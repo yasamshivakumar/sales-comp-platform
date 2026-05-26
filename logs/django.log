@@ -1,0 +1,427 @@
+INFO 2026-05-21 12:34:21,083 autoreload 16276 23612 Watching for file changes with StatReloader
+INFO 2026-05-21 12:34:38,699 autoreload 16276 23612 C:\Users\Admin\sales-comp-platform\backend\commissions\views.py changed, reloading.
+INFO 2026-05-21 12:34:40,658 autoreload 18336 24424 Watching for file changes with StatReloader
+INFO 2026-05-21 12:34:52,559 autoreload 18336 24424 C:\Users\Admin\sales-comp-platform\backend\commissions\views.py changed, reloading.
+INFO 2026-05-21 12:34:54,233 autoreload 21032 16364 Watching for file changes with StatReloader
+INFO 2026-05-21 12:35:00,360 autoreload 21032 16364 C:\Users\Admin\sales-comp-platform\backend\commissions\views.py changed, reloading.
+INFO 2026-05-21 12:35:02,075 autoreload 27092 17940 Watching for file changes with StatReloader
+INFO 2026-05-21 12:35:11,635 autoreload 27092 17940 C:\Users\Admin\sales-comp-platform\backend\commissions\views.py changed, reloading.
+INFO 2026-05-21 12:35:13,402 autoreload 10656 26700 Watching for file changes with StatReloader
+INFO 2026-05-21 12:35:30,998 autoreload 10656 26700 C:\Users\Admin\sales-comp-platform\backend\commissions\models.py changed, reloading.
+INFO 2026-05-21 12:35:32,741 autoreload 11752 21560 Watching for file changes with StatReloader
+INFO 2026-05-21 12:35:39,104 autoreload 11752 21560 C:\Users\Admin\sales-comp-platform\backend\commissions\models.py changed, reloading.
+INFO 2026-05-21 12:35:40,756 autoreload 22356 19688 Watching for file changes with StatReloader
+INFO 2026-05-21 12:35:49,162 autoreload 22356 19688 C:\Users\Admin\sales-comp-platform\backend\commissions\models.py changed, reloading.
+INFO 2026-05-21 12:35:50,814 autoreload 11364 2732 Watching for file changes with StatReloader
+INFO 2026-05-21 12:36:10,390 autoreload 11364 2732 C:\Users\Admin\sales-comp-platform\backend\commissions\serializers.py changed, reloading.
+INFO 2026-05-21 12:36:12,167 autoreload 15648 18616 Watching for file changes with StatReloader
+INFO 2026-05-21 12:37:13,807 autoreload 29060 24248 Watching for file changes with StatReloader
+INFO 2026-05-21 12:37:19,588 log 29060 26260 "GET /api/employees/ HTTP/1.1" 200 301
+INFO 2026-05-21 12:37:19,592 log 29060 21024 "GET /api/commissions/ HTTP/1.1" 200 670
+INFO 2026-05-21 12:37:25,331 log 29060 21024 "GET /api/user-setup/ HTTP/1.1" 200 6042
+INFO 2026-05-21 12:37:29,282 log 29060 26260 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-21 12:37:29,299 log 29060 21024 "GET /api/compensation-plans/ HTTP/1.1" 200 1987
+INFO 2026-05-21 12:37:32,274 log 29060 21024 "GET /api/orders/ HTTP/1.1" 200 1403
+INFO 2026-05-21 12:37:43,170 log 29060 13964 "GET /admin/commissions/scratetable/ HTTP/1.1" 200 20440
+INFO 2026-05-21 12:37:43,209 log 29060 13964 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-21 16:15:27,212 autoreload 17272 16324 Watching for file changes with StatReloader
+INFO 2026-05-21 16:15:36,100 log 17272 27000 "OPTIONS /api/orders/ HTTP/1.1" 200 0
+INFO 2026-05-21 16:15:36,133 log 17272 27000 "GET /api/orders/ HTTP/1.1" 200 1403
+INFO 2026-05-21 16:18:58,855 log 17272 9012 "OPTIONS /api/orders/ HTTP/1.1" 200 0
+INFO 2026-05-21 16:18:58,866 log 17272 9012 "GET /api/orders/ HTTP/1.1" 200 1403
+INFO 2026-05-21 16:19:12,303 log 17272 9012 "GET /api/orders/ HTTP/1.1" 200 1403
+INFO 2026-05-21 16:21:19,701 log 17272 9012 "GET /api/orders/ HTTP/1.1" 200 1403
+INFO 2026-05-21 16:21:26,101 log 17272 9012 "GET /api/orders/ HTTP/1.1" 200 1403
+INFO 2026-05-21 18:05:38,220 log 17272 15176 "GET /admin/commissions/scratetable/ HTTP/1.1" 200 20440
+INFO 2026-05-21 18:05:38,242 log 17272 15176 "GET /static/admin/css/base.css HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:38,253 log 17272 4672 "GET /static/admin/js/theme.js HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:38,255 log 17272 15176 "GET /static/admin/css/dark_mode.css HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:38,259 log 17272 29616 "GET /static/admin/css/nav_sidebar.css HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:38,261 log 17272 11596 "GET /static/admin/css/changelists.css HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:38,265 log 17272 4672 "GET /static/admin/js/jquery.init.js HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:38,266 log 17272 29616 "GET /static/admin/js/admin/RelatedObjectLookups.js HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:38,268 log 17272 15176 "GET /static/admin/js/core.js HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:38,269 log 17272 11596 "GET /static/admin/css/responsive.css HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:38,272 log 17272 8756 "GET /static/admin/js/vendor/jquery/jquery.js HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:38,276 log 17272 4672 "GET /static/admin/js/actions.js HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:38,276 log 17272 29616 "GET /static/admin/js/urlify.js HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:38,276 log 17272 15176 "GET /static/admin/js/prepopulate.js HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:38,280 log 17272 23748 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-21 18:05:38,292 log 17272 11596 "GET /static/admin/js/vendor/xregexp/xregexp.js HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:38,292 log 17272 23748 "GET /static/admin/img/search.svg HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:38,293 log 17272 15176 "GET /static/admin/img/icon-yes.svg HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:38,302 log 17272 15176 "GET /static/admin/js/nav_sidebar.js HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:38,303 log 17272 23748 "GET /static/admin/js/filters.js HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:51,279 log 17272 23748 "GET /admin/commissions/commission/ HTTP/1.1" 200 15715
+INFO 2026-05-21 18:05:51,310 log 17272 23748 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-21 18:05:54,315 log 17272 23748 "GET /admin/commissions/commission/25/change/ HTTP/1.1" 200 14683
+INFO 2026-05-21 18:05:54,344 log 17272 23748 "GET /static/admin/css/forms.css HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:54,347 log 17272 11596 "GET /static/admin/js/prepopulate_init.js HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:54,351 log 17272 23748 "GET /static/admin/css/widgets.css HTTP/1.1" 304 0
+INFO 2026-05-21 18:05:54,351 log 17272 15176 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-21 18:05:54,357 log 17272 15176 "GET /static/admin/js/change_form.js HTTP/1.1" 304 0
+INFO 2026-05-21 18:06:03,589 log 17272 15176 "GET /admin/commissions/commission/ HTTP/1.1" 200 15715
+INFO 2026-05-21 18:06:03,621 log 17272 15176 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-21 18:06:07,566 log 17272 15176 "GET /admin/commissions/commission/27/change/ HTTP/1.1" 200 14677
+INFO 2026-05-21 18:06:07,599 log 17272 15176 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-21 18:06:13,041 log 17272 15176 "GET /admin/commissions/sale/35/change/ HTTP/1.1" 200 16149
+INFO 2026-05-21 18:06:13,070 log 17272 23748 "GET /static/admin/img/icon-changelink.svg HTTP/1.1" 304 0
+INFO 2026-05-21 18:06:13,076 log 17272 23748 "GET /static/admin/img/icon-addlink.svg HTTP/1.1" 304 0
+INFO 2026-05-21 18:06:13,077 log 17272 15176 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-21 18:06:13,082 log 17272 15176 "GET /static/admin/img/icon-viewlink.svg HTTP/1.1" 304 0
+INFO 2026-05-21 18:18:20,553 log 17272 28516 "OPTIONS /api/login/ HTTP/1.1" 200 0
+WARNING 2026-05-21 18:18:21,860 log 17272 28516 Bad Request: /api/login/
+WARNING 2026-05-21 18:18:21,862 log 17272 28516 "POST /api/login/ HTTP/1.1" 400 31
+INFO 2026-05-21 18:18:31,142 log 17272 28516 "POST /api/login/ HTTP/1.1" 200 101
+INFO 2026-05-21 18:18:32,172 log 17272 21636 "OPTIONS /api/employees/ HTTP/1.1" 200 0
+INFO 2026-05-21 18:18:32,182 log 17272 16524 "OPTIONS /api/commissions/ HTTP/1.1" 200 0
+INFO 2026-05-21 18:18:32,195 log 17272 21636 "GET /api/employees/ HTTP/1.1" 200 301
+INFO 2026-05-21 18:18:32,207 log 17272 16524 "GET /api/commissions/ HTTP/1.1" 200 670
+INFO 2026-05-21 18:18:36,541 log 17272 28516 "OPTIONS /api/user-setup/ HTTP/1.1" 200 0
+INFO 2026-05-21 18:18:36,557 log 17272 28516 "GET /api/user-setup/ HTTP/1.1" 200 6042
+INFO 2026-05-21 18:18:40,530 log 17272 28516 "GET /api/user-setup/ HTTP/1.1" 200 6042
+INFO 2026-05-21 18:18:44,761 log 17272 28516 "GET /api/user-setup/ HTTP/1.1" 200 6042
+INFO 2026-05-21 18:18:47,991 log 17272 28516 "OPTIONS /api/compensation-plans/ HTTP/1.1" 200 0
+INFO 2026-05-21 18:18:47,992 log 17272 22956 "OPTIONS /api/compensation-tiers/ HTTP/1.1" 200 0
+INFO 2026-05-21 18:18:48,014 log 17272 28516 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-21 18:18:48,024 log 17272 22956 "GET /api/compensation-plans/ HTTP/1.1" 200 1987
+INFO 2026-05-21 18:18:49,117 log 17272 22956 "GET /api/orders/ HTTP/1.1" 200 1403
+INFO 2026-05-21 21:12:17,261 log 17272 10960 "OPTIONS /api/orders/ HTTP/1.1" 200 0
+INFO 2026-05-21 21:12:17,308 log 17272 10960 "GET /api/orders/ HTTP/1.1" 200 1403
+INFO 2026-05-21 21:12:58,077 log 17272 10960 "OPTIONS /api/employees/ HTTP/1.1" 200 0
+INFO 2026-05-21 21:12:58,078 log 17272 7824 "OPTIONS /api/commissions/ HTTP/1.1" 200 0
+INFO 2026-05-21 21:12:58,108 log 17272 7824 "GET /api/employees/ HTTP/1.1" 200 301
+INFO 2026-05-21 21:12:58,134 log 17272 10960 "GET /api/commissions/ HTTP/1.1" 200 670
+INFO 2026-05-21 21:13:46,720 log 17272 10960 "OPTIONS /api/user-setup/ HTTP/1.1" 200 0
+INFO 2026-05-21 21:13:46,746 log 17272 10960 "GET /api/user-setup/ HTTP/1.1" 200 6042
+INFO 2026-05-21 21:13:58,679 log 17272 10960 "OPTIONS /api/compensation-plans/ HTTP/1.1" 200 0
+INFO 2026-05-21 21:13:58,680 log 17272 7824 "OPTIONS /api/compensation-tiers/ HTTP/1.1" 200 0
+INFO 2026-05-21 21:13:58,716 log 17272 10960 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-21 21:13:58,753 log 17272 7824 "GET /api/compensation-plans/ HTTP/1.1" 200 1987
+INFO 2026-05-21 21:14:01,826 log 17272 7824 "GET /api/orders/ HTTP/1.1" 200 1403
+INFO 2026-05-21 21:15:29,692 log 17272 7824 "GET /api/user-setup/ HTTP/1.1" 200 6042
+INFO 2026-05-21 21:15:37,157 log 17272 10960 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-21 21:15:37,183 log 17272 7824 "GET /api/compensation-plans/ HTTP/1.1" 200 1987
+INFO 2026-05-21 21:16:34,471 log 17272 7824 "GET /api/employees/ HTTP/1.1" 200 301
+INFO 2026-05-21 21:16:34,493 log 17272 10960 "GET /api/commissions/ HTTP/1.1" 200 670
+INFO 2026-05-21 21:17:10,203 log 17272 10960 "GET /api/user-setup/ HTTP/1.1" 200 6042
+INFO 2026-05-21 21:17:18,766 log 17272 10960 "GET /api/employees/ HTTP/1.1" 200 301
+INFO 2026-05-21 21:17:18,800 log 17272 7824 "GET /api/commissions/ HTTP/1.1" 200 670
+INFO 2026-05-21 21:18:42,987 log 17272 7824 "GET /api/employees/ HTTP/1.1" 200 301
+INFO 2026-05-21 21:18:43,004 log 17272 10960 "GET /api/commissions/ HTTP/1.1" 200 670
+INFO 2026-05-21 21:18:49,007 log 17272 10960 "GET /api/employees/ HTTP/1.1" 200 301
+INFO 2026-05-21 21:18:49,022 log 17272 7824 "GET /api/commissions/ HTTP/1.1" 200 670
+INFO 2026-05-21 21:19:37,356 log 17272 7824 "GET /api/user-setup/ HTTP/1.1" 200 6042
+INFO 2026-05-21 21:20:33,159 log 17272 10960 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-21 21:20:33,180 log 17272 7824 "GET /api/compensation-plans/ HTTP/1.1" 200 1987
+INFO 2026-05-21 21:21:48,574 log 17272 10960 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-21 21:21:48,579 log 17272 7824 "GET /api/compensation-plans/ HTTP/1.1" 200 1987
+INFO 2026-05-22 06:14:41,005 log 17272 7528 "OPTIONS /api/compensation-plans/ HTTP/1.1" 200 0
+INFO 2026-05-22 06:14:41,007 log 17272 7460 "OPTIONS /api/compensation-tiers/ HTTP/1.1" 200 0
+INFO 2026-05-22 06:14:41,033 log 17272 7460 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-22 06:14:41,041 log 17272 7528 "GET /api/compensation-plans/ HTTP/1.1" 200 1987
+INFO 2026-05-22 06:14:44,517 log 17272 7460 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-22 06:14:44,530 log 17272 7528 "GET /api/compensation-plans/ HTTP/1.1" 200 1987
+INFO 2026-05-22 06:14:54,289 log 17272 7460 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-22 06:14:54,301 log 17272 7528 "GET /api/compensation-plans/ HTTP/1.1" 200 1987
+INFO 2026-05-22 06:19:17,352 log 17272 6156 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-22 06:19:17,359 log 17272 10888 "GET /api/compensation-plans/ HTTP/1.1" 200 1987
+INFO 2026-05-22 06:19:18,242 log 17272 6156 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-22 06:19:18,252 log 17272 10888 "GET /api/compensation-plans/ HTTP/1.1" 200 1987
+INFO 2026-05-22 06:26:38,145 log 17272 16420 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-22 06:26:38,157 log 17272 25492 "GET /api/compensation-plans/ HTTP/1.1" 200 1987
+INFO 2026-05-22 06:26:45,187 log 17272 16420 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-22 06:26:45,197 log 17272 25492 "GET /api/compensation-plans/ HTTP/1.1" 200 1987
+INFO 2026-05-22 06:27:03,776 log 17272 16420 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-22 06:27:03,783 log 17272 25492 "GET /api/compensation-plans/ HTTP/1.1" 200 1987
+INFO 2026-05-22 06:28:37,199 log 17272 16420 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-22 06:28:37,209 log 17272 25492 "GET /api/compensation-plans/ HTTP/1.1" 200 1987
+INFO 2026-05-22 06:28:58,142 log 17272 16420 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-22 06:28:58,149 log 17272 25492 "GET /api/compensation-plans/ HTTP/1.1" 200 1987
+INFO 2026-05-22 06:29:49,952 log 17272 16420 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-22 06:29:49,960 log 17272 25492 "GET /api/compensation-plans/ HTTP/1.1" 200 1987
+INFO 2026-05-22 06:30:01,009 log 17272 16420 "OPTIONS /api/commissions/ HTTP/1.1" 200 0
+INFO 2026-05-22 06:30:01,009 log 17272 25492 "OPTIONS /api/employees/ HTTP/1.1" 200 0
+INFO 2026-05-22 06:30:01,027 log 17272 16420 "GET /api/employees/ HTTP/1.1" 200 301
+INFO 2026-05-22 06:30:01,039 log 17272 25492 "GET /api/commissions/ HTTP/1.1" 200 670
+INFO 2026-05-22 07:18:51,763 log 17272 12728 "OPTIONS /api/user-setup/ HTTP/1.1" 200 0
+INFO 2026-05-22 07:18:51,776 log 17272 12728 "GET /api/user-setup/ HTTP/1.1" 200 6042
+INFO 2026-05-22 07:19:03,390 log 17272 16684 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-22 07:19:03,400 log 17272 12728 "GET /api/compensation-plans/ HTTP/1.1" 200 1987
+INFO 2026-05-22 07:19:04,859 log 17272 12728 "OPTIONS /api/orders/ HTTP/1.1" 200 0
+INFO 2026-05-22 07:19:04,906 log 17272 12728 "GET /api/orders/ HTTP/1.1" 200 1403
+INFO 2026-05-23 12:13:42,387 autoreload 14680 26700 Watching for file changes with StatReloader
+INFO 2026-05-23 12:13:48,300 log 14680 9884 "GET /admin/commissions/sale/35/change/ HTTP/1.1" 302 0
+INFO 2026-05-23 12:13:48,371 log 14680 9884 "GET /admin/login/?next=/admin/commissions/sale/35/change/ HTTP/1.1" 200 4134
+INFO 2026-05-23 12:13:48,409 log 14680 9884 "GET /static/admin/css/base.css HTTP/1.1" 304 0
+INFO 2026-05-23 12:13:48,426 log 14680 9884 "GET /static/admin/css/dark_mode.css HTTP/1.1" 304 0
+INFO 2026-05-23 12:13:48,426 log 14680 31900 "GET /static/admin/js/theme.js HTTP/1.1" 304 0
+INFO 2026-05-23 12:13:48,431 log 14680 1468 "GET /static/admin/css/nav_sidebar.css HTTP/1.1" 304 0
+INFO 2026-05-23 12:13:48,434 log 14680 31036 "GET /static/admin/css/login.css HTTP/1.1" 304 0
+INFO 2026-05-23 12:13:48,435 log 14680 3720 "GET /static/admin/css/responsive.css HTTP/1.1" 304 0
+INFO 2026-05-23 12:13:48,440 log 14680 3720 "GET /static/admin/js/nav_sidebar.js HTTP/1.1" 304 0
+INFO 2026-05-23 12:13:52,810 log 14680 3720 "POST /admin/login/?next=/admin/commissions/sale/35/change/ HTTP/1.1" 200 4302
+INFO 2026-05-23 12:14:25,183 autoreload 30728 17272 Watching for file changes with StatReloader
+INFO 2026-05-23 12:14:37,539 log 30728 32032 "POST /admin/login/?next=/admin/commissions/sale/35/change/ HTTP/1.1" 302 0
+INFO 2026-05-23 12:14:37,644 log 30728 32032 "GET /admin/commissions/sale/35/change/ HTTP/1.1" 302 0
+INFO 2026-05-23 12:14:37,769 log 30728 32032 "GET /admin/ HTTP/1.1" 200 12987
+INFO 2026-05-23 12:14:37,827 log 30728 32032 "GET /static/admin/css/dashboard.css HTTP/1.1" 304 0
+INFO 2026-05-23 12:14:37,828 log 30728 27076 "GET /static/admin/img/icon-alert.svg HTTP/1.1" 304 0
+INFO 2026-05-23 12:14:37,833 log 30728 2300 "GET /static/admin/img/icon-addlink.svg HTTP/1.1" 304 0
+INFO 2026-05-23 12:14:37,834 log 30728 25884 "GET /static/admin/img/icon-changelink.svg HTTP/1.1" 304 0
+INFO 2026-05-23 12:14:45,909 log 30728 25884 "GET /admin/commissions/compensationplan/ HTTP/1.1" 200 15347
+INFO 2026-05-23 12:14:45,957 log 30728 25884 "GET /static/admin/css/changelists.css HTTP/1.1" 304 0
+INFO 2026-05-23 12:14:45,959 log 30728 32032 "GET /static/admin/js/jquery.init.js HTTP/1.1" 304 0
+INFO 2026-05-23 12:14:45,961 log 30728 27076 "GET /static/admin/js/vendor/jquery/jquery.js HTTP/1.1" 304 0
+INFO 2026-05-23 12:14:45,962 log 30728 11544 "GET /static/admin/js/core.js HTTP/1.1" 304 0
+INFO 2026-05-23 12:14:45,967 log 30728 32460 "GET /static/admin/js/admin/RelatedObjectLookups.js HTTP/1.1" 304 0
+INFO 2026-05-23 12:14:45,971 log 30728 25884 "GET /static/admin/js/actions.js HTTP/1.1" 304 0
+INFO 2026-05-23 12:14:45,973 log 30728 32032 "GET /static/admin/js/urlify.js HTTP/1.1" 304 0
+INFO 2026-05-23 12:14:45,977 log 30728 27076 "GET /static/admin/js/prepopulate.js HTTP/1.1" 304 0
+INFO 2026-05-23 12:14:45,977 log 30728 11544 "GET /static/admin/js/vendor/xregexp/xregexp.js HTTP/1.1" 304 0
+INFO 2026-05-23 12:14:45,979 log 30728 32460 "GET /static/admin/img/search.svg HTTP/1.1" 304 0
+INFO 2026-05-23 12:14:45,993 log 30728 32460 "GET /static/admin/js/filters.js HTTP/1.1" 304 0
+INFO 2026-05-23 12:14:46,044 log 30728 2300 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-23 12:14:46,085 log 30728 32460 "GET /static/admin/img/tooltag-add.svg HTTP/1.1" 304 0
+INFO 2026-05-23 12:14:46,085 log 30728 2300 "GET /static/admin/img/icon-viewlink.svg HTTP/1.1" 304 0
+INFO 2026-05-23 12:15:20,846 log 30728 1484 "OPTIONS /api/signup/ HTTP/1.1" 200 0
+INFO 2026-05-23 12:15:22,240 log 30728 1484 "POST /api/signup/ HTTP/1.1" 200 90
+INFO 2026-05-23 12:15:34,017 log 30728 1484 "OPTIONS /api/login/ HTTP/1.1" 200 0
+INFO 2026-05-23 12:15:35,438 log 30728 1484 "POST /api/login/ HTTP/1.1" 200 101
+INFO 2026-05-23 12:15:36,555 log 30728 1484 "OPTIONS /api/employees/ HTTP/1.1" 200 0
+INFO 2026-05-23 12:15:36,556 log 30728 20836 "OPTIONS /api/commissions/ HTTP/1.1" 200 0
+INFO 2026-05-23 12:15:36,674 log 30728 1484 "GET /api/commissions/ HTTP/1.1" 200 2
+INFO 2026-05-23 12:15:36,684 log 30728 20836 "GET /api/employees/ HTTP/1.1" 200 2
+INFO 2026-05-23 12:15:46,637 log 30728 20836 "OPTIONS /api/user-setup/ HTTP/1.1" 200 0
+INFO 2026-05-23 12:15:46,742 log 30728 20836 "GET /api/user-setup/ HTTP/1.1" 200 2
+INFO 2026-05-23 12:15:53,361 log 30728 20836 "GET /api/user-setup/ HTTP/1.1" 200 2
+INFO 2026-05-23 12:15:55,759 log 30728 20836 "OPTIONS /api/compensation-plans/ HTTP/1.1" 200 0
+INFO 2026-05-23 12:15:55,759 log 30728 1484 "OPTIONS /api/compensation-tiers/ HTTP/1.1" 200 0
+INFO 2026-05-23 12:15:55,903 log 30728 20836 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-23 12:15:55,911 log 30728 1484 "GET /api/compensation-plans/ HTTP/1.1" 200 2
+INFO 2026-05-23 12:15:58,227 log 30728 1484 "OPTIONS /api/orders/ HTTP/1.1" 200 0
+INFO 2026-05-23 12:15:58,324 log 30728 1484 "GET /api/orders/ HTTP/1.1" 200 2
+INFO 2026-05-23 12:16:00,748 log 30728 1484 "GET /api/compensation-plans/ HTTP/1.1" 200 2
+INFO 2026-05-23 12:16:00,761 log 30728 20836 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-23 12:19:11,320 log 30728 2300 "GET /admin/auth/user/ HTTP/1.1" 200 17162
+INFO 2026-05-23 12:19:11,365 log 30728 32460 "GET /static/admin/img/icon-yes.svg HTTP/1.1" 304 0
+INFO 2026-05-23 12:19:11,367 log 30728 27076 "GET /static/admin/img/icon-no.svg HTTP/1.1" 304 0
+INFO 2026-05-23 12:19:11,441 log 30728 2300 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-23 12:19:11,495 log 30728 2300 "GET /static/admin/img/sorting-icons.svg HTTP/1.1" 304 0
+INFO 2026-05-23 12:19:13,587 log 30728 2300 "GET /admin/auth/user/2/change/ HTTP/1.1" 200 31553
+INFO 2026-05-23 12:19:13,624 log 30728 2300 "GET /static/admin/css/forms.css HTTP/1.1" 304 0
+INFO 2026-05-23 12:19:13,637 log 30728 32032 "GET /static/admin/js/SelectFilter2.js HTTP/1.1" 304 0
+INFO 2026-05-23 12:19:13,637 log 30728 25884 "GET /static/admin/js/prepopulate_init.js HTTP/1.1" 304 0
+INFO 2026-05-23 12:19:13,637 log 30728 27076 "GET /static/admin/js/calendar.js HTTP/1.1" 304 0
+INFO 2026-05-23 12:19:13,638 log 30728 11544 "GET /static/admin/js/SelectBox.js HTTP/1.1" 304 0
+INFO 2026-05-23 12:19:13,640 log 30728 32460 "GET /static/admin/js/admin/DateTimeShortcuts.js HTTP/1.1" 304 0
+INFO 2026-05-23 12:19:13,642 log 30728 32032 "GET /static/admin/css/widgets.css HTTP/1.1" 304 0
+INFO 2026-05-23 12:19:13,648 log 30728 32032 "GET /static/admin/js/change_form.js HTTP/1.1" 304 0
+INFO 2026-05-23 12:19:13,714 log 30728 2300 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-23 12:19:13,794 log 30728 2300 "GET /static/admin/img/selector-icons.svg HTTP/1.1" 304 0
+INFO 2026-05-23 12:19:13,795 log 30728 32460 "GET /static/admin/img/icon-clock.svg HTTP/1.1" 304 0
+INFO 2026-05-23 12:19:13,797 log 30728 32032 "GET /static/admin/img/icon-calendar.svg HTTP/1.1" 304 0
+INFO 2026-05-23 12:19:21,670 log 30728 1484 "GET /api/commissions/ HTTP/1.1" 200 2
+INFO 2026-05-23 12:19:21,744 log 30728 20836 "GET /api/employees/ HTTP/1.1" 200 2
+INFO 2026-05-23 12:19:31,205 log 30728 20836 "GET /api/user-setup/ HTTP/1.1" 200 2
+INFO 2026-05-23 12:19:47,120 log 30728 20836 "POST /api/user-setup/ HTTP/1.1" 201 490
+INFO 2026-05-23 12:19:49,516 log 30728 20836 "GET /api/user-setup/ HTTP/1.1" 200 492
+INFO 2026-05-23 12:19:57,337 log 30728 32032 "GET /admin/auth/user/2/change/ HTTP/1.1" 200 31553
+INFO 2026-05-23 12:19:57,450 log 30728 32032 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-23 12:19:59,769 log 30728 32032 "GET /admin/auth/user/ HTTP/1.1" 200 17162
+INFO 2026-05-23 12:19:59,877 log 30728 32032 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-23 12:20:04,302 log 30728 32032 "GET /admin/auth/user/2/change/ HTTP/1.1" 200 31553
+INFO 2026-05-23 12:20:04,415 log 30728 32032 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-23 12:20:38,349 log 30728 20836 "POST /api/user-setup/ HTTP/1.1" 200 519
+INFO 2026-05-23 12:20:40,398 log 30728 20836 "GET /api/user-setup/ HTTP/1.1" 200 521
+INFO 2026-05-23 12:21:14,174 log 30728 20836 "POST /api/user-setup/ HTTP/1.1" 200 528
+INFO 2026-05-23 12:21:15,911 log 30728 20836 "GET /api/user-setup/ HTTP/1.1" 200 530
+INFO 2026-05-23 12:21:34,983 log 30728 20836 "POST /api/user-setup/ HTTP/1.1" 200 553
+INFO 2026-05-23 12:21:36,714 log 30728 20836 "GET /api/user-setup/ HTTP/1.1" 200 555
+INFO 2026-05-23 12:21:40,151 log 30728 1484 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-23 12:21:40,243 log 30728 20836 "GET /api/compensation-plans/ HTTP/1.1" 200 2
+INFO 2026-05-23 12:23:16,070 log 30728 20836 "POST /api/compensation-plans/ HTTP/1.1" 201 472
+INFO 2026-05-23 12:23:16,164 log 30728 20836 "GET /api/compensation-plans/ HTTP/1.1" 200 474
+INFO 2026-05-23 12:23:43,449 log 30728 32032 "GET /admin/commissions/scratetable/ HTTP/1.1" 200 14632
+INFO 2026-05-23 12:23:43,560 log 30728 32032 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-23 12:23:46,015 log 30728 32032 "GET /admin/commissions/scratetable/add/ HTTP/1.1" 200 20751
+INFO 2026-05-23 12:23:46,131 log 30728 32032 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-23 12:24:05,824 log 30728 32032 "POST /admin/commissions/scratetable/add/ HTTP/1.1" 302 0
+INFO 2026-05-23 12:24:05,944 log 30728 32032 "GET /admin/commissions/scratetable/ HTTP/1.1" 200 18861
+INFO 2026-05-23 12:24:06,060 log 30728 32032 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-23 12:24:11,910 log 30728 20836 "GET /api/orders/ HTTP/1.1" 200 2
+INFO 2026-05-23 12:25:30,933 log 30728 32032 "GET /admin/commissions/compensationplan/ HTTP/1.1" 200 18256
+INFO 2026-05-23 12:25:31,046 log 30728 32032 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-23 12:26:04,609 log 30728 20836 "OPTIONS /api/orders-upload/ HTTP/1.1" 200 0
+INFO 2026-05-23 12:26:04,718 log 30728 20836 "POST /api/orders-upload/ HTTP/1.1" 200 84
+INFO 2026-05-23 12:26:06,705 log 30728 20836 "GET /api/orders/ HTTP/1.1" 200 282
+INFO 2026-05-23 12:26:12,032 log 30728 20836 "GET /api/employees/ HTTP/1.1" 200 62
+INFO 2026-05-23 12:26:12,044 log 30728 1484 "GET /api/commissions/ HTTP/1.1" 200 98
+INFO 2026-05-23 12:59:59,882 log 30728 19356 "GET /admin/commissions/compensationplan/?o=2 HTTP/1.1" 200 18735
+INFO 2026-05-23 13:00:00,016 log 30728 19356 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-23 13:00:14,335 log 30728 19356 "GET /admin/commissions/compensationtier/ HTTP/1.1" 200 13891
+INFO 2026-05-23 13:00:14,466 log 30728 19356 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-23 13:00:16,551 log 30728 19356 "GET /admin/commissions/compensationtier/add/ HTTP/1.1" 200 18345
+INFO 2026-05-23 13:00:16,790 log 30728 19356 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-23 13:00:24,322 log 30728 19356 "GET /admin/commissions/employee/ HTTP/1.1" 200 13965
+INFO 2026-05-23 13:00:24,464 log 30728 19356 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-23 13:00:26,864 log 30728 19356 "GET /admin/commissions/employee/1/change/ HTTP/1.1" 200 14178
+INFO 2026-05-23 13:00:27,107 log 30728 19356 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-23 13:00:30,036 log 30728 19356 "GET /admin/commissions/commission/ HTTP/1.1" 200 13890
+INFO 2026-05-23 13:00:30,180 log 30728 19356 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-23 13:00:32,394 log 30728 19356 "GET /admin/commissions/commission/1/change/ HTTP/1.1" 200 14668
+INFO 2026-05-23 13:00:32,539 log 30728 19356 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-23 13:02:44,773 autoreload 30728 17272 C:\Users\Admin\sales-comp-platform\backend\commissions\serializers.py changed, reloading.
+INFO 2026-05-23 13:02:47,318 autoreload 30240 32124 Watching for file changes with StatReloader
+INFO 2026-05-25 08:06:35,405 autoreload 30240 32124 C:\Users\Admin\sales-comp-platform\backend\commissions\views.py changed, reloading.
+INFO 2026-05-25 08:06:37,808 autoreload 34272 27184 Watching for file changes with StatReloader
+INFO 2026-05-25 08:06:43,654 autoreload 34272 27184 C:\Users\Admin\sales-comp-platform\backend\commissions\urls.py changed, reloading.
+INFO 2026-05-25 08:06:45,175 autoreload 3424 20048 Watching for file changes with StatReloader
+INFO 2026-05-25 08:06:54,345 autoreload 3424 20048 C:\Users\Admin\sales-comp-platform\backend\commissions\views.py changed, reloading.
+INFO 2026-05-25 08:06:55,917 autoreload 6220 31708 Watching for file changes with StatReloader
+INFO 2026-05-25 08:07:13,509 autoreload 6220 31708 C:\Users\Admin\sales-comp-platform\backend\commissions\views.py changed, reloading.
+INFO 2026-05-25 08:07:15,012 autoreload 32604 19252 Watching for file changes with StatReloader
+INFO 2026-05-25 08:15:26,168 autoreload 32604 19252 C:\Users\Admin\sales-comp-platform\backend\commissions\services.py changed, reloading.
+INFO 2026-05-25 08:15:27,423 autoreload 13864 34676 Watching for file changes with StatReloader
+INFO 2026-05-25 08:17:48,625 autoreload 8792 17152 Watching for file changes with StatReloader
+INFO 2026-05-25 08:18:02,581 log 8792 24116 "OPTIONS /api/employees/ HTTP/1.1" 200 0
+INFO 2026-05-25 08:18:02,581 log 8792 29928 "OPTIONS /api/user-profile/ HTTP/1.1" 200 0
+INFO 2026-05-25 08:18:02,581 log 8792 32544 "OPTIONS /api/commissions/ HTTP/1.1" 200 0
+INFO 2026-05-25 08:18:02,653 log 8792 24116 "GET /api/employees/ HTTP/1.1" 200 62
+INFO 2026-05-25 08:18:02,679 log 8792 32544 "GET /api/commissions/ HTTP/1.1" 200 2
+INFO 2026-05-25 08:18:02,768 log 8792 29928 "GET /api/user-profile/ HTTP/1.1" 200 112
+INFO 2026-05-25 08:18:14,686 log 8792 29928 "OPTIONS /api/user-setup/ HTTP/1.1" 200 0
+INFO 2026-05-25 08:18:14,790 log 8792 29928 "GET /api/user-setup/ HTTP/1.1" 200 555
+INFO 2026-05-25 08:18:16,842 log 8792 29928 "OPTIONS /api/compensation-plans/ HTTP/1.1" 200 0
+INFO 2026-05-25 08:18:16,843 log 8792 32544 "OPTIONS /api/compensation-tiers/ HTTP/1.1" 200 0
+INFO 2026-05-25 08:18:16,930 log 8792 29928 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-25 08:18:16,933 log 8792 32544 "GET /api/compensation-plans/ HTTP/1.1" 200 695
+INFO 2026-05-25 08:18:21,655 log 8792 32544 "OPTIONS /api/orders/ HTTP/1.1" 200 0
+INFO 2026-05-25 08:18:21,736 log 8792 32544 "GET /api/orders/ HTTP/1.1" 200 282
+INFO 2026-05-25 09:17:43,057 autoreload 8792 17152 C:\Users\Admin\sales-comp-platform\backend\commissions\serializers.py changed, reloading.
+INFO 2026-05-25 09:17:44,941 autoreload 27572 34792 Watching for file changes with StatReloader
+INFO 2026-05-25 09:21:46,728 autoreload 27572 34792 C:\Users\Admin\sales-comp-platform\backend\commissions\services.py changed, reloading.
+INFO 2026-05-25 09:21:48,057 autoreload 13300 16456 Watching for file changes with StatReloader
+INFO 2026-05-25 12:03:15,380 log 13300 24116 "OPTIONS /api/user-profile/ HTTP/1.1" 200 0
+INFO 2026-05-25 12:03:15,380 log 13300 29120 "OPTIONS /api/employees/ HTTP/1.1" 200 0
+INFO 2026-05-25 12:03:15,381 log 13300 32328 "OPTIONS /api/commissions/ HTTP/1.1" 200 0
+INFO 2026-05-25 12:03:15,464 log 13300 24116 "GET /api/employees/ HTTP/1.1" 200 62
+INFO 2026-05-25 12:03:15,481 log 13300 29120 "GET /api/user-profile/ HTTP/1.1" 200 112
+INFO 2026-05-25 12:03:15,491 log 13300 32328 "GET /api/commissions/ HTTP/1.1" 200 2
+INFO 2026-05-25 12:04:40,357 log 13300 32528 "GET /admin/commissions/commission/1/change/ HTTP/1.1" 200 14668
+INFO 2026-05-25 12:04:40,416 log 13300 32528 "GET /static/admin/css/base.css HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:40,435 log 13300 32528 "GET /static/admin/css/dark_mode.css HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:40,439 log 13300 9244 "GET /static/admin/js/theme.js HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:40,445 log 13300 11596 "GET /static/admin/css/nav_sidebar.css HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:40,447 log 13300 14980 "GET /static/admin/css/forms.css HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:40,453 log 13300 32528 "GET /static/admin/js/jquery.init.js HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:40,455 log 13300 31804 "GET /static/admin/js/vendor/jquery/jquery.js HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:40,460 log 13300 14980 "GET /static/admin/js/admin/RelatedObjectLookups.js HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:40,461 log 13300 9244 "GET /static/admin/js/core.js HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:40,458 log 13300 11596 "GET /static/admin/css/responsive.css HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:40,471 log 13300 32528 "GET /static/admin/css/widgets.css HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:40,475 log 13300 9244 "GET /static/admin/js/prepopulate.js HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:40,473 log 13300 31804 "GET /static/admin/js/actions.js HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:40,478 log 13300 14980 "GET /static/admin/js/vendor/xregexp/xregexp.js HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:40,485 log 13300 11596 "GET /static/admin/js/urlify.js HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:40,488 log 13300 32528 "GET /static/admin/js/prepopulate_init.js HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:40,501 log 13300 32528 "GET /static/admin/js/nav_sidebar.js HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:40,508 log 13300 32528 "GET /static/admin/js/change_form.js HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:40,556 log 13300 18124 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-25 12:04:40,672 log 13300 18124 "GET /static/admin/img/icon-addlink.svg HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:45,869 log 13300 18124 "GET /admin/commissions/scratetable/ HTTP/1.1" 200 18622
+INFO 2026-05-25 12:04:45,903 log 13300 18124 "GET /static/admin/css/changelists.css HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:45,909 log 13300 14980 "GET /static/admin/img/icon-yes.svg HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:45,909 log 13300 11596 "GET /static/admin/img/search.svg HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:45,918 log 13300 14980 "GET /static/admin/js/filters.js HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:45,975 log 13300 32528 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-25 12:04:45,993 log 13300 32528 "GET /static/admin/img/tooltag-add.svg HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:45,993 log 13300 14980 "GET /static/admin/img/icon-viewlink.svg HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:46,008 log 13300 14980 "GET /static/admin/img/sorting-icons.svg HTTP/1.1" 304 0
+INFO 2026-05-25 12:04:48,744 log 13300 14980 "GET /admin/commissions/scflatratetable/ HTTP/1.1" 200 14675
+INFO 2026-05-25 12:04:48,890 log 13300 14980 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-25 12:04:51,570 log 13300 14980 "GET /admin/commissions/sale/ HTTP/1.1" 200 13945
+INFO 2026-05-25 12:04:51,712 log 13300 14980 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-25 12:05:52,010 log 13300 14980 "GET /admin/auth/user/ HTTP/1.1" 200 17162
+INFO 2026-05-25 12:05:52,070 log 13300 32528 "GET /static/admin/img/icon-no.svg HTTP/1.1" 304 0
+INFO 2026-05-25 12:05:52,162 log 13300 14980 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-25 12:06:11,668 log 13300 32328 "OPTIONS /api/email-login/ HTTP/1.1" 200 0
+WARNING 2026-05-25 12:06:13,321 views 13300 32328 Failed login attempt for email: naresh@gmail.com
+WARNING 2026-05-25 12:06:13,322 log 13300 32328 Unauthorized: /api/email-login/
+WARNING 2026-05-25 12:06:13,324 log 13300 32328 "POST /api/email-login/ HTTP/1.1" 401 31
+WARNING 2026-05-25 12:06:30,759 views 13300 32328 Failed login attempt for email: naresh@gmail.com
+WARNING 2026-05-25 12:06:30,761 log 13300 32328 Unauthorized: /api/email-login/
+WARNING 2026-05-25 12:06:30,763 log 13300 32328 "POST /api/email-login/ HTTP/1.1" 401 31
+INFO 2026-05-25 12:07:19,416 log 13300 14980 "GET /admin/auth/user/2/change/ HTTP/1.1" 200 31553
+INFO 2026-05-25 12:07:19,487 log 13300 11596 "GET /static/admin/js/admin/DateTimeShortcuts.js HTTP/1.1" 304 0
+INFO 2026-05-25 12:07:19,489 log 13300 31804 "GET /static/admin/js/SelectFilter2.js HTTP/1.1" 304 0
+INFO 2026-05-25 12:07:19,494 log 13300 32528 "GET /static/admin/js/calendar.js HTTP/1.1" 304 0
+INFO 2026-05-25 12:07:19,495 log 13300 18124 "GET /static/admin/js/SelectBox.js HTTP/1.1" 304 0
+INFO 2026-05-25 12:07:19,683 log 13300 14980 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-25 12:07:19,765 log 13300 14980 "GET /static/admin/img/selector-icons.svg HTTP/1.1" 304 0
+INFO 2026-05-25 12:07:19,769 log 13300 18124 "GET /static/admin/img/icon-calendar.svg HTTP/1.1" 304 0
+INFO 2026-05-25 12:07:19,785 log 13300 32528 "GET /static/admin/img/icon-clock.svg HTTP/1.1" 304 0
+INFO 2026-05-25 12:07:37,184 log 13300 32528 "GET /admin/auth/user/ HTTP/1.1" 200 17162
+INFO 2026-05-25 12:07:37,326 log 13300 32528 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-25 12:07:40,848 log 13300 32528 "GET /admin/auth/user/2/change/ HTTP/1.1" 200 31553
+INFO 2026-05-25 12:07:41,008 log 13300 32528 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-25 12:07:48,904 log 13300 32528 "GET /admin/commissions/employee/ HTTP/1.1" 200 13965
+INFO 2026-05-25 12:07:49,068 log 13300 32528 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-25 12:07:51,363 log 13300 32528 "GET /admin/commissions/employee/1/change/ HTTP/1.1" 200 14178
+INFO 2026-05-25 12:07:51,522 log 13300 32528 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+WARNING 2026-05-25 12:08:12,315 views 13300 32328 Login attempt with non-existent email: 123@company.com
+WARNING 2026-05-25 12:08:12,316 log 13300 32328 Unauthorized: /api/email-login/
+WARNING 2026-05-25 12:08:12,318 log 13300 32328 "POST /api/email-login/ HTTP/1.1" 401 31
+INFO 2026-05-25 13:49:11,494 log 13300 6136 "OPTIONS /api/signup/ HTTP/1.1" 200 0
+INFO 2026-05-25 13:49:13,086 log 13300 6136 "POST /api/signup/ HTTP/1.1" 200 90
+INFO 2026-05-25 13:49:35,482 views 13300 6136 Successful login for email: anjali123@gmail.com
+INFO 2026-05-25 13:49:35,484 log 13300 6136 "POST /api/email-login/ HTTP/1.1" 200 158
+WARNING 2026-05-25 13:49:36,675 log 13300 6136 Not Found: /api/user-profile/
+WARNING 2026-05-25 13:49:36,676 log 13300 6136 "GET /api/user-profile/ HTTP/1.1" 404 34
+INFO 2026-05-25 13:49:36,690 log 13300 34584 "GET /api/employees/ HTTP/1.1" 200 62
+INFO 2026-05-25 13:49:36,784 log 13300 6136 "GET /api/commissions/ HTTP/1.1" 200 2
+INFO 2026-05-25 13:49:38,564 log 13300 6136 "OPTIONS /api/user-setup/ HTTP/1.1" 200 0
+INFO 2026-05-25 13:49:38,650 log 13300 6136 "GET /api/user-setup/ HTTP/1.1" 200 555
+INFO 2026-05-25 13:50:04,063 log 13300 6136 "OPTIONS /api/user-setup-upload/ HTTP/1.1" 200 0
+INFO 2026-05-25 13:50:08,510 log 13300 6136 "POST /api/user-setup-upload/ HTTP/1.1" 200 111
+INFO 2026-05-25 13:50:10,880 log 13300 6136 "GET /api/user-setup/ HTTP/1.1" 200 2168
+WARNING 2026-05-25 13:50:57,242 views 13300 6136 Login attempt with non-existent email: chandu8499@gmail.com
+WARNING 2026-05-25 13:50:57,243 log 13300 6136 Unauthorized: /api/email-login/
+WARNING 2026-05-25 13:50:57,244 log 13300 6136 "POST /api/email-login/ HTTP/1.1" 401 31
+WARNING 2026-05-25 13:52:23,684 views 13300 6136 Failed login attempt for email: chandu@gmail.com
+WARNING 2026-05-25 13:52:23,685 log 13300 6136 Unauthorized: /api/email-login/
+WARNING 2026-05-25 13:52:23,687 log 13300 6136 "POST /api/email-login/ HTTP/1.1" 401 31
+INFO 2026-05-25 13:52:31,487 log 13300 15376 "GET /admin/commissions/employee/1/change/ HTTP/1.1" 200 14178
+INFO 2026-05-25 13:52:31,626 log 13300 15376 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-25 13:52:33,420 log 13300 15376 "GET /admin/auth/user/ HTTP/1.1" 200 19008
+INFO 2026-05-25 13:52:33,575 log 13300 15376 "GET /admin/jsi18n/ HTTP/1.1" 200 3342
+INFO 2026-05-25 13:53:09,057 views 13300 6136 Successful login for email: chandu@gmail.com
+INFO 2026-05-25 13:53:09,058 log 13300 6136 "POST /api/email-login/ HTTP/1.1" 200 153
+INFO 2026-05-25 13:53:10,211 log 13300 6136 "GET /api/user-profile/ HTTP/1.1" 200 111
+INFO 2026-05-25 13:53:10,227 log 13300 34584 "GET /api/employees/ HTTP/1.1" 200 62
+INFO 2026-05-25 13:53:10,300 log 13300 6136 "GET /api/commissions/ HTTP/1.1" 200 2
+INFO 2026-05-25 13:53:29,572 log 13300 6136 "OPTIONS /api/change-password/ HTTP/1.1" 200 0
+INFO 2026-05-25 13:53:32,619 views 13300 6136 Password changed successfully for user: chandu@gmail.com
+INFO 2026-05-25 13:53:32,620 log 13300 6136 "POST /api/change-password/ HTTP/1.1" 200 94
+INFO 2026-05-25 13:53:50,681 views 13300 6136 Successful login for email: chandu@gmail.com
+INFO 2026-05-25 13:53:50,683 log 13300 6136 "POST /api/email-login/ HTTP/1.1" 200 153
+INFO 2026-05-25 13:53:51,972 log 13300 34584 "GET /api/employees/ HTTP/1.1" 200 62
+INFO 2026-05-25 13:53:51,976 log 13300 6136 "GET /api/user-profile/ HTTP/1.1" 200 111
+INFO 2026-05-25 13:53:52,001 log 13300 34652 "GET /api/commissions/ HTTP/1.1" 200 2
+INFO 2026-05-25 13:53:55,295 log 13300 34652 "GET /api/user-setup/ HTTP/1.1" 200 2168
+INFO 2026-05-25 13:53:59,988 log 13300 34652 "OPTIONS /api/compensation-plans/ HTTP/1.1" 200 0
+INFO 2026-05-25 13:53:59,989 log 13300 6136 "OPTIONS /api/compensation-tiers/ HTTP/1.1" 200 0
+INFO 2026-05-25 13:54:00,165 log 13300 34652 "GET /api/compensation-plans/ HTTP/1.1" 200 695
+INFO 2026-05-25 13:54:00,281 log 13300 6136 "GET /api/compensation-tiers/ HTTP/1.1" 200 2
+INFO 2026-05-25 13:56:27,977 autoreload 13300 16456 C:\Users\Admin\sales-comp-platform\backend\commissions\views.py changed, reloading.
+INFO 2026-05-25 13:56:30,044 autoreload 24456 26276 Watching for file changes with StatReloader
+INFO 2026-05-25 13:57:36,400 autoreload 24456 26276 C:\Users\Admin\sales-comp-platform\backend\commissions\views.py changed, reloading.
+INFO 2026-05-25 13:57:38,353 autoreload 24988 2892 Watching for file changes with StatReloader
+INFO 2026-05-25 14:00:48,265 autoreload 24988 2892 C:\Users\Admin\sales-comp-platform\backend\commissions\views.py changed, reloading.
+INFO 2026-05-25 14:00:49,832 autoreload 4820 12752 Watching for file changes with StatReloader
+INFO 2026-05-25 14:01:27,928 autoreload 4820 12752 C:\Users\Admin\sales-comp-platform\backend\commissions\views.py changed, reloading.
+INFO 2026-05-25 14:01:29,790 autoreload 9096 32172 Watching for file changes with StatReloader
+INFO 2026-05-25 14:01:55,336 autoreload 9096 32172 C:\Users\Admin\sales-comp-platform\backend\commissions\views.py changed, reloading.
+INFO 2026-05-25 14:01:57,093 autoreload 30072 28340 Watching for file changes with StatReloader
+INFO 2026-05-25 14:02:40,843 autoreload 30072 28340 C:\Users\Admin\sales-comp-platform\backend\commissions\views.py changed, reloading.
+INFO 2026-05-25 14:02:42,699 autoreload 10292 31468 Watching for file changes with StatReloader
