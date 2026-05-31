@@ -1,9 +1,23 @@
 from django.contrib import admin
-from .models import Employee,Sale,Commission,IncentiveRule
+from .models import (
+    Employee,
+    Sale,
+    Commission,
 
+    UserProfile,
+    Order,
+    AuditLog,
+    Organization,
+    ImportJob,
+)
+
+admin.site.register(Organization)
+admin.site.register(ImportJob)
 admin.site.register(Employee)
 admin.site.register(Sale)
-admin.site.register(IncentiveRule)
+admin.site.register(UserProfile)
+admin.site.register(Order)
+
 from .models import CompensationPlan, CompensationTier
 from .models import CompensationPlan, SCRateTable, SCFlatRateTable
 
@@ -212,11 +226,63 @@ class CompensationTierAdmin(admin.ModelAdmin):
         'min_sales',
     )
 
+
+# ---------------------------------------------------
+# Commission Admin - Now Fully Visible
+# ---------------------------------------------------
+@admin.register(AuditLog)
+class AuditLogAdmin(admin.ModelAdmin):
+    list_display = ("action", "user_email", "ip_address", "created_at")
+    list_filter = ("action",)
+    search_fields = ("user_email", "action", "request_id")
+    readonly_fields = (
+        "user",
+        "user_email",
+        "action",
+        "detail",
+        "ip_address",
+        "request_id",
+        "created_at",
+    )
+
+
+@admin.register(Commission)
 class CommissionAdmin(admin.ModelAdmin):
-    readonly_fields = ('employee', 'sale', 'commission_amount')
+    list_display = (
+        'id',
+        'employee_name',
+        'employee_email',
+        'commission_amount',
+        'sale',
+    )
+
+    list_filter = (
+        'commission_amount',
+    )
+
+    search_fields = (
+        'employee__name',
+        'employee__email',
+        'sale__id',
+    )
+
+    readonly_fields = (
+        'id',
+        'employee',
+        'sale',
+        'commission_amount',
+    )
+
+    def employee_name(self, obj):
+        return obj.employee.name if obj.employee else "Unknown"
+    employee_name.short_description = 'Employee Name'
+
+    def employee_email(self, obj):
+        return obj.employee.email if obj.employee else "N/A"
+    employee_email.short_description = 'Employee Email'
 
     def has_add_permission(self, request):
         return False
 
-
-admin.site.register(Commission, CommissionAdmin)
+    def has_delete_permission(self, request, obj=None):
+        return False

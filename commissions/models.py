@@ -1,57 +1,20 @@
 from django.db import models
-from django.contrib.auth.models import AbstractUser
+from django.conf import settings
 
 
-# class User(AbstractUser):
-#     """Custom User model extending Django's AbstractUser"""
-#     ROLE_CHOICES = [
-#         ('admin', 'Admin'),
-#         ('manager', 'Manager'),
-#         ('sales_rep', 'Sales Representative'),
-#         ('finance', 'Finance'),
-#         ('viewer', 'Viewer'),
-#     ]
-    
-#     role = models.CharField(
-#         max_length=50,
-#         choices=ROLE_CHOICES,
-#         default='sales_rep',
-#         help_text='User role for the compensation platform'
-#     )
-    
-#     employee_id = models.CharField(
-#         max_length=100,
-#         blank=True,
-#         null=True,
-#         unique=True,
-#         help_text='External employee ID'
-#     )
-    
-#     is_active_user = models.BooleanField(
-#         default=True,
-#         help_text='Whether user can access the platform'
-#     )
-    
-#     phone = models.CharField(
-#         max_length=20,
-#         blank=True,
-#         null=True
-#     )
-    
-#     department = models.CharField(
-#         max_length=255,
-#         blank=True,
-#         null=True
-#     )
-    
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
+class Organization(models.Model):
+    """Tenant boundary for multi-company deployments."""
 
-#     class Meta:
-#         ordering = ['date_joined']
+    slug = models.SlugField(max_length=64, unique=True)
+    name = models.CharField(max_length=200)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
-#     def __str__(self):
-#         return f"{self.get_full_name() or self.username} ({self.role})"
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
 
 
 class Employee(models.Model):
@@ -65,6 +28,14 @@ class Employee(models.Model):
 
 
 class Sale(models.Model):
+
+    order = models.OneToOneField(
+        "Order",
+        on_delete=models.CASCADE,
+        related_name="sale_record",
+        null=True,
+        blank=True,
+    )
 
     employee = models.ForeignKey(
         Employee,
@@ -87,6 +58,12 @@ class Sale(models.Model):
 
 
 class Commission(models.Model):
+    STATUS_CALCULATED = "calculated"
+    STATUS_APPROVED = "approved"
+    STATUS_CHOICES = [
+        (STATUS_CALCULATED, "Calculated"),
+        (STATUS_APPROVED, "Approved"),
+    ]
 
     employee = models.ForeignKey(
         Employee,
@@ -105,29 +82,40 @@ class Commission(models.Model):
         decimal_places=2
     )
 
+    compensation_plan = models.ForeignKey(
+        "CompensationPlan",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="commissions",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_CALCULATED,
+        db_index=True,
+    )
+
+    calculated_at = models.DateTimeField(auto_now_add=True, null=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_commissions",
+    )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["status", "calculated_at"]),
+        ]
+
     def __str__(self):
         return f"{self.employee.name} - {self.commission_amount}"
 
 
-class IncentiveRule(models.Model):
-
-    min_amount = models.DecimalField(
-        max_digits=10,
-        decimal_places=2
-    )
-
-    max_amount = models.DecimalField(
-        max_digits=10,
-        decimal_places=2
-    )
-
-    percentage = models.DecimalField(
-        max_digits=5,
-        decimal_places=2
-    )
-
-    def __str__(self):
-        return f"{self.min_amount} - {self.max_amount} : {self.percentage}%"
 
 
 
@@ -153,10 +141,17 @@ class CompensationPlan(models.Model):
         ('Customer Segment', 'Customer Segment'),
     ]
 
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="compensation_plans",
+        null=True,
+        blank=True,
+    )
+
     # Basic Information
     plan_name = models.CharField(
         max_length=200,
-        unique=True
     )
 
     description = models.TextField(
@@ -229,6 +224,14 @@ class CompensationPlan(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "plan_name"],
+                name="uniq_plan_name_per_org",
+            ),
+        ]
 
     def __str__(self):
         return self.plan_name
@@ -401,10 +404,18 @@ class CompensationTier(models.Model):
         )
 
 class UserProfile(models.Model):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="user_profiles",
+        null=True,
+        blank=True,
+    )
+
     # User Section
     enable_login = models.BooleanField(default=False)
     name = models.CharField(max_length=255, blank=True)
-    email = models.EmailField(unique=True, db_index=True)
+    email = models.EmailField(db_index=True)
     role = models.CharField(max_length=100, default='Sales Rep', db_index=True)
 
     # People Section
@@ -438,7 +449,8 @@ class UserProfile(models.Model):
     # Position Section
     position_name = models.CharField(
         max_length=255,
-        unique=False
+        blank=True,
+        default="",
     )
     position_title = models.CharField(
         max_length=255,
@@ -479,6 +491,14 @@ class UserProfile(models.Model):
     created_at = models.DateTimeField(
         auto_now_add=True
     )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "email"],
+                name="uniq_profile_email_per_org",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}".strip() or self.email
@@ -521,8 +541,16 @@ class HierarchyRelationship(models.Model):
         )
 
 class Order(models.Model):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="orders",
+        null=True,
+        blank=True,
+    )
+
     # Transaction identifiers
-    order_id = models.CharField(max_length=100, unique=True)
+    order_id = models.CharField(max_length=100, db_index=True)
     order_date = models.DateField()
 
     # Participant references
@@ -561,8 +589,99 @@ class Order(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "order_id"],
+                name="uniq_order_id_per_org",
+            ),
+        ]
+
     def __str__(self):
         return f"{self.order_id} - {self.sales_amount}"
 
 
-# create django model for commission table
+class ImportJob(models.Model):
+    JOB_ORDERS = "orders"
+    JOB_USERS = "users"
+    JOB_TYPE_CHOICES = [
+        (JOB_ORDERS, "Orders CSV"),
+        (JOB_USERS, "Users CSV"),
+    ]
+
+    STATUS_PENDING = "pending"
+    STATUS_PROCESSING = "processing"
+    STATUS_COMPLETED = "completed"
+    STATUS_FAILED = "failed"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_PROCESSING, "Processing"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_FAILED, "Failed"),
+    ]
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="import_jobs",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="import_jobs",
+    )
+    job_type = models.CharField(max_length=20, choices=JOB_TYPE_CHOICES)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+        db_index=True,
+    )
+    source_filename = models.CharField(max_length=255, blank=True)
+    input_file = models.FileField(upload_to="imports/%Y/%m/")
+    row_count = models.PositiveIntegerField(default=0)
+    result = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.job_type} #{self.pk} ({self.status})"
+
+
+class AuditLog(models.Model):
+    """Immutable trail of sensitive actions for pilot / compliance."""
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="audit_logs",
+        null=True,
+        blank=True,
+    )
+
+    user = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_logs",
+    )
+    user_email = models.EmailField(blank=True, db_index=True)
+    action = models.CharField(max_length=64, db_index=True)
+    detail = models.JSONField(default=dict, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    request_id = models.CharField(max_length=36, blank=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.action} ({self.user_email or 'system'})"

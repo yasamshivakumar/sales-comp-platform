@@ -2,7 +2,11 @@ db.sqlite3
 __pycache__/
 *.pyc
 .env
+.env.local
 venv/
+myenv/
 staticfiles/
 media/
 node_modules/
+logs/*.log
+!logs/.gitkeep

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Employee, Sale, Commission,CompensationPlan,UserProfile,HierarchyRelationship,CompensationPlan, CompensationTier,Order
+from .models import Employee, Commission, UserProfile, HierarchyRelationship, CompensationTier, Order
 
 from .models import (
     CompensationPlan,
@@ -12,30 +12,65 @@ class EmployeeSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class SaleSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Sale
-        fields = '__all__'
-
-
 class CommissionSerializer(serializers.ModelSerializer):
     employee_name = serializers.CharField(source='employee.name', read_only=True)
+    employee_email = serializers.CharField(source='employee.email', read_only=True)
+    employee_id = serializers.SerializerMethodField()
+    order_id = serializers.SerializerMethodField()
+    order_date = serializers.SerializerMethodField()
+    plan_name = serializers.CharField(
+        source='compensation_plan.plan_name',
+        read_only=True,
+        default=None,
+    )
+    approved_by_email = serializers.EmailField(
+        source='approved_by.email',
+        read_only=True,
+        default=None,
+    )
 
     class Meta:
         model = Commission
         fields = '__all__'
+        read_only_fields = [
+            'calculated_at',
+            'approved_at',
+            'approved_by',
+            'compensation_plan',
+            'status',
+        ]
 
-class CompensationPlanSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CompensationPlan
-        fields = '__all__'
+    def get_order_id(self, obj):
+        order = getattr(obj.sale, 'order', None) if obj.sale_id else None
+        return order.order_id if order else None
 
+    def get_order_date(self, obj):
+        order = getattr(obj.sale, 'order', None) if obj.sale_id else None
+        return order.order_date if order else None
 
+    def get_employee_id(self, obj):
+        # Try to get employee_id from UserProfile if available
+        try:
+            user_profile = UserProfile.objects.get(email=obj.employee.email)
+            return user_profile.employee_id
+        except UserProfile.DoesNotExist:
+            # Fallback: return a derived ID from employee email if no profile
+            return obj.employee.email.split('@')[0]
 
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
         fields = '__all__'
+
+    def validate(self, attrs):
+        from .field_rules import validate_user_profile_fields
+
+        raw = getattr(self, "initial_data", None) or {}
+        if hasattr(raw, "dict"):
+            raw = raw.dict()
+        merged = {**raw, **attrs}
+        validate_user_profile_fields(merged, partial=self.partial)
+        return attrs
 
 class HierarchyRelationshipSerializer(serializers.ModelSerializer):
     parent_name = serializers.CharField(
@@ -95,6 +130,27 @@ class CompensationPlanSerializer(serializers.ModelSerializer):
     class Meta:
         model = CompensationPlan
         fields = '__all__'
+        extra_kwargs = {
+            "description": {"required": False, "allow_blank": True},
+            "effective_end_date": {"required": False, "allow_null": True},
+            "position_name": {"required": False, "allow_blank": True, "allow_null": True},
+            "title": {"required": False, "allow_blank": True, "allow_null": True},
+            "business_group": {"required": False, "allow_blank": True, "allow_null": True},
+            "pay_period_type": {"required": False},
+        }
+
+    def validate(self, attrs):
+        from .field_rules import (
+            normalize_compensation_plan_payload,
+            validate_compensation_plan_fields,
+        )
+
+        raw = getattr(self, "initial_data", None) or {}
+        if hasattr(raw, "dict"):
+            raw = raw.dict()
+        merged = normalize_compensation_plan_payload({**raw, **attrs})
+        validate_compensation_plan_fields(merged, partial=self.partial)
+        return merged
 
     # --------------------------------------
     # Create plan and child tables
@@ -177,7 +233,17 @@ class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = "__all__"
-    
+
+    def validate(self, attrs):
+        from .field_rules import validate_order_fields
+
+        raw = getattr(self, "initial_data", None) or {}
+        if hasattr(raw, "dict"):
+            raw = raw.dict()
+        merged = {**raw, **attrs}
+        validate_order_fields(merged, partial=self.partial)
+        return attrs
+
     def validate_sales_amount(self, value):
         """
         Validate that sales_amount is non-negative and within acceptable bounds.

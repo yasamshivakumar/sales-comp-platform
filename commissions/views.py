@@ -1,23 +1,29 @@
-import pandas as pd
 from datetime import datetime
 from rest_framework import status
 import csv
 import io
 import logging
-from rest_framework.decorators import api_view,permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.response import Response
 from rest_framework import viewsets
-from .models import Employee, Sale, Commission,IncentiveRule,UserProfile,HierarchyRelationship,CompensationPlan, CompensationTier,Order,SCRateTable,SCFlatRateTable
+from .models import (
+    Employee,
+    Sale,
+    Commission,
+    UserProfile,
+    HierarchyRelationship,
+    CompensationPlan,
+    CompensationTier,
+    Order,
+)
 from decimal import Decimal, InvalidOperation
 from .serializers import (
     EmployeeSerializer,
-    SaleSerializer,
     CommissionSerializer,
     CompensationPlanSerializer,
     CompensationTierSerializer,
     OrderSerializer,
-    SCRateTableSerializer,
-    SCFlatRateTableSerializer,
 )
 from django.contrib.auth.models import User
 from rest_framework.views import APIView
@@ -27,22 +33,43 @@ from rest_framework.permissions import AllowAny
 from django.contrib.auth import authenticate
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
-from .models import CompensationPlan
-from .serializers import UserProfileSerializer,HierarchyRelationshipSerializer
-from .services import calculate_commission_for_order
+from .serializers import UserProfileSerializer, HierarchyRelationshipSerializer
+from django.conf import settings
+from .services import (
+    calculate_commission_for_order,
+    approve_commissions,
+    recalculate_orders_in_range,
+)
+from .permissions import (
+    require_admin,
+    require_finance_or_admin,
+    user_is_admin,
+    user_is_finance,
+    user_can_view_finance_data,
+    get_request_user_profile,
+)
+from .audit import record_audit
+from .emails import notify_admins
+from .models import AuditLog, ImportJob
+from .imports import process_orders_csv, should_use_async_import
+from .tenants import filter_queryset_by_organization
+from django.core.files.base import ContentFile
 from django.db import transaction
+from django.http import HttpResponse
+from django.utils.dateparse import parse_date
 
-# Initialize logger for commission app
-logger = logging.getLogger('commissions')
+logger = logging.getLogger("commissions")
+
+
+def _apply_onboarding_password(django_user, user_created):
+    """Set initial password only when DEFAULT_ONBOARDING_PASSWORD is configured."""
+    pwd = getattr(settings, "DEFAULT_ONBOARDING_PASSWORD", "") or ""
+    if user_created and pwd:
+        django_user.set_password(pwd)
 
 class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = Employee.objects.all()
     serializer_class = EmployeeSerializer
-
-
-class SaleViewSet(viewsets.ModelViewSet):
-    queryset = Sale.objects.all()
-    serializer_class = SaleSerializer
 
 
 class CommissionViewSet(viewsets.ModelViewSet):
@@ -62,99 +89,65 @@ class CommissionViewSet(viewsets.ModelViewSet):
             is_admin = user_profile.role.lower() in ['admin', 'administrator']
             
             if is_admin:
-                # Admin can see all commissions
-                return Commission.objects.all()
+                queryset = Commission.objects.select_related(
+                    "employee",
+                    "sale",
+                    "sale__order",
+                    "compensation_plan",
+                    "approved_by",
+                ).all()
+                queryset = filter_queryset_by_organization(
+                    queryset,
+                    getattr(self.request, "organization", None),
+                    field="sale__order__organization",
+                )
             else:
                 # Employee can only see their own commissions
-                # Match by employee_id from UserProfile
+                # Build possible email patterns for this employee
+                possible_emails = [
+                    user.email,  # Login email
+                ]
+                
+                # Add employee_id@company.com format
                 if user_profile.employee_id:
-                    return Commission.objects.filter(
-                        employee__email=user.email
-                    ) | Commission.objects.filter(
-                        employee__name=user_profile.name
-                    )
-                else:
-                    return Commission.objects.filter(
-                        employee__email=user.email
-                    )
+                    possible_emails.append(f"{user_profile.employee_id}@gmail.com")
+                
+                # Add name-based search
+                from django.db.models import Q
+                query = Q()
+                for email in possible_emails:
+                    query |= Q(employee__email=email)
+                
+                # Also search by employee name
+                if user_profile.name:
+                    query |= Q(employee__name__icontains=user_profile.name)
+                if user_profile.first_name and user_profile.last_name:
+                    full_name = f"{user_profile.first_name} {user_profile.last_name}"
+                    query |= Q(employee__name__icontains=full_name)
+                
+                queryset = Commission.objects.filter(query).select_related(
+                    "employee",
+                    "sale",
+                    "sale__order",
+                    "compensation_plan",
+                )
         except UserProfile.DoesNotExist:
-            # Fallback: show only their own
-            return Commission.objects.filter(
+            queryset = Commission.objects.filter(
                 employee__email=user.email
-            )
+            ).select_related("employee", "sale", "sale__order")
 
-
-# ====================================================
-# SC Rate Table ViewSet
-# ====================================================
-class SCRateTableViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for SC Rate Table (Tiered Commission Rates)
-    
-    Endpoints:
-    - GET /sc-rate-tables/ - List all rate tables
-    - GET /sc-rate-tables/?compensation_plan=<id> - Filter by compensation plan
-    - POST /sc-rate-tables/ - Create new rate table
-    - GET /sc-rate-tables/<id>/ - Get specific rate table
-    - PUT/PATCH /sc-rate-tables/<id>/ - Update rate table
-    - DELETE /sc-rate-tables/<id>/ - Delete rate table
-    """
-    serializer_class = SCRateTableSerializer
-    permission_classes = [IsAuthenticated]
-    
-    def get_queryset(self):
-        queryset = SCRateTable.objects.all().order_by('compensation_plan', 'sequence', 'from_amount')
-        
-        # Filter by compensation plan if provided
-        compensation_plan_id = self.request.query_params.get('compensation_plan', None)
-        if compensation_plan_id:
-            queryset = queryset.filter(compensation_plan_id=compensation_plan_id)
-        
-        # Filter by active status
-        is_active = self.request.query_params.get('is_active', None)
-        if is_active is not None:
-            is_active = is_active.lower() == 'true'
-            queryset = queryset.filter(is_active=is_active)
-        
+        status_filter = self.request.query_params.get("status")
+        if status_filter in (
+            Commission.STATUS_CALCULATED,
+            Commission.STATUS_APPROVED,
+        ):
+            queryset = queryset.filter(status=status_filter)
         return queryset
 
-
-# ====================================================
-# SC Flat Rate Table ViewSet
-# ====================================================
-class SCFlatRateTableViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for SC Flat Rate Table (Fixed Commission Rates)
-    
-    Endpoints:
-    - GET /sc-flat-rate-tables/ - List all flat rate tables
-    - GET /sc-flat-rate-tables/?compensation_plan=<id> - Filter by compensation plan
-    - POST /sc-flat-rate-tables/ - Create new flat rate table
-    - GET /sc-flat-rate-tables/<id>/ - Get specific flat rate table
-    - PUT/PATCH /sc-flat-rate-tables/<id>/ - Update flat rate table
-    - DELETE /sc-flat-rate-tables/<id>/ - Delete flat rate table
-    """
-    serializer_class = SCFlatRateTableSerializer
-    permission_classes = [IsAuthenticated]
-    
-    def get_queryset(self):
-        queryset = SCFlatRateTable.objects.all().order_by('compensation_plan')
-        
-        # Filter by compensation plan if provided
-        compensation_plan_id = self.request.query_params.get('compensation_plan', None)
-        if compensation_plan_id:
-            queryset = queryset.filter(compensation_plan_id=compensation_plan_id)
-        
-        # Filter by active status
-        is_active = self.request.query_params.get('is_active', None)
-        if is_active is not None:
-            is_active = is_active.lower() == 'true'
-            queryset = queryset.filter(is_active=is_active)
-        
-        return queryset
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([ScopedRateThrottle])
 def signup(request):
     username = request.data.get('username')
     email = request.data.get('email')
@@ -193,6 +186,7 @@ def signup(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([ScopedRateThrottle])
 def login(request):
     username = request.data.get('username')
     password = request.data.get('password')
@@ -204,6 +198,7 @@ def login(request):
     )
 
     if not user:
+        record_audit(request, "login_failed", {"username": username})
         return Response(
             {'error': 'Invalid credentials'},
             status=400
@@ -211,6 +206,7 @@ def login(request):
 
     # Get or create token
     token, _ = Token.objects.get_or_create(user=user)
+    record_audit(request, "login_success", {"user_id": user.pk})
 
     # Return success response
     return Response({
@@ -219,118 +215,18 @@ def login(request):
         'username': user.username
     })
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-@transaction.atomic
-def upload_orders(request):
-    """
-    Upload and process orders for commission calculation.
-    All operations wrapped in transaction for data consistency.
-    """
-    try:
-        file = request.FILES['file']
-    except KeyError:
-        logger.warning("Upload attempted without file")
-        return Response(
-            {'error': 'No file provided'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
-    # ================================================================
-    # FILE SIZE VALIDATION - Max 10MB
-    # ================================================================
-    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-    if file.size > MAX_FILE_SIZE:
-        logger.warning(f"File upload rejected: size {file.size} exceeds {MAX_FILE_SIZE} bytes")
-        return Response(
-            {'error': f'File size exceeds maximum allowed ({MAX_FILE_SIZE / 1024 / 1024}MB)'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
-    try:
-        df = pd.read_excel(file)
-    except Exception as e:
-        logger.error(f"Failed to read Excel file: {str(e)}")
-        return Response(
-            {'error': f'Failed to read file: {str(e)}'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    success_count = 0
-    failed_count = 0
-
-    logger.info(f"Starting order upload with {len(df)} rows")
-
-    for index, row in df.iterrows():
-
-        try:
-
-            if pd.isna(row['employee_email']):
-                continue
-
-            email = str(row['employee_email']).strip().lower()
-
-            employee = Employee.objects.filter(
-                email=email
-            ).first()
-
-            if not employee:
-                failed_count += 1
-                logger.warning(f"Row {index+1}: Employee not found: {email}")
-                continue
-
-            sale = Sale.objects.create(
-                employee=employee,
-                employee_salary=Decimal(str(row['salary'])),
-                amount=Decimal(str(row['sales_amount']))
-            )
-
-            rule = IncentiveRule.objects.filter(
-                min_amount__lte=Decimal(str(row['sales_amount'])),
-                max_amount__gte=Decimal(str(row['sales_amount']))
-            ).first()
-
-            if not rule:
-                failed_count += 1
-                logger.warning(f"Row {index+1}: No rule found for sales_amount {row['sales_amount']}")
-                continue
-
-            commission_amount = (
-                Decimal(str(row['sales_amount'])) *
-                rule.percentage
-            ) / Decimal("100")
-
-            Commission.objects.create(
-                employee=employee,
-                sale=sale,
-                commission_amount=commission_amount
-            )
-
-            success_count += 1
-            logger.debug(f"Row {index+1}: Commission created for {email}")
-
-        except (InvalidOperation, ValueError) as e:
-            failed_count += 1
-            logger.error(f"Row {index+1}: Decimal conversion error: {str(e)}")
-        except (InvalidOperation, ValueError) as e:
-            failed_count += 1
-            logger.error(f"Row {index+1}: Decimal conversion error: {str(e)}")
-        except Exception as e:
-            failed_count += 1
-            logger.error(f"Row {index+1}: Unexpected error: {str(e)}", exc_info=True)
-
-    logger.info(f"Order upload completed: {success_count} successful, {failed_count} failed")
-    
-    return Response({
-        "message": "Upload completed",
-        "success": success_count,
-        "failed": failed_count
-    })
-
 class CompensationPlanListCreateView(generics.ListCreateAPIView):
-    queryset = CompensationPlan.objects.all().order_by('-created_at')
     serializer_class = CompensationPlanSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = CompensationPlan.objects.all().order_by("-created_at")
+        return filter_queryset_by_organization(
+            qs, getattr(self.request, "organization", None)
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(organization=getattr(self.request, "organization", None))
 
     def check_admin_permission(self, request):
         """Check if user is admin, raise PermissionDenied if not"""
@@ -362,87 +258,225 @@ class CompensationPlanListCreateView(generics.ListCreateAPIView):
         """Only admins can update compensation plans"""
         self.check_admin_permission(request)
         return super().update(request, *args, **kwargs)
+
+
+class UserProfileListCreateView(generics.ListCreateAPIView):
+
     queryset = UserProfile.objects.all().order_by('first_name')
     serializer_class = UserProfileSerializer
     permission_classes = [IsAuthenticated]
 
     def create(self, request, *args, **kwargs):
-        email = request.data.get('email')
 
-        if not email:
-            return Response(
-                {'email': ['This field is required.']},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        try:
+            data = request.data.copy()
 
-        # Make request data mutable
-        data = request.data.copy()
+            # ---------------------------------------------------
+            # Required Field
+            # ---------------------------------------------------
+            email = str(
+                data.get('email', '')
+            ).strip()
 
-        # Remove hierarchy fields (handled separately)
-        parent_participant = data.pop('parent_participant', None)
-        child_participant = data.pop('child_participant', None)
-        split_percentage = data.pop('split_percentage', None)
-
-        # Convert empty numeric fields to zero
-        numeric_fields = [
-            'personal_target',
-        ]
-
-        for field in numeric_fields:
-            if not data.get(field):
-                data[field] = 0
-
-        # Remove empty date fields
-        if not data.get('hire_date'):
-            data['hire_date'] = None
-
-        # Create or update UserProfile
-        profile, created = UserProfile.objects.update_or_create(
-            email=email,
-            defaults=data
-        )
-
-        # Create Django login user if login access is enabled
-        if profile.enable_login:
-            username = profile.username or profile.email
-
-            if not User.objects.filter(username=username).exists():
-                User.objects.create_user(
-                    username=username,
-                    email=profile.email,
-                    first_name=profile.first_name,
-                    last_name=profile.last_name,
-                    password='Welcome@123'
+            if not email:
+                return Response(
+                    {'error': 'Email is required'},
+                    status=status.HTTP_400_BAD_REQUEST
                 )
 
-        # Create hierarchy relationship if provided
-        if (
-            parent_participant
-            and child_participant
-            and split_percentage
-        ):
-            HierarchyRelationship.objects.update_or_create(
-                parent_participant_id=parent_participant,
-                child_participant_id=child_participant,
+            from .field_rules import validate_user_profile_fields
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+
+            try:
+                validate_user_profile_fields(data)
+            except DRFValidationError as exc:
+                detail = exc.detail
+                if isinstance(detail, dict):
+                    detail = "; ".join(
+                        f"{k}: {v[0] if isinstance(v, list) else v}"
+                        for k, v in detail.items()
+                    )
+                return Response({"error": str(detail)}, status=status.HTTP_400_BAD_REQUEST)
+
+            # ---------------------------------------------------
+            # Boolean Conversion
+            # ---------------------------------------------------
+            enable_login = str(
+                data.get('enable_login', 'False')
+            ).strip().lower() in ['true', '1', 'yes']
+
+            # ---------------------------------------------------
+            # Numeric Fields
+            # ---------------------------------------------------
+            personal_target = (
+                data.get('personal_target') or 0
+            )
+
+            split_percentage = (
+                data.get('split_percentage') or 100
+            )
+
+            # ---------------------------------------------------
+            # Username
+            # ---------------------------------------------------
+            username = str(
+                data.get('username', '')
+            ).strip()
+
+            if not username:
+                username = email
+
+            # ---------------------------------------------------
+            # Create / Update UserProfile
+            # ---------------------------------------------------
+            org = getattr(request, "organization", None)
+            lookup = {"email": email}
+            if org:
+                lookup["organization"] = org
+
+            profile, created = UserProfile.objects.update_or_create(
+                **lookup,
                 defaults={
-                    'split_percentage': split_percentage,
-                    'is_active': True,
+                    "organization": org,
+                    # User
+                    'enable_login': enable_login,
+                    'name': str(
+                        data.get('name', '')
+                    ).strip(),
+
+                    'role': str(
+                        data.get('role', 'Sales Rep')
+                    ).strip(),
+
+                    # People
+                    'username': username,
+
+                    'first_name': str(
+                        data.get('first_name', '')
+                    ).strip(),
+
+                    'last_name': str(
+                        data.get('last_name', '')
+                    ).strip(),
+
+                    'prefix': str(
+                        data.get('prefix', '')
+                    ).strip(),
+
+                    'employee_id': str(
+                        data.get('employee_id', '')
+                    ).strip(),
+
+                    'hire_date': data.get('hire_date'),
+
+                    'personal_target': personal_target,
+
+                    'personal_currency': str(
+                        data.get('personal_currency', 'INR')
+                    ).strip(),
+
+                    'business_group': str(
+                        data.get('business_group', 'India')
+                    ).strip(),
+
+                    # Title
+                    'title': str(
+                        data.get('title', '')
+                    ).strip(),
+
+                    'pay_period_type': str(
+                        data.get('pay_period_type', 'Monthly')
+                    ).strip(),
+
+                    # Position
+                    'position_name': str(
+                        data.get('position_name', '')
+                    ).strip(),
+
+                    'position_title': str(
+                        data.get('position_title', '')
+                    ).strip(),
                 }
             )
 
-        serializer = self.get_serializer(profile)
+            # ---------------------------------------------------
+            # Create Django Auth User
+            # ---------------------------------------------------
+            if enable_login:
 
-        return Response(
-            serializer.data,
-            status=status.HTTP_201_CREATED if created
-            else status.HTTP_200_OK
-        )
+                django_user, user_created = User.objects.get_or_create(
+                    username=username,
+                    defaults={
+                        'email': email,
+                        'first_name': profile.first_name,
+                        'last_name': profile.last_name,
+                        'is_active': True,
+                    }
+                )
 
+                django_user.email = email
+                django_user.first_name = profile.first_name
+                django_user.last_name = profile.last_name
+                django_user.is_active = True
+
+                _apply_onboarding_password(django_user, user_created)
+                django_user.save()
+
+            # ---------------------------------------------------
+            # Hierarchy Relationship
+            # ---------------------------------------------------
+            parent_participant = data.get(
+                'parent_participant'
+            )
+
+            child_participant = data.get(
+                'child_participant'
+            )
+
+            if parent_participant and child_participant:
+
+                parent_profile = UserProfile.objects.filter(
+                    id=parent_participant
+                ).first()
+
+                child_profile = UserProfile.objects.filter(
+                    id=child_participant
+                ).first()
+
+                if parent_profile and child_profile:
+
+                    HierarchyRelationship.objects.update_or_create(
+                        parent_participant=parent_profile,
+                        child_participant=child_profile,
+                        defaults={
+                            'split_percentage': split_percentage,
+                            'is_active': True,
+                        }
+                    )
+
+            serializer = self.get_serializer(profile)
+
+            return Response(
+                serializer.data,
+                status=status.HTTP_201_CREATED
+                if created
+                else status.HTTP_200_OK
+            )
+
+        except Exception as e:
+
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 class UserProfileUploadView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "upload"
 
+    @transaction.atomic
     def post(self, request):
         # ---------------------------------------------------
         # Check file exists
@@ -479,19 +513,34 @@ class UserProfileUploadView(APIView):
         success = 0
         failed = 0
         errors = []
+        
+        # Cache for lookups to reduce database queries
+        email_to_profile = {}
+        username_to_profile = {}
+        employee_id_to_profile = {}
 
         # ---------------------------------------------------
-        # Process each row
+        # Process each row with batch optimization
         # ---------------------------------------------------
         for index, row in enumerate(rows, start=2):
             try:
                 # ---------------------------------------------------
                 # Required field: Email
                 # ---------------------------------------------------
-                email = str(row.get('email', '')).strip()
+                email = str(row.get('email', '')).strip().lower()
 
                 if not email:
                     raise Exception('Email is required')
+
+                role_val = str(row.get('role', '')).strip()
+                employee_id_val = str(row.get('employee_id', '')).strip()
+                name_val = str(row.get('name', '')).strip()
+                if not role_val:
+                    raise Exception('role is required')
+                if not employee_id_val:
+                    raise Exception('employee_id is required')
+                if not name_val:
+                    raise Exception('name is required')
 
                 # ---------------------------------------------------
                 # Boolean conversion for enable_login
@@ -569,15 +618,19 @@ class UserProfileUploadView(APIView):
                 # ---------------------------------------------------
                 # Create or Update UserProfile
                 # ---------------------------------------------------
+                org = getattr(request, "organization", None)
+                profile_lookup = {"email": email}
+                if org:
+                    profile_lookup["organization"] = org
+
                 profile, created = UserProfile.objects.update_or_create(
-                    email=email,
+                    **profile_lookup,
                     defaults={
+                        "organization": org,
                         # User
                         'enable_login': enable_login,
-                        'name': str(row.get('name', '')).strip(),
-                        'role': str(
-                            row.get('role', 'Sales Rep')
-                        ).strip(),
+                        'name': name_val,
+                        'role': role_val,
 
                         # People
                         'username': username,
@@ -590,9 +643,7 @@ class UserProfileUploadView(APIView):
                         'prefix': str(
                             row.get('prefix', '')
                         ).strip(),
-                        'employee_id': str(
-                            row.get('employee_id', '')
-                        ).strip(),
+                        'employee_id': employee_id_val,
                         'hire_date': hire_date,
                         'personal_target': personal_target,
                         'personal_currency': str(
@@ -619,6 +670,12 @@ class UserProfileUploadView(APIView):
                         ).strip(),
                     }
                 )
+                
+                # Update cache
+                email_to_profile[email] = profile
+                username_to_profile[username] = profile
+                if profile.employee_id:
+                    employee_id_to_profile[profile.employee_id] = profile
 
                 # ---------------------------------------------------
                 # Create Django Login User
@@ -626,9 +683,7 @@ class UserProfileUploadView(APIView):
                 # If enable_login = yes/true/1,
                 # create a Django auth user.
                 #
-                # Login credentials:
-                # Username: email (or username column if provided)
-                # Password: Welcome@123
+                # Login: password set only if DEFAULT_ONBOARDING_PASSWORD is in .env
                 # ---------------------------------------------------
                 if enable_login:
                     django_user, user_created = User.objects.get_or_create(
@@ -647,15 +702,13 @@ class UserProfileUploadView(APIView):
                     django_user.last_name = profile.last_name
                     django_user.is_active = True
 
-                    # Set default password only when user is first created
-                    if user_created:
-                        django_user.set_password('Welcome@123')
-
+                    _apply_onboarding_password(django_user, user_created)
                     django_user.save()
 
                 # ---------------------------------------------------
                 # Create Hierarchy Relationship
                 # Lookup by username, employee_id, or email
+                # Uses cache to reduce database queries
                 # ---------------------------------------------------
                 parent_value = str(
                     row.get('parent_participant', '')
@@ -666,8 +719,12 @@ class UserProfileUploadView(APIView):
                 ).strip()
 
                 if parent_value and child_value:
+                    # Try cache first, then database
                     parent_profile = (
-                        UserProfile.objects.filter(
+                        username_to_profile.get(parent_value)
+                        or employee_id_to_profile.get(parent_value)
+                        or email_to_profile.get(parent_value)
+                        or UserProfile.objects.filter(
                             username=parent_value
                         ).first()
                         or UserProfile.objects.filter(
@@ -679,7 +736,10 @@ class UserProfileUploadView(APIView):
                     )
 
                     child_profile = (
-                        UserProfile.objects.filter(
+                        username_to_profile.get(child_value)
+                        or employee_id_to_profile.get(child_value)
+                        or email_to_profile.get(child_value)
+                        or UserProfile.objects.filter(
                             username=child_value
                         ).first()
                         or UserProfile.objects.filter(
@@ -712,20 +772,31 @@ class UserProfileUploadView(APIView):
                     'email': row.get('email', ''),
                     'error': str(e),
                 })
-                print(
+                logger.error(
                     f"Error processing row {index}: {str(e)}"
                 )
 
         # ---------------------------------------------------
         # Final response
         # ---------------------------------------------------
-        return Response({
-            'message': 'Upload completed successfully',
-            'success': success,
-            'failed': failed,
-            'errors': errors[:20],  # Return first 20 errors
-            'default_password': 'Welcome@123',
-        })
+        payload = {
+            "message": "Upload completed successfully",
+            "success": success,
+            "failed": failed,
+            "errors": errors[:20],
+        }
+        if getattr(settings, "DEFAULT_ONBOARDING_PASSWORD", ""):
+            payload["note"] = (
+                "New login users received the password from DEFAULT_ONBOARDING_PASSWORD. "
+                "Change it after first login."
+            )
+        record_audit(
+            request,
+            "user_setup_upload",
+            {"success": success, "failed": failed, "filename": uploaded_file.name},
+        )
+        return Response(payload)
+
 
 class HierarchyRelationshipListCreateView(generics.ListCreateAPIView):
     queryset = HierarchyRelationship.objects.filter(
@@ -735,11 +806,6 @@ class HierarchyRelationshipListCreateView(generics.ListCreateAPIView):
     serializer_class = HierarchyRelationshipSerializer
     permission_classes = [IsAuthenticated]
 
-
-class CompensationPlanListCreateView(generics.ListCreateAPIView):
-    queryset = CompensationPlan.objects.all().order_by('-created_at')
-    serializer_class = CompensationPlanSerializer
-    permission_classes = [IsAuthenticated]
 
 class CompensationTierListCreateView(generics.ListCreateAPIView):
     queryset = CompensationTier.objects.all().order_by('plan', 'min_sales')
@@ -767,8 +833,11 @@ class OrderListCreateView(generics.ListCreateAPIView):
         - Regular employee: Can only see their own orders
         """
         user = self.request.user
-        queryset = Order.objects.all().order_by("-order_date")
-        
+        queryset = filter_queryset_by_organization(
+            Order.objects.all().order_by("-order_date"),
+            getattr(self.request, "organization", None),
+        )
+
         try:
             user_profile = UserProfile.objects.get(email=user.email)
             is_admin = user_profile.role.lower() in ['admin', 'administrator']
@@ -786,11 +855,18 @@ class OrderListCreateView(generics.ListCreateAPIView):
             # Fallback: show nothing if profile doesn't exist
             return queryset.none()
 
+    def perform_create(self, serializer):
+        order = serializer.save(
+            organization=getattr(self.request, "organization", None)
+        )
+        calculate_commission_for_order(order)
 
 
 class OrderUploadView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "upload"
 
     def post(self, request):
         # ---------------------------------------------------
@@ -818,176 +894,80 @@ class OrderUploadView(APIView):
         # ---------------------------------------------------
         try:
             decoded_file = uploaded_file.read().decode("utf-8")
-            csv_reader = csv.DictReader(io.StringIO(decoded_file))
-            rows = list(csv_reader)
+            rows = list(csv.DictReader(io.StringIO(decoded_file)))
         except Exception as e:
             return Response(
                 {"error": f"Error reading CSV file: {str(e)}"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        success = 0
-        failed = 0
-        errors = []
+        organization = getattr(request, "organization", None)
+        if not organization:
+            return Response(
+                {"error": "Organization context missing"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # Get actual fields that exist in the Order model
-        order_model_fields = {
-            field.name for field in Order._meta.get_fields()
-        }
+        if should_use_async_import(len(rows)):
+            from .tasks import process_import_job_task
 
-        # ---------------------------------------------------
-        # Process each row
-        # ---------------------------------------------------
-        for index, row in enumerate(rows, start=2):
-            try:
-                # ---------------------------------------------------
-                # Required field: order_id
-                # ---------------------------------------------------
-                order_id = str(row.get("order_id", "")).strip()
-                if not order_id:
-                    raise Exception("order_id is required")
+            job = ImportJob.objects.create(
+                organization=organization,
+                created_by=request.user,
+                job_type=ImportJob.JOB_ORDERS,
+                source_filename=uploaded_file.name,
+                row_count=len(rows),
+            )
+            job.input_file.save(
+                uploaded_file.name,
+                ContentFile(decoded_file.encode("utf-8")),
+                save=True,
+            )
+            process_import_job_task.delay(job.id)
+            record_audit(
+                request,
+                "orders_upload_queued",
+                {"job_id": job.id, "rows": len(rows), "filename": uploaded_file.name},
+            )
+            return Response(
+                {
+                    "message": "Import queued for background processing",
+                    "async": True,
+                    "job_id": job.id,
+                    "status": job.status,
+                    "row_count": len(rows),
+                },
+                status=status.HTTP_202_ACCEPTED,
+            )
 
-                # ---------------------------------------------------
-                # Required field: order_date
-                # ---------------------------------------------------
-                order_date_value = row.get("order_date", "")
-                if not order_date_value:
-                    raise Exception("order_date is required")
-
-                order_date = None
-                date_formats = [
-                    "%Y-%m-%d",  # 2026-05-01
-                    "%d-%m-%Y",  # 01-05-2026
-                    "%d/%m/%Y",  # 01/05/2026
-                ]
-
-                for fmt in date_formats:
-                    try:
-                        order_date = datetime.strptime(
-                            str(order_date_value).strip(),
-                            fmt
-                        ).date()
-                        break
-                    except ValueError:
-                        pass
-
-                if order_date is None:
-                    raise Exception(
-                        f"Invalid order_date format: {order_date_value}"
-                    )
-
-                # ---------------------------------------------------
-                # Required field: sales_amount
-                # ---------------------------------------------------
-                
-                try:
-                    sales_amount = Decimal(str(row.get("sales_amount", 0) or 0))
-                except (InvalidOperation, ValueError):
-                    sales_amount = Decimal("0")
-
-                # ---------------------------------------------------
-                # Base fields (only if they exist in model)
-                # ---------------------------------------------------
-                defaults = {}
-
-                if "order_date" in order_model_fields:
-                    defaults["order_date"] = order_date
-
-                if "employee_id" in order_model_fields:
-                    defaults["employee_id"] = str(
-                        row.get("employee_id", "")
-                    ).strip()
-
-                if "position_name" in order_model_fields:
-                    defaults["position_name"] = str(
-                        row.get("position_name", "")
-                    ).strip()
-
-                if "sales_amount" in order_model_fields:
-                    defaults["sales_amount"] = Decimal(str(sales_amount))
-
-                if "order_status" in order_model_fields:
-                    defaults["order_status"] = (
-                        str(
-                            row.get("order_status", "Booked")
-                        ).strip() or "Booked"
-                    )
-
-                if "currency" in order_model_fields:
-                    defaults["currency"] = (
-                        str(
-                            row.get("currency", "INR")
-                        ).strip() or "INR"
-                    )
-
-                # ---------------------------------------------------
-                # Optional text fields
-                # Added only if both:
-                # 1. CSV contains the column
-                # 2. Model contains the field
-                # ---------------------------------------------------
-                optional_text_fields = [
-                    "customer_name",
-                    "product_name",
-                    "service_name",
-                ]
-
-                for field_name in optional_text_fields:
-                    if (
-                        field_name in row
-                        and field_name in order_model_fields
-                    ):
-                        defaults[field_name] = str(
-                            row.get(field_name, "")
-                        ).strip()
-
-                # ---------------------------------------------------
-                # Optional numeric field: quantity
-                # Added only if model has quantity field
-                # ---------------------------------------------------
-                if (
-                    "quantity" in row
-                    and "quantity" in order_model_fields
-                    and str(row.get("quantity", "")).strip()
-                ):
-                    defaults["quantity"] = float(
-                        row.get("quantity")
-                    )
-
-                # ---------------------------------------------------
-                # Create or update order
-                # ---------------------------------------------------
-                order, created = Order.objects.update_or_create(
-                    order_id=order_id,
-                    defaults=defaults
-                )
-
-            # 👉 AUTO COMMISSION CALCULATION HERE
-                calculate_commission_for_order(order)
-
-                success += 1
-
-                
-
-            except Exception as e:
-                failed += 1
-                errors.append({
-                    "row": index,
-                    "error": str(e),
-                })
-                print(
-                    f"Error processing row {index}: {str(e)}"
-                )
-
-        # ---------------------------------------------------
-        # Final response
-        # ---------------------------------------------------
+        summary = process_orders_csv(organization, decoded_file)
+        record_audit(
+            request,
+            "orders_upload",
+            {
+                "success": summary["success"],
+                "failed": summary["failed"],
+                "filename": uploaded_file.name,
+            },
+        )
+        notify_admins(
+            "IncentivePro: order upload finished",
+            (
+                f"User: {request.user.email}\n"
+                f"File: {uploaded_file.name}\n"
+                f"Success: {summary['success']}\n"
+                f"Failed: {summary['failed']}\n"
+            ),
+        )
         return Response({
             "message": "Order upload completed successfully",
-            "success": success,
-            "failed": failed,
-            "errors": errors[:20],
+            "async": False,
+            **summary,
         })
+
+
+signup.throttle_scope = "login"
+login.throttle_scope = "login"
 
 
 # =====================================================
@@ -995,6 +975,7 @@ class OrderUploadView(APIView):
 # =====================================================
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([ScopedRateThrottle])
 def email_login(request):
     """
     Login endpoint that accepts email and password.
@@ -1033,6 +1014,7 @@ def email_login(request):
             user = User.objects.get(username=email)
         except User.DoesNotExist:
             logger.warning(f"Login attempt with non-existent email: {email}")
+            record_audit(request, "login_failed", {"email": email})
             return Response(
                 {'error': 'Invalid credentials'},
                 status=status.HTTP_401_UNAUTHORIZED
@@ -1041,6 +1023,7 @@ def email_login(request):
     # Check password
     if not user.check_password(password):
         logger.warning(f"Failed login attempt for email: {email}")
+        record_audit(request, "login_failed", {"email": email})
         return Response(
             {'error': 'Invalid credentials'},
             status=status.HTTP_401_UNAUTHORIZED
@@ -1061,6 +1044,7 @@ def email_login(request):
         user_profile = UserProfile.objects.filter(email=user.email).first()
         
         logger.info(f"Successful login for email: {email}")
+        record_audit(request, "login_success", {"user_id": user.id, "email": email})
         
         return Response({
             'message': 'Login successful',
@@ -1174,13 +1158,17 @@ def get_user_profile(request):
         user_profile = UserProfile.objects.get(email=user.email)
         is_admin = user_profile.role.lower() in ['admin', 'administrator']
         
+        org = user_profile.organization
         return Response({
             'user_id': user.id,
             'email': user.email,
             'role': user_profile.role,
             'name': user_profile.name,
             'is_admin': is_admin,
+            'is_finance': user_is_finance(request),
             'employee_id': user_profile.employee_id,
+            'organization_slug': org.slug if org else None,
+            'organization_name': org.name if org else None,
         })
         
     except UserProfile.DoesNotExist:
@@ -1194,3 +1182,425 @@ def get_user_profile(request):
             {'error': 'An error occurred'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+# =====================================================
+# REPORTS API
+# =====================================================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def commission_summary_report(request):
+    """
+    Commission Summary Report
+    Shows total commissions, top earners, metrics
+    Admin: All employees, Employee: Own only
+    """
+    from django.db.models import Sum, Count, Q, Avg
+    from datetime import datetime, timedelta
+    
+    user = request.user
+    try:
+        user_profile = UserProfile.objects.get(email=user.email)
+        is_admin = user_profile.role.lower() in ['admin', 'administrator']
+    except:
+        is_admin = False
+    
+    # Get date range
+    start_date = request.query_params.get('start_date')
+    end_date = request.query_params.get('end_date')
+    
+    if start_date and end_date:
+        commissions = Commission.objects.filter(
+            sale__order__order_date__range=[start_date, end_date]
+        )
+    else:
+        commissions = Commission.objects.all()
+    
+    # Filter by role
+    if not is_admin:
+        possible_emails = [user.email]
+        if user_profile.employee_id:
+            possible_emails.append(f"{user_profile.employee_id}@company.com")
+        commissions = commissions.filter(employee__email__in=possible_emails)
+    
+    # Calculate metrics
+    total_commission = commissions.aggregate(Sum('commission_amount'))['commission_amount__sum'] or 0
+    total_count = commissions.count()
+    avg_commission = commissions.aggregate(Avg('commission_amount'))['commission_amount__avg'] or 0
+    
+    # Top earners (only for admin)
+    top_earners = []
+    if is_admin:
+        top_earners = Commission.objects.values('employee__name', 'employee__email').annotate(
+            total=Sum('commission_amount'),
+            count=Count('id')
+        ).order_by('-total')[:5]
+    
+    return Response({
+        'total_commission': float(total_commission),
+        'total_count': total_count,
+        'avg_commission': float(avg_commission),
+        'top_earners': list(top_earners),
+        'is_admin': is_admin,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def sales_performance_report(request):
+    """
+    Sales Performance Report
+    Shows sales by employee, achievement metrics
+    """
+    from django.db.models import Sum, Count
+    
+    user = request.user
+    try:
+        user_profile = UserProfile.objects.get(email=user.email)
+        is_admin = user_profile.role.lower() in ['admin', 'administrator']
+    except:
+        is_admin = False
+    
+    # Get orders and sales
+    orders = Order.objects.all()
+    
+    if not is_admin:
+        possible_employee_ids = []
+        if user_profile.employee_id:
+            possible_employee_ids.append(user_profile.employee_id)
+        orders = orders.filter(employee_id__in=possible_employee_ids)
+    
+    # Aggregate sales data
+    sales_data = orders.values('employee_id', 'position_name').annotate(
+        total_sales=Sum('sales_amount'),
+        order_count=Count('id'),
+        avg_order=Sum('sales_amount')
+    ).order_by('-total_sales')
+    
+    # Calculate totals
+    total_sales = orders.aggregate(Sum('sales_amount'))['sales_amount__sum'] or 0
+    total_orders = orders.count()
+    
+    return Response({
+        'total_sales': float(total_sales),
+        'total_orders': total_orders,
+        'sales_data': list(sales_data),
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def employee_earnings_report(request):
+    """
+    Employee Earnings Report
+    Detailed breakdown of commissions by employee
+    """
+    from django.db.models import Sum, Count
+    
+    user = request.user
+    try:
+        user_profile = UserProfile.objects.get(email=user.email)
+        is_admin = user_profile.role.lower() in ['admin', 'administrator']
+    except:
+        is_admin = False
+    
+    # Get commissions
+    commissions = Commission.objects.all()
+    
+    if not is_admin:
+        possible_emails = [user.email]
+        if user_profile.employee_id:
+            possible_emails.append(f"{user_profile.employee_id}@company.com")
+        commissions = commissions.filter(employee__email__in=possible_emails)
+    
+    # Group by employee
+    earnings_data = commissions.values('employee__name', 'employee__email', 'employee_id').annotate(
+        total_earnings=Sum('commission_amount'),
+        commission_count=Count('id'),
+        avg_commission=Sum('commission_amount')
+    ).order_by('-total_earnings')
+    
+    return Response({
+        'earnings': list(earnings_data),
+        'is_admin': is_admin,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def period_analytics_report(request):
+    """
+    Period-wise Analytics Report
+    Monthly, Quarterly, Annual metrics
+    """
+    from django.db.models import Sum, Count
+    from datetime import datetime, timedelta
+    from dateutil.relativedelta import relativedelta
+    
+    user = request.user
+    try:
+        user_profile = UserProfile.objects.get(email=user.email)
+        is_admin = user_profile.role.lower() in ['admin', 'administrator']
+    except:
+        is_admin = False
+    
+    period = request.query_params.get('period', 'monthly')  # monthly, quarterly, annual
+    
+    commissions = Commission.objects.all()
+    
+    if not is_admin:
+        possible_emails = [user.email]
+        if user_profile.employee_id:
+            possible_emails.append(f"{user_profile.employee_id}@company.com")
+        commissions = commissions.filter(employee__email__in=possible_emails)
+    
+    # Group by period
+    period_data = []
+    
+    if period == 'monthly':
+        # Last 12 months
+        for i in range(12, 0, -1):
+            month_start = datetime.now() - relativedelta(months=i)
+            month_end = month_start + relativedelta(months=1)
+            
+            month_commission = commissions.filter(
+                calculated_at__gte=month_start,
+                calculated_at__lt=month_end
+            ).aggregate(total=Sum('commission_amount'), count=Count('id'))
+            
+            period_data.append({
+                'period': month_start.strftime('%B %Y'),
+                'total': float(month_commission['total'] or 0),
+                'count': month_commission['count'] or 0,
+            })
+    
+    return Response({
+        'period': period,
+        'data': period_data,
+        'is_admin': is_admin,
+    })
+
+
+# =====================================================
+# Phase 2: Approvals, payroll export, bulk recalc
+# =====================================================
+
+def _commission_queryset_for_export(request):
+    """Base queryset for payroll export (admin/finance: all; employee: own)."""
+    queryset = Commission.objects.select_related(
+        "employee",
+        "sale",
+        "sale__order",
+        "compensation_plan",
+    )
+    if user_can_view_finance_data(request):
+        return queryset
+    profile = get_request_user_profile(request)
+    if not profile:
+        return queryset.none()
+    emails = [request.user.email]
+    if profile.employee_id:
+        emails.append(f"{profile.employee_id}@company.com")
+    return queryset.filter(employee__email__in=emails)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def approve_commissions_view(request):
+    """
+    Approve calculated commissions for payroll.
+
+    Body: { "ids": [1,2,3] } and/or { "start_date": "2025-01-01", "end_date": "2025-01-31" }
+    """
+    require_admin(request)
+    ids = request.data.get("ids") or []
+    start_date = parse_date(request.data.get("start_date") or "")
+    end_date = parse_date(request.data.get("end_date") or "")
+
+    queryset = Commission.objects.filter(status=Commission.STATUS_CALCULATED)
+    if ids:
+        queryset = queryset.filter(id__in=ids)
+    org = getattr(request, "organization", None)
+    if org:
+        queryset = queryset.filter(sale__order__organization=org)
+    if start_date and end_date:
+        queryset = queryset.filter(
+            sale__order__order_date__range=[start_date, end_date]
+        )
+    if not ids and not (start_date and end_date):
+        return Response(
+            {"error": "Provide commission ids and/or start_date + end_date"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    count = approve_commissions(queryset, request.user)
+    record_audit(
+        request,
+        "commissions_approved",
+        {
+            "approved": count,
+            "start_date": str(start_date) if start_date else None,
+            "end_date": str(end_date) if end_date else None,
+            "ids": ids,
+        },
+    )
+    return Response({"approved": count})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def commission_payroll_export(request):
+    """
+    CSV export for payroll (approved commissions by default).
+
+    Query: start_date, end_date, status=approved|calculated|all
+    """
+    start_date = parse_date(request.query_params.get("start_date") or "")
+    end_date = parse_date(request.query_params.get("end_date") or "")
+    status_param = (request.query_params.get("status") or "approved").lower()
+
+    queryset = _commission_queryset_for_export(request)
+    if start_date and end_date:
+        queryset = queryset.filter(
+            sale__order__order_date__range=[start_date, end_date]
+        )
+    if status_param == "approved":
+        queryset = queryset.filter(status=Commission.STATUS_APPROVED)
+    elif status_param == "calculated":
+        queryset = queryset.filter(status=Commission.STATUS_CALCULATED)
+    elif status_param != "all":
+        return Response(
+            {"error": "status must be approved, calculated, or all"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow([
+        "commission_id",
+        "employee_id",
+        "employee_name",
+        "employee_email",
+        "order_id",
+        "order_date",
+        "sales_amount",
+        "commission_amount",
+        "status",
+        "plan_name",
+        "calculated_at",
+        "approved_at",
+    ])
+
+    for comm in queryset.order_by("sale__order__order_date", "employee__name"):
+        order = comm.sale.order if comm.sale_id and comm.sale.order_id else None
+        profile = UserProfile.objects.filter(email=comm.employee.email).first()
+        writer.writerow([
+            comm.id,
+            profile.employee_id if profile else "",
+            comm.employee.name,
+            comm.employee.email,
+            order.order_id if order else "",
+            order.order_date.isoformat() if order and order.order_date else "",
+            order.sales_amount if order else "",
+            comm.commission_amount,
+            comm.status,
+            comm.compensation_plan.plan_name if comm.compensation_plan_id else "",
+            comm.calculated_at.isoformat() if comm.calculated_at else "",
+            comm.approved_at.isoformat() if comm.approved_at else "",
+        ])
+
+    response = HttpResponse(buffer.getvalue(), content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="payroll_commissions.csv"'
+    return response
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def recalculate_commissions_view(request):
+    """
+    Recalculate commissions for orders in a date range (admin).
+
+    Body: { "start_date": "2025-01-01", "end_date": "2025-01-31", "force": true }
+    force=true replaces approved commissions; default skips approved orders.
+    """
+    require_admin(request)
+    start_date = parse_date(request.data.get("start_date") or "")
+    end_date = parse_date(request.data.get("end_date") or "")
+    if not start_date or not end_date:
+        return Response(
+            {"error": "start_date and end_date are required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    force = bool(request.data.get("force", False))
+    stats = recalculate_orders_in_range(
+        start_date,
+        end_date,
+        force=force,
+        organization=getattr(request, "organization", None),
+    )
+    record_audit(
+        request,
+        "commissions_recalculated",
+        {
+            "start_date": str(start_date),
+            "end_date": str(end_date),
+            "force": force,
+            **stats,
+        },
+    )
+    return Response(stats)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def audit_log_list(request):
+    """Recent audit events (admin / finance)."""
+    require_finance_or_admin(request)
+    limit = min(int(request.query_params.get("limit", 100)), 500)
+    logs = AuditLog.objects.select_related("user").order_by("-created_at")
+    logs = filter_queryset_by_organization(
+        logs, getattr(request, "organization", None)
+    )[:limit]
+    data = [
+        {
+            "id": row.id,
+            "action": row.action,
+            "user_email": row.user_email,
+            "detail": row.detail,
+            "ip_address": row.ip_address,
+            "request_id": row.request_id,
+            "created_at": row.created_at.isoformat(),
+        }
+        for row in logs
+    ]
+    return Response({"count": len(data), "results": data})
+
+
+email_login.throttle_scope = "login"
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def import_job_detail(request, job_id):
+    """Poll status of a background CSV import."""
+    org = getattr(request, "organization", None)
+    job = ImportJob.objects.filter(pk=job_id, organization=org).first()
+    if not job:
+        return Response({"error": "Import job not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if not user_is_admin(request) and job.created_by_id != request.user.id:
+        return Response({"error": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+    return Response({
+        "id": job.id,
+        "job_type": job.job_type,
+        "status": job.status,
+        "source_filename": job.source_filename,
+        "row_count": job.row_count,
+        "result": job.result,
+        "error_message": job.error_message,
+        "created_at": job.created_at.isoformat(),
+        "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+    })
