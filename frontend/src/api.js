@@ -4,7 +4,6 @@ import axios from "axios";
 // API CONFIGURATION
 // ============================================================================
 // Build API base URL from environment variables
-const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
 const apiHost = process.env.REACT_APP_API_HOST || 'http://localhost:8000';
 const apiBaseURL = process.env.REACT_APP_API_BASE_URL || `${apiHost}/api`;
 

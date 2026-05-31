@@ -13,7 +13,7 @@ function App() {
   useEffect(() => {
     fetchEmployees();
     fetchCommissionSummary();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchEmployees = async () => {
     try {

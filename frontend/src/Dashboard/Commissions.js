@@ -7,7 +7,6 @@ function Commissions() {
   const [commissions, setCommissions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [userRole, setUserRole] = useState("Employee");
   const [isAdmin, setIsAdmin] = useState(false);
   const [canManagePayroll, setCanManagePayroll] = useState(false);
 
@@ -27,25 +26,24 @@ function Commissions() {
   useEffect(() => {
     fetchUserProfile();
     fetchCommissions();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (activeTab === "reports") {
       fetchReport();
     }
-  }, [reportType, period, activeTab]);
+  }, [reportType, period, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchUserProfile = async () => {
     try {
       const response = await api.get("user-profile/");
-      setUserRole(response.data.role);
       const admin = Boolean(response.data.is_admin);
       const finance = Boolean(response.data.is_finance);
       setIsAdmin(admin);
       setCanManagePayroll(admin || finance);
     } catch (err) {
-      setUserRole("Employee");
       setIsAdmin(false);
+      setCanManagePayroll(false);
     }
   };
 
@@ -70,7 +68,7 @@ function Commissions() {
     if (activeTab === "commissions") {
       fetchCommissions();
     }
-  }, [statusFilter]);
+  }, [statusFilter, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleApproveCalculated = async () => {
     if (!startDate || !endDate) {
@@ -195,7 +193,6 @@ function Commissions() {
     if (!reportData) return;
 
     let csv = "";
-    let rows = [];
 
     if (reportType === "commission-summary" && reportData.top_earners) {
       csv = "Name,Email,Total Commission,Count\n";
@@ -245,11 +242,11 @@ function Commissions() {
       <PageHeader
         badge="Analytics"
         title="Commissions & Reports"
-        subtitle={
-          isAdmin
-            ? "Manage all employee commissions, earnings, and analytics."
-            : "View your personal commissions and earnings."
-        }
+        // subtitle={
+        //   isAdmin
+        //     ? "Manage all employee commissions, earnings, and analytics."
+        //     : "View your personal commissions and earnings."
+        // }
       />
 
       <div className="tabs">

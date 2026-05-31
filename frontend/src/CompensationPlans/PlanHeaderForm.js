@@ -79,10 +79,10 @@ function PlanHeaderForm({ onPlanCreated }) {
   return (
     <div className="panel">
       <h2 className="panel__title">Create compensation plan</h2>
-      <p className="orders-section__desc" style={{ marginBottom: "1rem" }}>
+      {/* <p className="orders-section__desc" style={{ marginBottom: "1rem" }}>
         Required: plan name, role, status Active, plan basis Role, effective start date,
         commission table type. All other fields are optional.
-      </p>
+      </p> */}
 
       <div className="form-grid">
         <div className="form-field">

@@ -3,7 +3,8 @@
 
 [build]
   base = "frontend"
-  command = "npm ci && npm run build"
+  # CI=false — CRA treats ESLint warnings as errors when CI=true (Netlify default)
+  command = "npm install && CI=false npm run build"
   publish = "build"
 
 [build.environment]

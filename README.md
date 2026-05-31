@@ -6,10 +6,14 @@ Manage compensation plans, sales participants, orders, and commission calculatio
 
 ```
 sales-comp-platform/
-├── backend/          Django API + PostgreSQL (git repo)
+├── backend/          Django API (manage.py, config/, commissions/)
 ├── frontend/         React UI (Create React App)
+├── deploy/           Deployment guides and env templates
+├── docker-compose.yml
 └── README.md
 ```
+
+**Note:** All Django code lives under `backend/` only. Do not add a second `commissions/` or `config/` folder at the repo root — that was a duplicate copy and causes confusion in the IDE.
 
 ## Quick start (development)
 
@@ -164,6 +168,7 @@ After pulling Phase 2:
 
 | Host | Guide |
 |------|--------|
+| **DigitalOcean** (all-in-one) | [deploy/DEPLOY-DIGITALOCEAN.md](deploy/DEPLOY-DIGITALOCEAN.md) — App Platform or Droplet + `.do/app.yaml` |
 | **Netlify** | [deploy/DEPLOY-NETLIFY-RENDER.md](deploy/DEPLOY-NETLIFY-RENDER.md) — uses root `netlify.toml` |
 | **Vercel** | [deploy/DEPLOY-VERCEL-RENDER.md](deploy/DEPLOY-VERCEL-RENDER.md) — uses `frontend/vercel.json` |
 
@@ -172,7 +177,7 @@ After pulling Phase 2:
 | Frontend | https://incentra.co.in |
 | API (Render) | https://api.incentra.co.in |
 
-Env templates: `deploy/render.env.example`, `deploy/netlify.env.example`, `deploy/frontend.env.production.incentra`
+Env templates: `deploy/digitalocean.env.example`, `deploy/render.env.example`, `deploy/netlify.env.example`, `deploy/frontend.env.production.incentra`
 
 ## Git
 

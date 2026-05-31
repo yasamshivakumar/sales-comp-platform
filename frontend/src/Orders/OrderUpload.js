@@ -76,10 +76,10 @@ function OrderUpload({ onUploadSuccess }) {
     <div className="panel">
       <div className="orders-section__head">
         <div className="orders-section__icon">📤</div>
-        <div>
+        {/* <div>
           <h3 className="orders-section__title">Bulk upload</h3>
           <p className="orders-section__desc">Import many orders from CSV at once</p>
-        </div>
+        </div> */}
       </div>
 
       <div

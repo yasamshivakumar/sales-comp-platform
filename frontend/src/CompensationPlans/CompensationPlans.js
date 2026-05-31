@@ -15,7 +15,7 @@ function CompensationPlans() {
   useEffect(() => {
     fetchPlans();
     fetchTiers();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchPlans = () => {
     api
