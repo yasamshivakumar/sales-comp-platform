@@ -1,3 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+
+# Environment files
+.env
+.env.local
+*.env.local
+
 # Frontend
 frontend/node_modules/
 frontend/build/
@@ -5,11 +14,21 @@ frontend/.env
 frontend/.env.local
 frontend/.env.production.local
 
-# Backend (local only — never commit)
+# Backend Virtual Environments
 backend/myenv/
 backend/venv/
+venv/
+myenv/
+
+# Static & Media
 backend/staticfiles/
 backend/media/
+staticfiles/
+media/
+
+# Logs
+logs/*.log
+!logs/.gitkeep
 backend/logs/*.log
 
 # IDE / OS
@@ -17,7 +36,3 @@ backend/logs/*.log
 .vscode/
 *.swp
 .DS_Store
-
-# Env secrets (backend has its own .gitignore too)
-.env
-*.env.local
