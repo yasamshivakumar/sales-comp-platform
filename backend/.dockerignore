@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+myenv
+venv
+__pycache__
+*.pyc
+.git
+logs
+staticfiles
+*.sqlite3

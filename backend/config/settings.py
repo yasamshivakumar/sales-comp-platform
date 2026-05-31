@@ -38,8 +38,23 @@ if not SECRET_KEY:
 
 DEBUG = _env_bool("DEBUG", "True")
 
-ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS", "localhost,127.0.0.1")
+def _merge_allowed_hosts():
+    """Env ALLOWED_HOSTS plus Render hostname; always allow *.onrender.com in production."""
+    hosts = _env_list(
+        "ALLOWED_HOSTS",
+        "localhost,127.0.0.1,.onrender.com",
+    )
+    render_host = os.getenv("RENDER_EXTERNAL_HOSTNAME", "").strip()
+    if render_host and render_host not in hosts:
+        hosts.append(render_host)
+    if not DEBUG:
+        for required in (".onrender.com",):
+            if required not in hosts:
+                hosts.append(required)
+    return hosts
 
+
+ALLOWED_HOSTS = _merge_allowed_hosts()
 # --- Application ---
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -148,6 +163,15 @@ DATABASES = {
 
 # Render / Heroku style DATABASE_URL (takes precedence when set)
 _database_url = os.getenv("DATABASE_URL")
+if not DEBUG and not _database_url:
+    _db_host = os.getenv("DB_HOST", "localhost")
+    if _db_host in ("localhost", "127.0.0.1", "::1"):
+        raise ValueError(
+            "DATABASE_URL is required in production (Render: link PostgreSQL to the "
+            "web service, or paste Internal Database URL into DATABASE_URL). "
+            "Local DB_HOST/DB_PASSWORD only apply when DEBUG=True."
+        )
+
 if _database_url:
     try:
         import dj_database_url
