@@ -131,8 +131,9 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 # --- Database ---
 _db_password = os.getenv("DB_PASSWORD")
-if _db_password is None and DEBUG:
-    _db_password = "1234"  # local dev fallback only; set DB_PASSWORD in .env for real deploys
+_placeholder_passwords = {"", "your-db-password", "change-me"}
+if DEBUG and (_db_password is None or _db_password in _placeholder_passwords):
+    _db_password = "1234"  # local dev fallback; set real DB_PASSWORD in .env for production
 
 DATABASES = {
     "default": {
