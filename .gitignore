@@ -1,0 +1,23 @@
+# Frontend
+frontend/node_modules/
+frontend/build/
+frontend/.env
+frontend/.env.local
+frontend/.env.production.local
+
+# Backend (local only — never commit)
+backend/myenv/
+backend/venv/
+backend/staticfiles/
+backend/media/
+backend/logs/*.log
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Env secrets (backend has its own .gitignore too)
+.env
+*.env.local

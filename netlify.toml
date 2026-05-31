@@ -1,0 +1,17 @@
+# Netlify — React frontend only (API stays on Render)
+# Site settings: https://app.netlify.com → your site → Build & deploy
+
+[build]
+  base = "frontend"
+  command = "npm ci && npm run build"
+  publish = "build"
+
+[build.environment]
+  NODE_VERSION = "20"
+  CI = "false"
+
+# Create React App — client-side routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
