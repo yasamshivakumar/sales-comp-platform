@@ -15,7 +15,6 @@ function Orders() {
       <PageHeader
         badge="Transactions"
         title="Orders"
-        // subtitle="Create orders manually or bulk-upload a CSV to trigger commission calculations."
       />
 
       <div className="orders-grid">

@@ -558,8 +558,6 @@ class Order(models.Model):
     position_name = models.CharField(max_length=200, blank=True, null=True, db_index=True)
 
     # Business context
-    # customer_name = models.CharField(max_length=200, blank=True, null=True)
-    # product_name = models.CharField(max_length=200, blank=True, null=True)
     service_name = models.CharField(max_length=200, blank=True, null=True)
 
     # Financial values

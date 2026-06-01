@@ -92,9 +92,7 @@ def resolve_compensation_plan(order):
 
     for pos_name in _position_names_to_try(order, user_profile):
         plan = (
-            plan_base.filter(
-                position_name=pos_name,
-            )
+            plan_base.filter(position_name=pos_name)
             .filter(effective)
             .exclude(position_name__isnull=True)
             .exclude(position_name="")
@@ -108,9 +106,7 @@ def resolve_compensation_plan(order):
         role = str(user_profile.role).strip()
         if role:
             plan = (
-                plan_base.filter(
-                    role=role,
-                )
+                plan_base.filter(role=role)
                 .filter(effective)
                 .filter(empty_position)
                 .order_by("-updated_at")
@@ -275,7 +271,8 @@ def calculate_commission_for_order(order, replace_existing=True, force=False):
             "(position_name=%s, employee_id=%s, sales_amount=%s, "
             "order_date=%s, organization_id=%s). "
             "Check: plan status=Active, effective dates include order_date, "
-            "position/role match, UserProfile exists for employee_id.",
+            "position/role match, "
+            "UserProfile exists for employee_id.",
             order.order_id,
             order.position_name,
             order.employee_id,

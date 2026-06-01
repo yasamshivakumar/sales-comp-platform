@@ -20,6 +20,7 @@ services:
         generateValue: true
       - key: ALLOWED_HOSTS
         value: api.incentra.co.in,.onrender.com
+      # Add your exact Vercel URL(s); *.vercel.app is also allowed via regex in settings.py
       - key: CORS_ALLOWED_ORIGINS
         value: https://incentra.co.in,https://www.incentra.co.in
       - key: FRONTEND_URL

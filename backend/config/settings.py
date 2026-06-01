@@ -237,11 +237,45 @@ if SENTRY_DSN:
         environment=os.getenv("SENTRY_ENVIRONMENT", "production"),
     )
 
-# --- CORS ---
-CORS_ALLOWED_ORIGINS = _env_list(
-    "CORS_ALLOWED_ORIGINS",
-    "http://localhost:3000,http://127.0.0.1:3000",
-)
+# --- CORS (Vercel frontend → Render API) ---
+def _cors_allowed_origins():
+    origins = _env_list(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000",
+    )
+    frontend = os.getenv("FRONTEND_URL", "").strip().rstrip("/")
+    if frontend and frontend not in origins:
+        origins.append(frontend)
+    if frontend.startswith("https://") and "://www." not in frontend:
+        www = frontend.replace("https://", "https://www.", 1)
+        if www not in origins:
+            origins.append(www)
+    return origins
+
+
+CORS_ALLOWED_ORIGINS = _cors_allowed_origins()
+# Vercel production + preview deploys (*.vercel.app)
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://[a-z0-9-]+\.vercel\.app$",
+    r"^https://[a-z0-9-]+-[a-z0-9-]+\.vercel\.app$",
+]
+CORS_ALLOW_CREDENTIALS = False
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+    "x-request-id",
+]
+CORS_EXPOSE_HEADERS = ["X-Request-ID"]
+CORS_PREFLIGHT_MAX_AGE = 86400
+
+# Required if any cookie/session flows cross-origin (safe to mirror CORS origins)
+CSRF_TRUSTED_ORIGINS = list(CORS_ALLOWED_ORIGINS)
 
 # --- Production HTTPS hardening ---
 if not DEBUG:

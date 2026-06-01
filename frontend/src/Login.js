@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import api from "./api";
+import api, { getApiErrorMessage } from "./api";
 import { useToast } from "./Components/Toast";
 
 const apiHost = process.env.REACT_APP_API_HOST || "http://localhost:8000";
@@ -37,7 +37,10 @@ function Login() {
 
     setLoading(true);
     try {
-      const res = await api.post("email-login/", { email, password });
+      const res = await api.post("auth/email-login/", {
+        email: email.trim().toLowerCase(),
+        password,
+      });
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("email", res.data.email);
       localStorage.setItem("user_id", res.data.user_id);
@@ -46,7 +49,7 @@ function Login() {
       success("Login successful! Redirecting...");
       setTimeout(() => navigate("/"), 1000);
     } catch (err) {
-      error(err.response?.data?.error || "Login failed");
+      error(getApiErrorMessage(err, "Login failed"));
     } finally {
       setLoading(false);
     }

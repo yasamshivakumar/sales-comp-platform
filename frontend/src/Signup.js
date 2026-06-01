@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import api from "./api";
+import api, { getApiErrorMessage } from "./api";
 import { useToast } from "./Components/Toast";
 
 function Signup() {
@@ -38,11 +38,15 @@ function Signup() {
 
     setLoading(true);
     try {
-      await api.post("signup/", { username, email, password });
+      await api.post("auth/signup/", {
+        username,
+        email: email.trim().toLowerCase(),
+        password,
+      });
       success("Account created! Redirecting to login...");
       setTimeout(() => navigate("/login"), 1500);
     } catch (err) {
-      error(err.response?.data?.error || "Signup failed");
+      error(getApiErrorMessage(err, "Signup failed"));
     } finally {
       setLoading(false);
     }

@@ -44,10 +44,6 @@ function OrderForm() {
     <div className="panel">
       <div className="orders-section__head">
         <div className="orders-section__icon">✏️</div>
-        {/* <div>
-          <h3 className="orders-section__title">Manual entry</h3>
-          <p className="orders-section__desc">Add a single order and run commission calc</p>
-        </div> */}
       </div>
 
       <div className="form-grid">

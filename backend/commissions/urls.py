@@ -53,6 +53,12 @@ urlpatterns = [
         name="commission-recalculate",
     ),
     path("", include(router.urls)),
+    # Auth (preferred paths for Vercel / SPA)
+    path("auth/signup/", signup, name="auth-signup"),
+    path("auth/login/", login, name="auth-login"),
+    path("auth/email-login/", email_login, name="auth-email-login"),
+    path("auth/change-password/", change_password, name="auth-change-password"),
+    # Legacy aliases
     path("signup/", signup),
     path("login/", login),
     path("email-login/", email_login, name="email-login"),

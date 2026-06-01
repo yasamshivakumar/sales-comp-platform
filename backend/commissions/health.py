@@ -7,6 +7,26 @@ from rest_framework.response import Response
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
+def api_root(request):
+    """Landing page when visiting the service root URL (e.g. on Render)."""
+    return Response(
+        {
+            "service": "IncentivePro API",
+            "status": "running",
+            "endpoints": {
+                "health": "/api/health/",
+                "readiness": "/api/health/ready/",
+                "login": "/api/auth/email-login/",
+                "signup": "/api/auth/signup/",
+                "api": "/api/",
+                "admin": "/admin/",
+            },
+        }
+    )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
 def health_check(request):
     """Liveness probe — process is up."""
     return Response({"status": "ok"})
