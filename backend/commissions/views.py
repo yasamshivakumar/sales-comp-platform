@@ -55,7 +55,36 @@ from .emails import notify_admins
 from .models import AuditLog, ImportJob
 from .imports import process_orders_csv, should_use_async_import
 from .list_scope import order_search_q
-from .tenants import filter_queryset_by_organization
+from .tenants import filter_queryset_by_organization, get_default_organization
+
+
+def _ensure_self_signup_admin_profile(user):
+    """
+    Self-signup is the tenant bootstrap path: the account owner becomes admin,
+    then uses User Setup to add reps/employees.
+    """
+    if not user or not getattr(user, "email", ""):
+        return None
+
+    email = user.email.strip().lower()
+    name = user.get_full_name() or user.username or email
+    employee_id = user.username or email.split("@")[0]
+    profile, _ = UserProfile.objects.update_or_create(
+        organization=get_default_organization(),
+        email=email,
+        defaults={
+            "enable_login": True,
+            "username": user.username or email,
+            "name": name,
+            "first_name": user.first_name or user.username or "",
+            "last_name": user.last_name or "",
+            "employee_id": employee_id,
+            "role": "Admin",
+            "business_group": "Company HQ",
+            "personal_currency": "INR",
+        },
+    )
+    return profile
 
 
 def _orders_queryset_for_request(request):
@@ -229,6 +258,7 @@ def signup(request):
         email=email,
         password=password
     )
+    profile = _ensure_self_signup_admin_profile(user)
 
     # Create authentication token
     token, _ = Token.objects.get_or_create(user=user)
@@ -236,7 +266,9 @@ def signup(request):
     # Return success response
     return Response({
         'message': 'User created successfully',
-        'token': token.key
+        'token': token.key,
+        'role': profile.role if profile else 'Admin',
+        'name': profile.name if profile else user.username,
     })
 
 
@@ -1060,7 +1092,10 @@ def email_login(request):
         token, _ = Token.objects.get_or_create(user=user)
         
         # Get user profile for additional info
-        user_profile = UserProfile.objects.filter(email=user.email).first()
+        user_profile = (
+            UserProfile.objects.filter(email=user.email).first()
+            or _ensure_self_signup_admin_profile(user)
+        )
         
         logger.info(f"Successful login for email: {email}")
         record_audit(request, "login_success", {"user_id": user.id, "email": email})
@@ -1201,10 +1236,24 @@ def get_user_profile(request):
         })
         
     except UserProfile.DoesNotExist:
-        return Response(
-            {'error': 'User profile not found'},
-            status=status.HTTP_404_NOT_FOUND
-        )
+        user_profile = _ensure_self_signup_admin_profile(user)
+        org = user_profile.organization if user_profile else None
+        return Response({
+            'user_id': user.id,
+            'email': user.email,
+            'role': user_profile.role if user_profile else 'Admin',
+            'name': user_profile.name if user_profile else user.get_full_name() or user.username,
+            'is_admin': True,
+            'is_finance': False,
+            'is_manager': False,
+            'employee_id': user_profile.employee_id if user_profile else user.username,
+            'territory_id': None,
+            'territory_name': None,
+            'business_group': user_profile.business_group if user_profile else 'Company HQ',
+            'personal_currency': user_profile.personal_currency if user_profile else 'INR',
+            'organization_slug': org.slug if org else None,
+            'organization_name': org.name if org else None,
+        })
     except Exception as e:
         logger.error(f"Error fetching user profile: {str(e)}")
         return Response(
