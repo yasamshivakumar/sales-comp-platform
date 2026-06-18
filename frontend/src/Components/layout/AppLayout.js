@@ -162,7 +162,6 @@ function NavItemButton({ icon: Icon, label, selected, onClick, to, component, co
 }
 
 const repMenu = [
-  { name: "Dashboard", path: "/", icon: SpaceDashboardOutlinedIcon },
   { name: "Incentive Details", path: "/statement", icon: AccountBalanceWalletOutlinedIcon },
 ];
 
