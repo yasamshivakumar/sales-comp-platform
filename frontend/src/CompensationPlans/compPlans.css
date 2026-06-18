@@ -1,0 +1,63 @@
+.comp-plans-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.comp-plans-toolbar__hint {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.comp-plans-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 24px;
+}
+
+.comp-plans-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.comp-plans-table th,
+.comp-plans-table td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.comp-plans-table th {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-light);
+}
+
+.comp-plans-table tbody tr:hover {
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.comp-plans-empty {
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  border: 1px dashed var(--border-color);
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.comp-plans-empty p {
+  margin: 0 0 16px;
+}
+
+.comp-plans-manage {
+  margin-top: 8px;
+}

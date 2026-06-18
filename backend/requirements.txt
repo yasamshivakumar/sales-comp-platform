@@ -10,3 +10,4 @@ celery==5.4.0
 redis==5.2.1
 sentry-sdk==2.19.2
 mozilla-django-oidc==4.0.1
+python-dateutil==2.9.0

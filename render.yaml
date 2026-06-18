@@ -1,45 +1,37 @@
-# Optional Render Blueprint — import in Render Dashboard or deploy via render.com/docs/blueprint-spec
-# Custom domains: api.incentra.co.in (web), incentra.co.in on Vercel (frontend)
+databases:
+  - name: incentra-db
+    databaseName: sales_comp_db
+    user: sales_comp_user
 
 services:
   - type: web
-    name: incentivepro-api
+    name: incentra-backend
     runtime: python
     rootDir: backend
-    plan: starter
-    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
-    preDeployCommand: python manage.py migrate --noinput
-    startCommand: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    plan: free
     healthCheckPath: /api/health/
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    startCommand: python manage.py migrate && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
     envVars:
       - key: PYTHON_VERSION
-        value: "3.12.0"
+        value: 3.13.4
       - key: DEBUG
         value: "False"
       - key: SECRET_KEY
         generateValue: true
-      - key: ALLOWED_HOSTS
-        value: api.incentra.co.in,.onrender.com
-      # Add your exact Vercel URL(s); *.vercel.app is also allowed via regex in settings.py
-      - key: CORS_ALLOWED_ORIGINS
-        value: https://incentra.co.in,https://www.incentra.co.in
-      - key: FRONTEND_URL
-        value: https://incentra.co.in
-      - key: SECURE_SSL_REDIRECT
-        value: "False"
-      - key: USE_X_FORWARDED_HOST
-        value: "True"
-      - key: TIME_ZONE
-        value: Asia/Kolkata
       - key: DATABASE_URL
         fromDatabase:
-          name: incentivepro-db
+          name: incentra-db
           property: connectionString
+      - key: ALLOWED_HOSTS
+        value: .onrender.com
+      - key: FRONTEND_URL
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: CSRF_TRUSTED_ORIGINS
+        sync: false
       - key: CELERY_TASK_ALWAYS_EAGER
         value: "True"
-
-databases:
-  - name: incentivepro-db
-    plan: basic-256mb
-    databaseName: sales_comp_db
-    user: incentra
+      - key: USE_ASYNC_IMPORTS
+        value: "False"

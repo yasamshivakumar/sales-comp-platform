@@ -30,6 +30,46 @@ def validate_user_profile_fields(data, partial=False):
             _missing("Name", "name")
 
 
+def find_user_profile_duplicates(organization, email, employee_id, exclude_pk=None):
+    """
+    Return human-readable duplicate errors for email / employee_id within an org.
+    Used for manual create and CSV upload.
+    """
+    from .models import UserProfile
+
+    qs = UserProfile.objects.all()
+    if organization is not None:
+        qs = qs.filter(organization=organization)
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+
+    errors = []
+    email = str(email or "").strip()
+    employee_id = str(employee_id or "").strip()
+
+    if email:
+        match = qs.filter(email__iexact=email).first()
+        if match:
+            label = match.name or match.employee_id or match.email
+            errors.append(
+                f"Email '{email}' is already used by {label}."
+            )
+
+    if employee_id:
+        match = (
+            qs.filter(employee_id__iexact=employee_id)
+            .exclude(employee_id="")
+            .first()
+        )
+        if match:
+            label = match.name or match.email or match.employee_id
+            errors.append(
+                f"Employee ID '{employee_id}' is already assigned to {label}."
+            )
+
+    return errors
+
+
 def validate_order_fields(data, partial=False):
     if not partial or "order_id" in data:
         if not str(data.get("order_id", "")).strip():
@@ -68,18 +108,45 @@ def validate_compensation_plan_fields(data, partial=False):
 
 
 def normalize_compensation_plan_payload(data):
-    """Map API/UI aliases to model fields."""
+    """Map API/UI aliases to model fields and snap dates to a single month."""
+    from datetime import date as date_cls
+
+    from .plan_periods import normalize_monthly_plan_dates
+
     normalized = dict(data)
     if "table_type" in normalized and "commission_table_type" not in normalized:
         raw = str(normalized.pop("table_type")).strip().lower()
-        normalized["commission_table_type"] = "FLAT" if raw == "flat" else "RATE"
+        if raw == "flat":
+            normalized["commission_table_type"] = "FLAT"
+        elif raw == "lookup":
+            normalized["commission_table_type"] = "LOOKUP"
+        else:
+            normalized["commission_table_type"] = "RATE"
     elif "commission_table_type" in normalized:
         raw = str(normalized["commission_table_type"]).strip().upper()
-        if raw not in ("RATE", "FLAT"):
+        if raw not in ("RATE", "FLAT", "LOOKUP"):
             raw = "RATE"
         normalized["commission_table_type"] = raw
     if not normalized.get("status"):
         normalized["status"] = "Active"
     if not normalized.get("plan_basis"):
         normalized["plan_basis"] = "Role"
+
+    # UI may send comp_period=YYYY-MM from month picker
+    comp_period = normalized.pop("comp_period", None) or normalized.pop("plan_month", None)
+    if comp_period and not normalized.get("effective_start_date"):
+        text = str(comp_period).strip()
+        if len(text) == 7 and text[4] == "-":
+            y, m = int(text[:4]), int(text[5:7])
+            normalized["effective_start_date"] = date_cls(y, m, 1)
+
+    if normalized.get("effective_start_date"):
+        start, end = normalize_monthly_plan_dates(
+            normalized.get("effective_start_date"),
+            normalized.get("effective_end_date"),
+        )
+        normalized["effective_start_date"] = start
+        normalized["effective_end_date"] = end
+        normalized["pay_period_type"] = normalized.get("pay_period_type") or "Monthly"
+
     return normalized

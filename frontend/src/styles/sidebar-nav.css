@@ -1,0 +1,53 @@
+/* Sidebar nav — no hover effects */
+
+.enterprise-sidebar a.sidebar-nav-item,
+.enterprise-sidebar button.sidebar-nav-item {
+  color: rgba(255, 255, 255, 0.62) !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  text-decoration: none !important;
+  box-shadow: none !important;
+  transform: none !important;
+  padding: 8px 4px !important;
+  border: 1px solid transparent !important;
+  border-left: 3px solid transparent !important;
+  border-radius: 6px !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+}
+
+.enterprise-sidebar a.sidebar-nav-item:hover,
+.enterprise-sidebar a.sidebar-nav-item:focus,
+.enterprise-sidebar a.sidebar-nav-item:active,
+.enterprise-sidebar a.sidebar-nav-item:visited,
+.enterprise-sidebar button.sidebar-nav-item:hover,
+.enterprise-sidebar button.sidebar-nav-item:focus,
+.enterprise-sidebar button.sidebar-nav-item:active {
+  color: rgba(255, 255, 255, 0.62) !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  text-decoration: none !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.enterprise-sidebar .sidebar-nav-item--active,
+.enterprise-sidebar .sidebar-nav-item--active:hover,
+.enterprise-sidebar .sidebar-nav-item--active:focus,
+.enterprise-sidebar .sidebar-nav-item--active:active {
+  color: #fff !important;
+  background-color: rgba(255, 255, 255, 0.12) !important;
+  border-left-color: #fff !important;
+}
+
+.enterprise-sidebar .sidebar-nav-item--logout,
+.enterprise-sidebar .sidebar-nav-item--logout:hover,
+.enterprise-sidebar .sidebar-nav-item--logout:focus {
+  color: rgba(252, 165, 165, 0.95) !important;
+}
+
+.enterprise-sidebar a,
+.enterprise-sidebar a:hover,
+.enterprise-sidebar a:visited {
+  text-decoration: none !important;
+}

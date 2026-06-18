@@ -14,7 +14,7 @@ def process_import_job_task(self, job_id):
         job = run_import_job(job_id)
         if job.status == job.STATUS_COMPLETED:
             notify_admins(
-                f"IncentivePro: {job.job_type} import #{job.id} completed",
+                f"Incentra: {job.job_type} import #{job.id} completed",
                 (
                     f"Organization: {job.organization.slug}\n"
                     f"File: {job.source_filename}\n"

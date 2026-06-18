@@ -1,7 +1,7 @@
-# One-time local setup for IncentivePro (Windows)
+# One-time local setup for Incentra (Windows)
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 
-Write-Host "=== IncentivePro local setup ===" -ForegroundColor Cyan
+Write-Host "=== Incentra local setup ===" -ForegroundColor Cyan
 
 if (-not (Test-Path "$Root\backend\.env")) {
     Copy-Item "$Root\backend\.env.example" "$Root\backend\.env"

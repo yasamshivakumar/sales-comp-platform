@@ -16,7 +16,12 @@ function UserSection({ form, handleChange, renderField, renderSelect }) {
 
       {renderField("name", "Display name *")}
       {renderField("email", "Email *", "email")}
-      {renderSelect("role", "Role *", ["Admin", "Manager", "Sales Rep"])}
+      {renderField(
+        "role",
+        "Role *",
+        "text",
+        "e.g. Admin, Finance, Manager, Sales Rep"
+      )}
     </div>
   );
 }

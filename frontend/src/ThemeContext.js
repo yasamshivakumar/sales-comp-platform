@@ -2,34 +2,26 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 
 const ThemeContext = createContext();
 
-export function ThemeProvider({ children }) {
-  const [isDarkMode, setIsDarkMode] = useState(true);
+function getInitialDarkMode() {
+  const savedTheme = localStorage.getItem("theme");
+  if (savedTheme === "dark") return true;
+  if (savedTheme === "light") return false;
+  return false;
+}
 
-  // Load theme preference from localStorage on mount
-  useEffect(() => {
-    const savedTheme = localStorage.getItem("theme");
-    if (savedTheme) {
-      setIsDarkMode(savedTheme === "dark");
-    }
-    document.documentElement.setAttribute(
-      "data-theme",
-      savedTheme === "light" ? "light" : "dark"
-    );
-  }, []);
+export function ThemeProvider({ children }) {
+  const [isDarkMode, setIsDarkMode] = useState(getInitialDarkMode);
 
   useEffect(() => {
     document.documentElement.setAttribute(
       "data-theme",
       isDarkMode ? "dark" : "light"
     );
+    localStorage.setItem("theme", isDarkMode ? "dark" : "light");
   }, [isDarkMode]);
 
   const toggleTheme = () => {
-    setIsDarkMode((prev) => {
-      const newMode = !prev;
-      localStorage.setItem("theme", newMode ? "dark" : "light");
-      return newMode;
-    });
+    setIsDarkMode((prev) => !prev);
   };
 
   const theme = isDarkMode ? darkTheme : lightTheme;
@@ -49,7 +41,6 @@ export function useTheme() {
   return context;
 }
 
-// Dark Theme (Current - Blue/Gray)
 const darkTheme = {
   name: "dark",
   background: "#020617",
@@ -67,7 +58,6 @@ const darkTheme = {
   overlay: "rgba(0, 0, 0, 0.7)",
 };
 
-// Light Theme (New - Clean & Bright)
 const lightTheme = {
   name: "light",
   background: "#f8fafc",

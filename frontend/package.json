@@ -2,20 +2,31 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
+  "proxy": "http://127.0.0.1:8000",
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^9.1.0",
+    "@mui/material": "^9.1.0",
+    "@mui/x-date-pickers": "^9.4.0",
     "axios": "^1.16.1",
+    "bootstrap": "^5.3.8",
+    "dayjs": "^1.11.21",
     "react": "^19.2.6",
+    "react-bootstrap": "^2.10.10",
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.15.1",
-    "react-scripts": "5.0.1"
+    "react-scripts": "5.0.1",
+    "react-transition-group": "^4.4.5"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "cross-env CI=false DISABLE_ESLINT_PLUGIN=true react-scripts build",
-    "test": "react-scripts test",
+    "start": "craco start",
+    "build": "cross-env CI=false DISABLE_ESLINT_PLUGIN=true craco build",
+    "test": "craco test",
     "eject": "react-scripts eject"
   },
   "devDependencies": {
+    "@craco/craco": "^7.1.0",
     "cross-env": "^7.0.3"
   },
   "eslintConfig": {

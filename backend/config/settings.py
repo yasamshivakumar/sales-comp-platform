@@ -1,5 +1,5 @@
 """
-Django settings for IncentivePro / sales-comp-platform.
+Django settings for Incentra / sales-comp-platform.
 Load secrets from backend/.env (see .env.example).
 """
 
@@ -38,23 +38,7 @@ if not SECRET_KEY:
 
 DEBUG = _env_bool("DEBUG", "True")
 
-def _merge_allowed_hosts():
-    """Env ALLOWED_HOSTS plus Render hostname; always allow *.onrender.com in production."""
-    hosts = _env_list(
-        "ALLOWED_HOSTS",
-        "localhost,127.0.0.1,.onrender.com",
-    )
-    render_host = os.getenv("RENDER_EXTERNAL_HOSTNAME", "").strip()
-    if render_host and render_host not in hosts:
-        hosts.append(render_host)
-    if not DEBUG:
-        for required in (".onrender.com",):
-            if required not in hosts:
-                hosts.append(required)
-    return hosts
-
-
-ALLOWED_HOSTS = _merge_allowed_hosts()
+ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS", "localhost,127.0.0.1")
 # --- Application ---
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -161,17 +145,8 @@ DATABASES = {
     }
 }
 
-# Render / Heroku style DATABASE_URL (takes precedence when set)
+# Render / Heroku style DATABASE_URL (optional; takes precedence when set)
 _database_url = os.getenv("DATABASE_URL")
-if not DEBUG and not _database_url:
-    _db_host = os.getenv("DB_HOST", "localhost")
-    if _db_host in ("localhost", "127.0.0.1", "::1"):
-        raise ValueError(
-            "DATABASE_URL is required in production (Render: link PostgreSQL to the "
-            "web service, or paste Internal Database URL into DATABASE_URL). "
-            "Local DB_HOST/DB_PASSWORD only apply when DEBUG=True."
-        )
-
 if _database_url:
     try:
         import dj_database_url
@@ -237,7 +212,7 @@ if SENTRY_DSN:
         environment=os.getenv("SENTRY_ENVIRONMENT", "production"),
     )
 
-# --- CORS (Vercel frontend → Render API) ---
+# --- CORS ---
 def _cors_allowed_origins():
     origins = _env_list(
         "CORS_ALLOWED_ORIGINS",
@@ -254,11 +229,12 @@ def _cors_allowed_origins():
 
 
 CORS_ALLOWED_ORIGINS = _cors_allowed_origins()
-# Vercel production + preview deploys (*.vercel.app)
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^https://[a-z0-9-]+\.vercel\.app$",
-    r"^https://[a-z0-9-]+-[a-z0-9-]+\.vercel\.app$",
-]
+CORS_ALLOWED_ORIGIN_REGEXES = []
+if DEBUG:
+    CORS_ALLOWED_ORIGIN_REGEXES += [
+        r"^http://localhost:\d+$",
+        r"^http://127\.0\.0\.1:\d+$",
+    ]
 CORS_ALLOW_CREDENTIALS = False
 CORS_ALLOW_HEADERS = [
     "accept",
@@ -294,9 +270,9 @@ if not DEBUG:
     SECURE_HSTS_PRELOAD = _env_bool("SECURE_HSTS_PRELOAD", "True")
 
 # --- Logging ---
-# Render/Heroku: console only (ephemeral disk). Local: console + rotating file.
-_on_render = bool(os.getenv("RENDER"))
-_log_handlers = ["console"] if _on_render else ["console", "file"]
+LOGS_DIR = os.path.join(BASE_DIR, "logs")
+os.makedirs(LOGS_DIR, exist_ok=True)
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -324,26 +300,22 @@ LOGGING = {
         },
     },
     "root": {
-        "handlers": _log_handlers,
+        "handlers": ["console", "file"],
         "level": "INFO",
     },
     "loggers": {
         "django": {
-            "handlers": _log_handlers,
+            "handlers": ["console", "file"],
             "level": os.getenv("DJANGO_LOG_LEVEL", "INFO"),
             "propagate": False,
         },
         "commissions": {
-            "handlers": _log_handlers,
+            "handlers": ["console", "file"],
             "level": os.getenv("COMMISSIONS_LOG_LEVEL", "INFO"),
             "propagate": False,
         },
     },
 }
-
-if not _on_render:
-    LOGS_DIR = os.path.join(BASE_DIR, "logs")
-    os.makedirs(LOGS_DIR, exist_ok=True)
 
 # --- Email (pilot notifications) ---
 EMAIL_BACKEND = os.getenv(
@@ -355,5 +327,19 @@ EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
 EMAIL_USE_TLS = _env_bool("EMAIL_USE_TLS", "True")
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@incentivepro.local")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@incentra.local")
 NOTIFY_EMAILS = _env_list("NOTIFY_EMAILS", "")
+
+# --- Commission AI assistant (OpenAI-compatible API) ---
+COMMISSION_AI_API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("COMMISSION_AI_API_KEY", "")
+COMMISSION_AI_BASE_URL = os.getenv("COMMISSION_AI_BASE_URL", "https://api.openai.com/v1")
+COMMISSION_AI_MODEL = os.getenv("COMMISSION_AI_MODEL", "gpt-4o-mini")
+COMMISSION_AI_TIMEOUT = int(os.getenv("COMMISSION_AI_TIMEOUT", "45"))
+# openai | ollama | auto — auto uses OpenAI when a key is set, else local Ollama
+COMMISSION_AI_PROVIDER = os.getenv("COMMISSION_AI_PROVIDER", "auto").lower()
+COMMISSION_AI_OLLAMA_URL = os.getenv("COMMISSION_AI_OLLAMA_URL", "http://localhost:11434/v1")
+COMMISSION_AI_OLLAMA_MODEL = os.getenv("COMMISSION_AI_OLLAMA_MODEL", "llama3.2")
+COMMISSION_AI_ENABLED = _env_bool(
+    "COMMISSION_AI_ENABLED",
+    "True",
+)

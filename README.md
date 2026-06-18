@@ -1,4 +1,4 @@
-# IncentivePro — Sales Compensation Platform
+# Incentra — Sales Compensation Platform
 
 Manage compensation plans, sales participants, orders, and commission calculations with role, position, and hierarchy rules.
 
@@ -8,12 +8,10 @@ Manage compensation plans, sales participants, orders, and commission calculatio
 sales-comp-platform/
 ├── backend/          Django API (manage.py, config/, commissions/)
 ├── frontend/         React UI (Create React App)
-├── deploy/           Deployment guides and env templates
-├── docker-compose.yml
 └── README.md
 ```
 
-**Note:** All Django code lives under `backend/` only. Do not add a second `commissions/` or `config/` folder at the repo root — that was a duplicate copy and causes confusion in the IDE.
+**Note:** All Django code lives under `backend/` only.
 
 ## Quick start (development)
 
@@ -51,101 +49,93 @@ cd backend
 .\myenv\Scripts\python.exe seed_demo.py
 ```
 
-## Phase 4 — Production scale
+## Optional features
 
 | Capability | Details |
 |------------|---------|
-| **Multi-tenant** | `Organization` model; users/plans/orders scoped per company (default org for existing data) |
-| **Async CSV imports** | Large order uploads (≥50 rows) queued via Celery + Redis; poll `GET /api/import-jobs/{id}/` |
-| **SSO (OIDC)** | Set `OIDC_ENABLED=True` + IdP endpoints — login redirects to `/oidc/authenticate/` |
-| **Sentry** | Set `SENTRY_DSN` for error tracking |
-| **Docker worker** | `docker compose up` runs `api`, `worker`, `redis`, `db` |
+| **Multi-tenant** | `Organization` model; users/plans/orders scoped per company |
+| **Async CSV imports** | Large order uploads (≥50 rows) via Celery + Redis; poll `GET /api/import-jobs/{id}/` |
+| **SSO (OIDC)** | Set `OIDC_ENABLED=True` + IdP endpoints |
+| **Health checks** | `GET /api/health/`, `GET /api/health/ready/` |
+| **Audit log** | `GET /api/audit-logs/` — admin & finance roles |
 
 ```powershell
 # Async imports locally
 # In backend/.env: CELERY_BROKER_URL=redis://localhost:6379/0
-redis-server   # or docker run -p 6379:6379 redis:7-alpine
+redis-server
 cd backend
 .\myenv\Scripts\celery.exe -A config worker -l info
 ```
 
-Frontend: `REACT_APP_OIDC_ENABLED=true` shows **Sign in with SSO**.
+## Business controls
 
-## Phase 3 — Pilot operations (10–50 users)
+- **Plan effective dates**: Commission lookup uses `order.order_date` against each plan’s effective dates.
+- **Order status**: Commission is calculated only when `order_status` is **Success**.
+- **Commission status**: New rows are `calculated`; admins approve for payroll.
+- **Protected payouts**: Re-upload / recalc skips approved commissions unless force recalc.
+- **Payroll export**: `GET /api/commissions/export/?start_date=&end_date=&status=approved`
 
-| Capability | Details |
-|------------|---------|
-| **Health checks** | `GET /api/health/` (liveness), `GET /api/health/ready/` (DB readiness) |
-| **Rate limits** | Login/signup `10/min`, CSV uploads `6/min`, API `120/min` (env-tunable) |
-| **Audit log** | `GET /api/audit-logs/` — admin & finance roles; tracks login, uploads, approve, recalc |
-| **Email alerts** | Set `NOTIFY_EMAILS` — order upload summary emailed to ops |
-| **Finance role** | `Finance` / `Finance Viewer` — view audit log + payroll export (no approve/recalc) |
-| **Docker** | `docker compose up --build` from repo root (Postgres + API) |
-| **CI** | GitHub Actions runs migrations + `commissions.tests` on backend changes |
+## Environment variables
 
-```powershell
-# Docker pilot (from repo root)
-copy backend\.env.example backend\.env
-# Set SECRET_KEY, DB_PASSWORD=postgres for compose
-docker compose up --build
+See `backend/.env.example` and `frontend/.env.example`.
+
+| Variable | Description |
+|----------|-------------|
+| `SECRET_KEY` | Django secret (required in production) |
+| `DEBUG` | `True` for local dev |
+| `ALLOWED_HOSTS` | Comma-separated hostnames |
+| `DB_*` | PostgreSQL connection |
+| `CORS_ALLOWED_ORIGINS` | Frontend URL(s) |
+| `DATABASE_URL` | Optional Postgres URL (overrides `DB_*`) |
+
+## Deploy: Render Backend + Vercel Frontend
+
+### Render (Django API)
+
+Use the root `render.yaml` blueprint. It creates:
+
+- `incentra-backend` web service from `backend/`
+- `incentra-db` PostgreSQL database
+
+After Render creates the backend URL, set these backend env vars:
+
+```text
+DEBUG=False
+ALLOWED_HOSTS=your-render-service.onrender.com,.onrender.com
+FRONTEND_URL=https://your-vercel-app.vercel.app
+CORS_ALLOWED_ORIGINS=https://your-vercel-app.vercel.app
+CSRF_TRUSTED_ORIGINS=https://your-vercel-app.vercel.app
 ```
 
-Request tracing: every response includes `X-Request-ID` (also stored on audit rows).
+The Render start command runs migrations and starts Gunicorn.
 
-## Phase 2 — Business controls
+### Vercel (React UI)
 
-- **Plan effective dates**: Commission lookup uses `order.order_date` against each plan’s `effective_start_date` / `effective_end_date`.
-- **Commission status**: New rows are `calculated`; admins approve for payroll (`approved`).
-- **Protected payouts**: Re-upload / recalc skips orders with approved commissions unless you run **Recalculate period** and confirm force replace.
-- **Payroll export**: `GET /api/commissions/export/?start_date=&end_date=&status=approved` (CSV).
-- **Bulk approve**: `POST /api/commissions/approve/` with `{ "start_date", "end_date" }` or `{ "ids": [1,2,3] }`.
-- **Bulk recalc**: `POST /api/commissions/recalculate/` with `{ "start_date", "end_date", "force": true|false }`.
+Use the root `vercel.json`. Set this Vercel env var before deploying:
 
-In the UI: **Commissions** tab → set period dates → Approve / Export / Recalculate (admin only).
+```text
+REACT_APP_API_BASE_URL=https://your-render-service.onrender.com/api
+```
 
-## Production checklist (Phase 1)
+Then redeploy the Vercel project so the React build includes the Render API URL.
 
-- [ ] Copy `backend/.env.example` → `backend/.env` with strong `SECRET_KEY`
-- [ ] Set `DEBUG=False` on the server
-- [ ] Set `ALLOWED_HOSTS` and `CORS_ALLOWED_ORIGINS` to your real domain(s)
-- [ ] Use HTTPS (Vercel + Render terminate TLS on your domains)
-- [ ] Do **not** set `DEFAULT_ONBOARDING_PASSWORD` in production (or force password reset)
-- [ ] PostgreSQL backups scheduled (daily minimum)
-- [ ] Run `python manage.py collectstatic` if serving Django admin/static
-- [ ] Build frontend: `npm run build` and serve `build/` behind HTTPS
+## User guide
 
-## Environment variables (backend)
+**[docs/Incentra-User-Guide.md](docs/Incentra-User-Guide.md)** (also at `/Incentra-User-Guide-Full.md` in the frontend public folder)
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `SECRET_KEY` | Prod yes | Django secret |
-| `DEBUG` | Yes | `False` in production |
-| `ALLOWED_HOSTS` | Yes | Comma-separated domains |
-| `DB_*` | Yes | PostgreSQL connection |
-| `CORS_ALLOWED_ORIGINS` | Yes | Frontend URL(s) |
-| `DEFAULT_ONBOARDING_PASSWORD` | No | Dev/pilot only; leave empty in prod |
-| `TIME_ZONE` | No | Default `Asia/Kolkata` |
-| `NOTIFY_EMAILS` | No | Comma-separated ops inboxes for upload alerts |
-| `EMAIL_*` | No | SMTP when not using console backend |
-| `THROTTLE_*` | No | DRF rate limits (login/upload/user) |
+## Required fields
 
-## Required fields (everything else is optional)
-
-**User setup:** `email`, `role` (must match plan role), `employee_id` (must match orders), `name`
+**User setup:** `email`, `role`, `employee_id`, `name`
 
 **Orders:** `order_id`, `order_date`, `employee_id`, `sales_amount`
 
-**Compensation plan:** `plan_name`, `role`, `status` (= Active), `plan_basis` (= Role), `effective_start_date`, `commission_table_type` (RATE/FLAT)
-
-Commission matching also needs plan **effective dates** to include each order’s `order_date`, and at least one **rate tier** on the plan.
+**Compensation plan:** `plan_name`, `role`, `status` (= Active), `effective_start_date`, `commission_table_type` (RATE/FLAT/LOOKUP)
 
 ## Commission rules
 
-1. **Position plan** (if `position_name` matches)  
-2. Else **role plan** (plan has role, no position)  
-3. **Hierarchy**: `split_percentage` = % kept by the rep; manager gets the rest  
-
-Re-uploading the same `order_id` **replaces** calculated commissions (no duplicates). Approved commissions are locked until an admin force-recalculates.
+1. **Position plan** (if `position_name` matches)
+2. Else **role plan**
+3. **Hierarchy**: `split_percentage` = % kept by the rep; manager gets the rest
 
 ## Tests
 
@@ -153,32 +143,3 @@ Re-uploading the same `order_id` **replaces** calculated commissions (no duplica
 cd backend
 .\myenv\Scripts\python.exe manage.py test commissions.tests
 ```
-
-After pulling Phase 2:
-
-```powershell
-.\myenv\Scripts\python.exe manage.py migrate
-```
-
-## Deploy on incentra.co.in
-
-**API + database:** Render + PostgreSQL → **[deploy/DEPLOY-VERCEL-RENDER.md](deploy/DEPLOY-VERCEL-RENDER.md)** (sections 2–3)
-
-**Frontend (pick one):**
-
-| Host | Guide |
-|------|--------|
-| **DigitalOcean** (all-in-one) | [deploy/DEPLOY-DIGITALOCEAN.md](deploy/DEPLOY-DIGITALOCEAN.md) — App Platform or Droplet + `.do/app.yaml` |
-| **Netlify** | [deploy/DEPLOY-NETLIFY-RENDER.md](deploy/DEPLOY-NETLIFY-RENDER.md) — uses root `netlify.toml` |
-| **Vercel** | [deploy/DEPLOY-VERCEL-RENDER.md](deploy/DEPLOY-VERCEL-RENDER.md) — uses `frontend/vercel.json` |
-
-| Layer | URL |
-|-------|-----|
-| Frontend | https://incentra.co.in |
-| API (Render) | https://api.incentra.co.in |
-
-Env templates: `deploy/digitalocean.env.example`, `deploy/render.env.example`, `deploy/netlify.env.example`, `deploy/frontend.env.production.incentra`
-
-## Git
-
-Backend is versioned under `backend/.git`. Track `frontend/` in the same remote or a separate repo before production deploy.

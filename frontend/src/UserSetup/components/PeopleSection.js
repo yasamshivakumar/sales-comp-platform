@@ -1,4 +1,4 @@
-function PeopleSection({ renderField }) {
+function PeopleSection({ renderField, renderSelect, renderTerritorySelect }) {
   return (
     <div className="form-grid">
       <p className="section-heading">People details</p>
@@ -9,8 +9,9 @@ function PeopleSection({ renderField }) {
       {renderField("prefix", "Prefix")}
       {renderField("employee_id", "Employee ID *")}
       {renderField("personal_target", "Personal target", "number")}
-      {renderField("personal_currency", "Currency")}
+      {renderSelect("personal_currency", "Currency")}
       {renderField("business_group", "Business group")}
+      {renderTerritorySelect && renderTerritorySelect()}
     </div>
   );
 }

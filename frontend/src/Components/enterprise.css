@@ -1,0 +1,385 @@
+.enterprise-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.enterprise-table th,
+.enterprise-table td {
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.enterprise-table th {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.status-pill--calculated { background: rgba(99, 102, 241, 0.15); color: #4338ca; }
+.status-pill--manager_approved { background: rgba(234, 179, 8, 0.15); color: #a16207; }
+.status-pill--approved { background: rgba(34, 197, 94, 0.15); color: #15803d; }
+.status-pill--paid { background: rgba(16, 185, 129, 0.15); color: #047857; }
+.status-pill--open { background: rgba(239, 68, 68, 0.12); color: #b91c1c; }
+.status-pill--resolved { background: rgba(34, 197, 94, 0.15); color: #15803d; }
+.status-pill--rejected { background: rgba(148, 163, 184, 0.2); color: #475569; }
+.status-pill--draft { background: rgba(148, 163, 184, 0.2); color: #475569; }
+.status-pill--no_commission { background: rgba(148, 163, 184, 0.18); color: #64748b; }
+
+[data-theme="dark"] .status-pill--calculated { background: rgba(99, 102, 241, 0.2); color: #a5b4fc; }
+[data-theme="dark"] .status-pill--manager_approved { background: rgba(234, 179, 8, 0.2); color: #fde047; }
+[data-theme="dark"] .status-pill--approved { background: rgba(34, 197, 94, 0.2); color: #86efac; }
+[data-theme="dark"] .status-pill--paid { background: rgba(16, 185, 129, 0.25); color: #6ee7b7; }
+[data-theme="dark"] .status-pill--open { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+[data-theme="dark"] .status-pill--resolved { background: rgba(34, 197, 94, 0.2); color: #86efac; }
+[data-theme="dark"] .status-pill--rejected { background: rgba(148, 163, 184, 0.2); color: #cbd5e1; }
+[data-theme="dark"] .status-pill--draft { background: rgba(148, 163, 184, 0.2); color: #cbd5e1; }
+
+.enterprise-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  align-items: flex-end;
+}
+
+.enterprise-form-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.status-pill + .status-pill {
+  margin-left: 6px;
+}
+
+.view-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.view-tabs button {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.view-tabs button.active {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--primary-dark);
+  border-color: var(--primary-color);
+}
+
+[data-theme="dark"] .view-tabs button.active {
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--primary-light);
+}
+
+.integration-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(15, 23, 42, 0.4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 2rem 1rem;
+  overflow-y: auto;
+}
+
+.integration-modal {
+  width: min(960px, 100%);
+  max-height: calc(100vh - 4rem);
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: var(--shadow-xl);
+}
+
+.integrations-panel--embedded .panel {
+  margin-bottom: 1rem;
+}
+
+.integrations-panel--embedded.integrations-panel--orders .integrations-panel__head {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.integrations-panel--embedded.integrations-panel--orders .panel:first-of-type {
+  margin-top: 0;
+}
+
+.integrations-panel__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.integrations-panel__title {
+  margin: 0 0 0.35rem;
+  font-size: 1.25rem;
+}
+
+.integrations-panel__subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.disputes-panel__subtitle {
+  margin: 0.35rem 0 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.disputes-panel__count {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-light);
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.disputes-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+}
+
+.disputes-table thead th {
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: var(--bg-light);
+  white-space: nowrap;
+}
+
+.disputes-table tbody tr:hover {
+  background: rgba(99, 102, 241, 0.04);
+}
+
+.disputes-table__id {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--primary-dark);
+}
+
+.disputes-table__id--muted {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.disputes-table__issue {
+  max-width: 280px;
+  color: var(--text-secondary);
+}
+
+.disputes-table__state {
+  text-align: center;
+  padding: 2.5rem 1rem !important;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.disputes-table__actions {
+  white-space: nowrap;
+}
+
+.disputes-table__action-btn {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+  margin-right: 0.35rem;
+}
+
+.disputes-table__ack {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  background: #dcfce7;
+  color: #166534;
+}
+
+.disputes-table__hint {
+  font-size: 0.75rem;
+  color: var(--text-muted, #64748b);
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .disputes-table__id {
+  color: var(--primary-light);
+}
+
+[data-theme="dark"] .disputes-table thead th {
+  background: rgba(15, 23, 42, 0.5);
+}
+
+/* Commission search (dispute picker) */
+.commission-search {
+  position: relative;
+  width: 100%;
+}
+
+.commission-search__input {
+  width: 100%;
+}
+
+.commission-search__list {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  margin: 0;
+  padding: 0.35rem 0;
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--bg-white, #fff);
+  border: 1px solid var(--border-light, #dddbda);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.commission-search__option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.commission-search__option:hover:not(:disabled),
+.commission-search__option:focus-visible:not(:disabled) {
+  background: rgba(1, 118, 211, 0.08);
+}
+
+.commission-search__option--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.commission-search__primary {
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.commission-search__secondary {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.commission-search__badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--warning-color, #b54708);
+}
+
+.commission-search__empty {
+  padding: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.commission-search__empty--error {
+  color: var(--danger-color, #b42318);
+}
+
+.commission-search__hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.disputes-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+}
+
+.disputes-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 240px;
+  flex: 1 1 280px;
+}
+
+.disputes-form__field--grow {
+  flex: 2 1 320px;
+}
+
+.disputes-form__field label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.disputes-form__textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.disputes-form__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background: var(--bg-light, #f8fafc);
+  border: 1px solid var(--border-light, #ecebea);
+  font-size: 0.875rem;
+}
+
+.disputes-form__summary-label {
+  display: block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 0.15rem;
+}
+
+[data-theme="dark"] .commission-search__list {
+  background: #111827;
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+[data-theme="dark"] .disputes-form__summary {
+  background: rgba(15, 23, 42, 0.5);
+  border-color: rgba(148, 163, 184, 0.14);
+}

@@ -33,6 +33,7 @@ from rest_framework.permissions import AllowAny
 from django.contrib.auth import authenticate
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied
 from .serializers import UserProfileSerializer, HierarchyRelationshipSerializer
 from django.conf import settings
 from .services import (
@@ -45,6 +46,7 @@ from .permissions import (
     require_finance_or_admin,
     user_is_admin,
     user_is_finance,
+    user_is_manager,
     user_can_view_finance_data,
     get_request_user_profile,
 )
@@ -52,20 +54,58 @@ from .audit import record_audit
 from .emails import notify_admins
 from .models import AuditLog, ImportJob
 from .imports import process_orders_csv, should_use_async_import
+from .list_scope import order_search_q
 from .tenants import filter_queryset_by_organization
+
+
+def _orders_queryset_for_request(request):
+    """Orders visible to the user, with commission data prefetched."""
+    queryset = filter_queryset_by_organization(
+        Order.objects.select_related("sale_record")
+        .prefetch_related(
+            Prefetch(
+                "sale_record__commission_set",
+                queryset=Commission.objects.order_by("id"),
+            )
+        )
+        .order_by("-order_date", "-id"),
+        getattr(request, "organization", None),
+    )
+
+    search_term = (
+        request.query_params.get("q") or request.query_params.get("search") or ""
+    ).strip()
+    if search_term:
+        queryset = queryset.filter(order_search_q(search_term))
+    else:
+        status_filter = (request.query_params.get("order_status") or "").strip()
+        if status_filter:
+            queryset = queryset.filter(order_status__iexact=status_filter)
+
+    user = request.user
+    try:
+        user_profile = UserProfile.objects.get(email=user.email)
+        is_admin = user_profile.role.lower() in ["admin", "administrator"]
+        if is_admin:
+            return queryset
+        if user_profile.employee_id:
+            return queryset.filter(employee_id=user_profile.employee_id)
+        return queryset.filter(employee_email=user.email)
+    except UserProfile.DoesNotExist:
+        return queryset.none()
+
 from django.core.files.base import ContentFile
 from django.db import transaction
+from django.db.models import Prefetch
 from django.http import HttpResponse
 from django.utils.dateparse import parse_date
 
 logger = logging.getLogger("commissions")
 
 
-def _apply_onboarding_password(django_user, user_created):
-    """Set initial password only when DEFAULT_ONBOARDING_PASSWORD is configured."""
-    pwd = getattr(settings, "DEFAULT_ONBOARDING_PASSWORD", "") or ""
-    if user_created and pwd:
-        django_user.set_password(pwd)
+from .user_scope import profile_commission_q
+from .auth_utils import provision_login_user
+
 
 class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = Employee.objects.all()
@@ -87,14 +127,18 @@ class CommissionViewSet(viewsets.ModelViewSet):
         try:
             user_profile = UserProfile.objects.get(email=user.email)
             is_admin = user_profile.role.lower() in ['admin', 'administrator']
+            is_finance = user_is_finance(self.request)
+            is_manager = user_is_manager(self.request)
             
-            if is_admin:
+            if is_admin or is_finance or is_manager:
                 queryset = Commission.objects.select_related(
                     "employee",
                     "sale",
                     "sale__order",
                     "compensation_plan",
                     "approved_by",
+                    "manager_approved_by",
+                    "payout_run",
                 ).all()
                 queryset = filter_queryset_by_organization(
                     queryset,
@@ -102,29 +146,9 @@ class CommissionViewSet(viewsets.ModelViewSet):
                     field="sale__order__organization",
                 )
             else:
-                # Employee can only see their own commissions
-                # Build possible email patterns for this employee
-                possible_emails = [
-                    user.email,  # Login email
-                ]
-                
-                # Add employee_id@company.com format
-                if user_profile.employee_id:
-                    possible_emails.append(f"{user_profile.employee_id}@gmail.com")
-                
-                # Add name-based search
                 from django.db.models import Q
-                query = Q()
-                for email in possible_emails:
-                    query |= Q(employee__email=email)
-                
-                # Also search by employee name
-                if user_profile.name:
-                    query |= Q(employee__name__icontains=user_profile.name)
-                if user_profile.first_name and user_profile.last_name:
-                    full_name = f"{user_profile.first_name} {user_profile.last_name}"
-                    query |= Q(employee__name__icontains=full_name)
-                
+
+                query = profile_commission_q(user_profile, user.email)
                 queryset = Commission.objects.filter(query).select_related(
                     "employee",
                     "sale",
@@ -137,12 +161,44 @@ class CommissionViewSet(viewsets.ModelViewSet):
             ).select_related("employee", "sale", "sale__order")
 
         status_filter = self.request.query_params.get("status")
-        if status_filter in (
-            Commission.STATUS_CALCULATED,
-            Commission.STATUS_APPROVED,
-        ):
+        valid_statuses = {c[0] for c in Commission.STATUS_CHOICES}
+        if status_filter in valid_statuses:
             queryset = queryset.filter(status=status_filter)
         return queryset
+
+    def _payroll_can_see_all(self, request):
+        try:
+            user_profile = UserProfile.objects.get(email=request.user.email)
+            role = user_profile.role.lower()
+            return (
+                role in ["admin", "administrator"]
+                or user_is_finance(request)
+                or user_is_manager(request)
+            )
+        except UserProfile.DoesNotExist:
+            return False
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        if self._payroll_can_see_all(request):
+            from .list_scope import commission_employee_search_q, list_limit_for_request
+
+            q = (request.query_params.get("q") or "").strip()
+            if q:
+                queryset = queryset.filter(commission_employee_search_q(q))
+            limit = list_limit_for_request(request, searching=bool(q))
+            total_count = queryset.count()
+            queryset = queryset.order_by("-calculated_at", "-id")[:limit]
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(
+                {
+                    "results": serializer.data,
+                    "count": total_count,
+                    "limited": total_count > limit,
+                }
+            )
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
 
 @api_view(['POST'])
@@ -184,43 +240,20 @@ def signup(request):
     })
 
 
-@api_view(['POST'])
-@permission_classes([AllowAny])
-@throttle_classes([ScopedRateThrottle])
-def login(request):
-    username = request.data.get('username')
-    password = request.data.get('password')
+signup.throttle_scope = "login"
 
-    # Authenticate user
-    user = authenticate(
-        username=username,
-        password=password
-    )
-
-    if not user:
-        record_audit(request, "login_failed", {"username": username})
-        return Response(
-            {'error': 'Invalid credentials'},
-            status=400
-        )
-
-    # Get or create token
-    token, _ = Token.objects.get_or_create(user=user)
-    record_audit(request, "login_success", {"user_id": user.pk})
-
-    # Return success response
-    return Response({
-        'message': 'Login successful',
-        'token': token.key,
-        'username': user.username
-    })
 
 class CompensationPlanListCreateView(generics.ListCreateAPIView):
     serializer_class = CompensationPlanSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        qs = CompensationPlan.objects.all().order_by("-created_at")
+        qs = CompensationPlan.objects.prefetch_related(
+            "sc_rate_tables",
+            "sc_flat_rate_tables",
+            "sc_lookup_tables",
+            "commission_rules",
+        ).order_by("-created_at")
         return filter_queryset_by_organization(
             qs, getattr(self.request, "organization", None)
         )
@@ -229,35 +262,52 @@ class CompensationPlanListCreateView(generics.ListCreateAPIView):
         serializer.save(organization=getattr(self.request, "organization", None))
 
     def check_admin_permission(self, request):
-        """Check if user is admin, raise PermissionDenied if not"""
-        try:
-            user_profile = UserProfile.objects.get(email=request.user.email)
-            is_admin = user_profile.role.lower() in ['admin', 'administrator']
-            if not is_admin:
-                raise PermissionDenied("Only administrators can access compensation plans")
-        except UserProfile.DoesNotExist:
-            raise PermissionDenied("User profile not found")
+        if not user_is_admin(request):
+            raise PermissionDenied("Only administrators can access compensation plans")
         return True
 
     def list(self, request, *args, **kwargs):
-        """Only admins can view compensation plans"""
         self.check_admin_permission(request)
         return super().list(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
-        """Only admins can create compensation plans"""
         self.check_admin_permission(request)
         return super().create(request, *args, **kwargs)
 
-    def destroy(self, request, *args, **kwargs):
-        """Only admins can delete compensation plans"""
+
+class CompensationPlanDetailView(generics.RetrieveUpdateAPIView):
+    serializer_class = CompensationPlanSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = CompensationPlan.objects.prefetch_related(
+            "sc_rate_tables",
+            "sc_flat_rate_tables",
+            "sc_lookup_tables",
+            "commission_rules",
+            "commission_rules__conditions",
+            "commission_rules__results",
+        )
+        return filter_queryset_by_organization(
+            qs, getattr(self.request, "organization", None)
+        )
+
+    def check_admin_permission(self, request):
+        if not user_is_admin(request):
+            raise PermissionDenied("Only administrators can access compensation plans")
+        return True
+
+    def retrieve(self, request, *args, **kwargs):
         self.check_admin_permission(request)
-        return super().destroy(request, *args, **kwargs)
+        return super().retrieve(request, *args, **kwargs)
 
     def update(self, request, *args, **kwargs):
-        """Only admins can update compensation plans"""
         self.check_admin_permission(request)
         return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        self.check_admin_permission(request)
+        return super().partial_update(request, *args, **kwargs)
 
 
 class UserProfileListCreateView(generics.ListCreateAPIView):
@@ -265,6 +315,28 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
     queryset = UserProfile.objects.all().order_by('first_name')
     serializer_class = UserProfileSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        from .list_scope import profile_search_q
+
+        qs = UserProfile.objects.all().order_by("first_name")
+        qs = filter_queryset_by_organization(
+            qs, getattr(self.request, "organization", None)
+        )
+        q = (self.request.query_params.get("q") or "").strip()
+        if q:
+            qs = qs.filter(profile_search_q(q))
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        from .list_scope import list_limit_for_request
+
+        queryset = self.filter_queryset(self.get_queryset())
+        q = (request.query_params.get("q") or "").strip()
+        limit = list_limit_for_request(request, searching=bool(q))
+        page = queryset[:limit]
+        serializer = self.get_serializer(page, many=True)
+        return Response(serializer.data)
 
     def create(self, request, *args, **kwargs):
 
@@ -326,101 +398,60 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
             if not username:
                 username = email
 
+            employee_id = str(data.get("employee_id", "")).strip()
+
             # ---------------------------------------------------
-            # Create / Update UserProfile
+            # Reject duplicate users (email / employee_id within org)
             # ---------------------------------------------------
+            from .field_rules import find_user_profile_duplicates
+
             org = getattr(request, "organization", None)
-            lookup = {"email": email}
-            if org:
-                lookup["organization"] = org
+            dup_errors = find_user_profile_duplicates(org, email, employee_id)
+            if dup_errors:
+                return Response(
+                    {"error": " ".join(dup_errors)},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-            profile, created = UserProfile.objects.update_or_create(
-                **lookup,
-                defaults={
-                    "organization": org,
-                    # User
-                    'enable_login': enable_login,
-                    'name': str(
-                        data.get('name', '')
-                    ).strip(),
-
-                    'role': str(
-                        data.get('role', 'Sales Rep')
-                    ).strip(),
-
-                    # People
-                    'username': username,
-
-                    'first_name': str(
-                        data.get('first_name', '')
-                    ).strip(),
-
-                    'last_name': str(
-                        data.get('last_name', '')
-                    ).strip(),
-
-                    'prefix': str(
-                        data.get('prefix', '')
-                    ).strip(),
-
-                    'employee_id': str(
-                        data.get('employee_id', '')
-                    ).strip(),
-
-                    'hire_date': data.get('hire_date'),
-
-                    'personal_target': personal_target,
-
-                    'personal_currency': str(
-                        data.get('personal_currency', 'INR')
-                    ).strip(),
-
-                    'business_group': str(
-                        data.get('business_group', 'India')
-                    ).strip(),
-
-                    # Title
-                    'title': str(
-                        data.get('title', '')
-                    ).strip(),
-
-                    'pay_period_type': str(
-                        data.get('pay_period_type', 'Monthly')
-                    ).strip(),
-
-                    # Position
-                    'position_name': str(
-                        data.get('position_name', '')
-                    ).strip(),
-
-                    'position_title': str(
-                        data.get('position_title', '')
-                    ).strip(),
-                }
+            # ---------------------------------------------------
+            # Create UserProfile
+            # ---------------------------------------------------
+            profile = UserProfile.objects.create(
+                organization=org,
+                enable_login=enable_login,
+                name=str(data.get("name", "")).strip(),
+                email=email,
+                role=str(data.get("role", "Sales Rep")).strip(),
+                username=username,
+                first_name=str(data.get("first_name", "")).strip(),
+                last_name=str(data.get("last_name", "")).strip(),
+                prefix=str(data.get("prefix", "")).strip(),
+                employee_id=employee_id,
+                hire_date=data.get("hire_date"),
+                personal_target=personal_target,
+                personal_currency=str(
+                    data.get("personal_currency", "INR")
+                ).strip(),
+                business_group=str(
+                    data.get("business_group", "India")
+                ).strip(),
+                title=str(data.get("title", "")).strip(),
+                pay_period_type=str(
+                    data.get("pay_period_type", "Monthly")
+                ).strip(),
+                position_name=str(data.get("position_name", "")).strip(),
+                position_title=str(data.get("position_title", "")).strip(),
             )
+            territory_id = data.get("territory")
+            if territory_id:
+                profile.territory_id = territory_id
+                profile.save(update_fields=["territory"])
 
             # ---------------------------------------------------
             # Create Django Auth User
             # ---------------------------------------------------
             if enable_login:
-
-                django_user, user_created = User.objects.get_or_create(
-                    username=username,
-                    defaults={
-                        'email': email,
-                        'first_name': profile.first_name,
-                        'last_name': profile.last_name,
-                        'is_active': True,
-                    }
-                )
-
-                django_user.email = email
-                django_user.first_name = profile.first_name
-                django_user.last_name = profile.last_name
-                django_user.is_active = True
-
-                _apply_onboarding_password(django_user, user_created)
-                django_user.save()
+                provision_login_user(profile)
 
             # ---------------------------------------------------
             # Hierarchy Relationship
@@ -458,9 +489,7 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
 
             return Response(
                 serializer.data,
-                status=status.HTTP_201_CREATED
-                if created
-                else status.HTTP_200_OK
+                status=status.HTTP_201_CREATED,
             )
 
         except Exception as e:
@@ -616,59 +645,47 @@ class UserProfileUploadView(APIView):
                     username = email
 
                 # ---------------------------------------------------
-                # Create or Update UserProfile
+                # Reject duplicates, then create UserProfile
                 # ---------------------------------------------------
                 org = getattr(request, "organization", None)
-                profile_lookup = {"email": email}
-                if org:
-                    profile_lookup["organization"] = org
 
-                profile, created = UserProfile.objects.update_or_create(
-                    **profile_lookup,
-                    defaults={
-                        "organization": org,
-                        # User
-                        'enable_login': enable_login,
-                        'name': name_val,
-                        'role': role_val,
+                from .field_rules import find_user_profile_duplicates
 
-                        # People
-                        'username': username,
-                        'first_name': str(
-                            row.get('first_name', '')
-                        ).strip(),
-                        'last_name': str(
-                            row.get('last_name', '')
-                        ).strip(),
-                        'prefix': str(
-                            row.get('prefix', '')
-                        ).strip(),
-                        'employee_id': employee_id_val,
-                        'hire_date': hire_date,
-                        'personal_target': personal_target,
-                        'personal_currency': str(
-                            row.get('personal_currency', 'INR')
-                        ).strip(),
-                        'business_group': str(
-                            row.get('business_group', 'India')
-                        ).strip(),
+                dup_errors = find_user_profile_duplicates(
+                    org, email, employee_id_val
+                )
+                if dup_errors:
+                    raise Exception(" ".join(dup_errors))
 
-                        # Title
-                        'title': str(
-                            row.get('title', '')
-                        ).strip(),
-                        'pay_period_type': str(
-                            row.get('pay_period_type', 'Monthly')
-                        ).strip(),
-
-                        # Position
-                        'position_name': str(
-                            row.get('position_name', '')
-                        ).strip(),
-                        'position_title': str(
-                            row.get('position_title', '')
-                        ).strip(),
-                    }
+                profile = UserProfile.objects.create(
+                    organization=org,
+                    enable_login=enable_login,
+                    name=name_val,
+                    role=role_val,
+                    email=email,
+                    username=username,
+                    first_name=str(row.get('first_name', '')).strip(),
+                    last_name=str(row.get('last_name', '')).strip(),
+                    prefix=str(row.get('prefix', '')).strip(),
+                    employee_id=employee_id_val,
+                    hire_date=hire_date,
+                    personal_target=personal_target,
+                    personal_currency=str(
+                        row.get('personal_currency', 'INR')
+                    ).strip(),
+                    business_group=str(
+                        row.get('business_group', 'India')
+                    ).strip(),
+                    title=str(row.get('title', '')).strip(),
+                    pay_period_type=str(
+                        row.get('pay_period_type', 'Monthly')
+                    ).strip(),
+                    position_name=str(
+                        row.get('position_name', '')
+                    ).strip(),
+                    position_title=str(
+                        row.get('position_title', '')
+                    ).strip(),
                 )
                 
                 # Update cache
@@ -686,24 +703,7 @@ class UserProfileUploadView(APIView):
                 # Login: password set only if DEFAULT_ONBOARDING_PASSWORD is in .env
                 # ---------------------------------------------------
                 if enable_login:
-                    django_user, user_created = User.objects.get_or_create(
-                        username=username,
-                        defaults={
-                            'email': email,
-                            'first_name': profile.first_name,
-                            'last_name': profile.last_name,
-                            'is_active': True,
-                        }
-                    )
-
-                    # Always update latest details
-                    django_user.email = email
-                    django_user.first_name = profile.first_name
-                    django_user.last_name = profile.last_name
-                    django_user.is_active = True
-
-                    _apply_onboarding_password(django_user, user_created)
-                    django_user.save()
+                    provision_login_user(profile)
 
                 # ---------------------------------------------------
                 # Create Hierarchy Relationship
@@ -827,39 +827,46 @@ class OrderListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        """
-        Filter orders based on user role:
-        - Admin: Can see all orders
-        - Regular employee: Can only see their own orders
-        """
-        user = self.request.user
-        queryset = filter_queryset_by_organization(
-            Order.objects.all().order_by("-order_date"),
-            getattr(self.request, "organization", None),
-        )
-
-        try:
-            user_profile = UserProfile.objects.get(email=user.email)
-            is_admin = user_profile.role.lower() in ['admin', 'administrator']
-            
-            if is_admin:
-                # Admin can see all orders
-                return queryset
-            else:
-                # Employee can only see their own orders
-                if user_profile.employee_id:
-                    return queryset.filter(employee_id=user_profile.employee_id)
-                else:
-                    return queryset.filter(employee_email=user.email)
-        except UserProfile.DoesNotExist:
-            # Fallback: show nothing if profile doesn't exist
-            return queryset.none()
+        return _orders_queryset_for_request(self.request)
 
     def perform_create(self, serializer):
         order = serializer.save(
             organization=getattr(self.request, "organization", None)
         )
         calculate_commission_for_order(order)
+
+
+class OrderDetailView(generics.RetrieveUpdateAPIView):
+    """
+    GET/PATCH /api/orders/<id>/
+
+    Updating an order (e.g. Booked → Success) recalculates commission when eligible.
+    """
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return _orders_queryset_for_request(self.request)
+
+    def perform_update(self, serializer):
+        if not user_is_admin(self.request):
+            raise PermissionDenied("Only administrators can update orders")
+        order = serializer.save()
+        calculate_commission_for_order(order)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        refreshed = (
+            self.get_queryset()
+            .select_related("sale_record")
+            .prefetch_related("sale_record__commission_set")
+            .get(pk=instance.pk)
+        )
+        return Response(self.get_serializer(refreshed).data)
 
 
 class OrderUploadView(APIView):
@@ -951,7 +958,7 @@ class OrderUploadView(APIView):
             },
         )
         notify_admins(
-            "IncentivePro: order upload finished",
+            "Incentra: order upload finished",
             (
                 f"User: {request.user.email}\n"
                 f"File: {uploaded_file.name}\n"
@@ -964,10 +971,6 @@ class OrderUploadView(APIView):
             "async": False,
             **summary,
         })
-
-
-signup.throttle_scope = "login"
-login.throttle_scope = "login"
 
 
 # =====================================================
@@ -1004,30 +1007,46 @@ def email_login(request):
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    try:
-        # Try to get user by email field first
-        user = User.objects.get(email=email)
-        
-    except User.DoesNotExist:
-        # Fallback: try to get user by username (which might be email)
-        try:
-            user = User.objects.get(username=email)
-        except User.DoesNotExist:
-            logger.warning(f"Login attempt with non-existent email: {email}")
-            record_audit(request, "login_failed", {"email": email})
-            return Response(
-                {'error': 'Invalid credentials'},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
-    
-    # Check password
-    if not user.check_password(password):
-        logger.warning(f"Failed login attempt for email: {email}")
+    profile = (
+        UserProfile.objects.filter(email__iexact=email, enable_login=True).first()
+        or UserProfile.objects.filter(employee_id__iexact=email, enable_login=True).first()
+    )
+
+    user = User.objects.filter(email__iexact=email).first()
+    if not user:
+        user = User.objects.filter(username__iexact=email).first()
+    if not user and profile:
+        user = User.objects.filter(email__iexact=profile.email).first()
+    if not user and profile:
+        user = User.objects.filter(username__iexact=profile.username).first()
+    if not user and profile:
+        user = provision_login_user(profile)
+
+    if not user:
+        logger.warning(f"Login attempt with non-existent email: {email}")
         record_audit(request, "login_failed", {"email": email})
         return Response(
             {'error': 'Invalid credentials'},
             status=status.HTTP_401_UNAUTHORIZED
         )
+
+    # Check password (username is the canonical auth field in Django)
+    if not user.check_password(password):
+        auth_user = authenticate(request, username=user.username, password=password)
+        if not auth_user:
+            auth_user = authenticate(request, username=user.email, password=password)
+        if not auth_user and profile:
+            repaired = provision_login_user(profile)
+            if repaired and repaired.check_password(password):
+                auth_user = repaired
+        if not auth_user:
+            logger.warning(f"Failed login attempt for email: {email}")
+            record_audit(request, "login_failed", {"email": email})
+            return Response(
+                {'error': 'Invalid credentials'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        user = auth_user
     
     # Check if user is active
     if not user.is_active:
@@ -1061,6 +1080,9 @@ def email_login(request):
             {'error': 'An error occurred during login'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+email_login.throttle_scope = "login"
 
 
 # =====================================================
@@ -1166,7 +1188,14 @@ def get_user_profile(request):
             'name': user_profile.name,
             'is_admin': is_admin,
             'is_finance': user_is_finance(request),
+            'is_manager': user_is_manager(request),
             'employee_id': user_profile.employee_id,
+            'territory_id': user_profile.territory_id,
+            'territory_name': (
+                user_profile.territory.name if user_profile.territory_id else None
+            ),
+            'business_group': user_profile.business_group or '',
+            'personal_currency': user_profile.personal_currency or 'INR',
             'organization_slug': org.slug if org else None,
             'organization_name': org.name if org else None,
         })
@@ -1184,6 +1213,60 @@ def get_user_profile(request):
         )
 
 
+def _profile_display_name(profile):
+    if not profile:
+        return ""
+    full = f"{profile.first_name} {profile.last_name}".strip()
+    return full or (profile.name or "").strip() or profile.email
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def employee_directory(request):
+    """Employees for order-form search with position, manager, and territory."""
+    from .list_scope import list_limit_for_request, profile_search_q
+
+    org = getattr(request, "organization", None)
+    profiles = filter_queryset_by_organization(
+        UserProfile.objects.exclude(employee_id="")
+        .exclude(employee_id__isnull=True)
+        .select_related("territory"),
+        org,
+    ).order_by("employee_id")
+
+    query = (request.query_params.get("q") or "").strip()
+    if query:
+        profiles = profiles.filter(profile_search_q(query))
+
+    limit = list_limit_for_request(request, searching=bool(query))
+    profile_list = list(profiles[:limit])
+    profile_ids = [profile.id for profile in profile_list]
+    manager_by_child = {}
+    if profile_ids:
+        for rel in HierarchyRelationship.objects.filter(
+            child_participant_id__in=profile_ids
+        ).select_related("parent_participant"):
+            manager_by_child[rel.child_participant_id] = rel.parent_participant
+
+    results = []
+    for profile in profile_list:
+        manager = manager_by_child.get(profile.id)
+        results.append(
+            {
+                "id": profile.id,
+                "employee_id": profile.employee_id,
+                "display_name": _profile_display_name(profile),
+                "position_name": profile.position_name or "",
+                "business_group": profile.business_group or "",
+                "manager_name": _profile_display_name(manager) if manager else "",
+                "territory_id": profile.territory_id,
+                "territory_name": profile.territory.name if profile.territory else "",
+            }
+        )
+
+    return Response(results)
+
+
 # =====================================================
 # REPORTS API
 # =====================================================
@@ -1197,51 +1280,126 @@ def commission_summary_report(request):
     Admin: All employees, Employee: Own only
     """
     from django.db.models import Sum, Count, Q, Avg
-    from datetime import datetime, timedelta
+    from django.utils.dateparse import parse_date
     
     user = request.user
+    user_profile = None
     try:
         user_profile = UserProfile.objects.get(email=user.email)
         is_admin = user_profile.role.lower() in ['admin', 'administrator']
-    except:
+    except UserProfile.DoesNotExist:
         is_admin = False
     
-    # Get date range
-    start_date = request.query_params.get('start_date')
-    end_date = request.query_params.get('end_date')
+    start_date = parse_date(request.query_params.get("start_date") or "")
+    end_date = parse_date(request.query_params.get("end_date") or "")
     
+    from .business_groups import (
+        apply_business_group_to_commissions,
+        business_group_choices_for_api,
+        commission_totals_by_business_group,
+        currency_for_business_group,
+        resolve_dashboard_business_group,
+    )
+    from .permissions import user_is_finance
+
+    can_view_all_groups = is_admin or user_is_finance(request)
+    effective_group, view_all_groups, available_groups = resolve_dashboard_business_group(
+        request, user_profile, can_view_all_groups
+    )
+
+    commissions = Commission.objects.all()
+    org = getattr(request, "organization", None)
+    if org:
+        commissions = commissions.filter(sale__order__organization=org)
+
     if start_date and end_date:
-        commissions = Commission.objects.filter(
+        commissions = commissions.filter(
             sale__order__order_date__range=[start_date, end_date]
         )
-    else:
-        commissions = Commission.objects.all()
+    elif start_date:
+        commissions = commissions.filter(sale__order__order_date__gte=start_date)
+    elif end_date:
+        commissions = commissions.filter(sale__order__order_date__lte=end_date)
     
     # Filter by role
-    if not is_admin:
+    if not is_admin and not user_is_finance(request):
         possible_emails = [user.email]
-        if user_profile.employee_id:
+        if user_profile and user_profile.employee_id:
             possible_emails.append(f"{user_profile.employee_id}@company.com")
         commissions = commissions.filter(employee__email__in=possible_emails)
+
+    base_commissions = commissions
+    commissions = apply_business_group_to_commissions(commissions, effective_group)
     
-    # Calculate metrics
+    from .currencies import active_currency_totals, normalize_currency, primary_currency_from_totals
+
     total_commission = commissions.aggregate(Sum('commission_amount'))['commission_amount__sum'] or 0
     total_count = commissions.count()
     avg_commission = commissions.aggregate(Avg('commission_amount'))['commission_amount__avg'] or 0
-    
+    active_reps_count = commissions.values('employee_id').distinct().count()
+
+    personal_currency = normalize_currency(
+        user_profile.personal_currency if user_profile else None
+    )
+    by_business_group = (
+        commission_totals_by_business_group(base_commissions) if view_all_groups else []
+    )
+    if effective_group:
+        primary_currency = currency_for_business_group(effective_group, personal_currency)
+    else:
+        primary_currency = primary_currency_from_totals(
+            [
+                {"currency": row["currency"], "total": row["total"]}
+                for row in by_business_group
+            ],
+            fallback=personal_currency,
+        )
+    totals_by_currency = (
+        active_currency_totals(
+            [{"currency": primary_currency, "total": float(total_commission)}]
+        )
+        if effective_group
+        else active_currency_totals(
+            [
+                {"currency": row["currency"], "total": row["total"]}
+                for row in by_business_group
+            ]
+        )
+    )
+
     # Top earners (only for admin)
     top_earners = []
     if is_admin:
-        top_earners = Commission.objects.values('employee__name', 'employee__email').annotate(
+        for row in commissions.values('employee__name', 'employee__email').annotate(
             total=Sum('commission_amount'),
-            count=Count('id')
-        ).order_by('-total')[:5]
-    
+            count=Count('id'),
+        ).order_by('-total')[:5]:
+            profile = UserProfile.objects.filter(email=row["employee__email"]).first()
+            top_earners.append(
+                {
+                    **row,
+                    "business_group": profile.business_group if profile else "",
+                    "currency": currency_for_business_group(
+                        profile.business_group if profile else effective_group,
+                        profile.personal_currency if profile else primary_currency,
+                    ),
+                }
+            )
+
     return Response({
         'total_commission': float(total_commission),
         'total_count': total_count,
         'avg_commission': float(avg_commission),
-        'top_earners': list(top_earners),
+        'active_reps_count': active_reps_count,
+        'totals_by_currency': totals_by_currency,
+        'by_business_group': by_business_group,
+        'business_group': effective_group,
+        'view_all_business_groups': view_all_groups,
+        'available_business_groups': available_groups,
+        'business_group_choices': business_group_choices_for_api(),
+        'personal_currency': personal_currency,
+        'primary_currency': primary_currency,
+        'top_earners': top_earners,
         'is_admin': is_admin,
     })
 
@@ -1253,39 +1411,124 @@ def sales_performance_report(request):
     Sales Performance Report
     Shows sales by employee, achievement metrics
     """
-    from django.db.models import Sum, Count
-    
+    from django.db.models import Sum, Count, Avg
+    from django.utils.dateparse import parse_date
+
     user = request.user
+    user_profile = None
     try:
         user_profile = UserProfile.objects.get(email=user.email)
         is_admin = user_profile.role.lower() in ['admin', 'administrator']
-    except:
+    except UserProfile.DoesNotExist:
         is_admin = False
-    
-    # Get orders and sales
+
+    start_date = parse_date(request.query_params.get("start_date") or "")
+    end_date = parse_date(request.query_params.get("end_date") or "")
+
+    from .business_groups import (
+        apply_business_group_to_orders,
+        business_group_choices_for_api,
+        currency_for_business_group,
+        resolve_dashboard_business_group,
+        sales_totals_by_business_group,
+    )
+    from .permissions import user_is_finance
+
+    can_view_all_groups = is_admin or user_is_finance(request)
+    effective_group, view_all_groups, available_groups = resolve_dashboard_business_group(
+        request, user_profile, can_view_all_groups
+    )
+
     orders = Order.objects.all()
-    
-    if not is_admin:
+    org = getattr(request, "organization", None)
+    if org:
+        orders = filter_queryset_by_organization(orders, org)
+
+    if start_date and end_date:
+        orders = orders.filter(order_date__range=[start_date, end_date])
+    elif start_date:
+        orders = orders.filter(order_date__gte=start_date)
+    elif end_date:
+        orders = orders.filter(order_date__lte=end_date)
+
+    if not is_admin and not user_is_finance(request):
         possible_employee_ids = []
-        if user_profile.employee_id:
+        if user_profile and user_profile.employee_id:
             possible_employee_ids.append(user_profile.employee_id)
         orders = orders.filter(employee_id__in=possible_employee_ids)
-    
-    # Aggregate sales data
-    sales_data = orders.values('employee_id', 'position_name').annotate(
+
+    base_orders = orders
+    orders = apply_business_group_to_orders(orders, effective_group)
+
+    from .currencies import active_currency_totals, normalize_currency, primary_currency_from_totals
+    from .models import UserProfile as UP
+
+    sales_data = orders.values('employee_id', 'position_name', 'currency').annotate(
         total_sales=Sum('sales_amount'),
         order_count=Count('id'),
-        avg_order=Sum('sales_amount')
+        avg_order=Avg('sales_amount'),
     ).order_by('-total_sales')
-    
-    # Calculate totals
+
     total_sales = orders.aggregate(Sum('sales_amount'))['sales_amount__sum'] or 0
     total_orders = orders.count()
-    
+
+    personal_currency = normalize_currency(
+        user_profile.personal_currency if user_profile else None
+    )
+    by_business_group = (
+        sales_totals_by_business_group(base_orders) if view_all_groups else []
+    )
+    if effective_group:
+        primary_currency = currency_for_business_group(effective_group, personal_currency)
+    else:
+        primary_currency = primary_currency_from_totals(
+            [
+                {"currency": row["currency"], "total": row["total"]}
+                for row in by_business_group
+            ],
+            fallback=personal_currency,
+        )
+    totals_by_currency = (
+        active_currency_totals([{"currency": primary_currency, "total": float(total_sales)}])
+        if effective_group
+        else active_currency_totals(
+            [
+                {"currency": row["currency"], "total": row["total"]}
+                for row in by_business_group
+            ]
+        )
+    )
+    sales_rows = []
+    for row in sales_data:
+        profile = UP.objects.filter(employee_id=row["employee_id"]).first()
+        row_currency = currency_for_business_group(
+            profile.business_group if profile else effective_group,
+            row.get("currency") or primary_currency,
+        )
+        sales_rows.append(
+            {
+                **row,
+                "currency": row_currency,
+                "business_group": profile.business_group if profile else "",
+                "total_sales": float(row["total_sales"] or 0),
+                "avg_order": float(row["avg_order"] or 0),
+            }
+        )
+
     return Response({
         'total_sales': float(total_sales),
         'total_orders': total_orders,
-        'sales_data': list(sales_data),
+        'totals_by_currency': totals_by_currency,
+        'by_business_group': by_business_group,
+        'business_group': effective_group,
+        'view_all_business_groups': view_all_groups,
+        'available_business_groups': available_groups,
+        'business_group_choices': business_group_choices_for_api(),
+        'personal_currency': personal_currency,
+        'primary_currency': primary_currency,
+        'sales_data': sales_rows,
+        'start_date': str(start_date) if start_date else None,
+        'end_date': str(end_date) if end_date else None,
     })
 
 
@@ -1297,33 +1540,72 @@ def employee_earnings_report(request):
     Detailed breakdown of commissions by employee
     """
     from django.db.models import Sum, Count
-    
+    from .list_scope import list_limit_for_request
+
     user = request.user
+    user_profile = None
     try:
         user_profile = UserProfile.objects.get(email=user.email)
         is_admin = user_profile.role.lower() in ['admin', 'administrator']
-    except:
+    except UserProfile.DoesNotExist:
         is_admin = False
-    
-    # Get commissions
+
+    from .business_groups import (
+        apply_business_group_to_commissions,
+        currency_for_business_group,
+        resolve_dashboard_business_group,
+    )
+    from .permissions import user_is_finance
+
+    can_view_all_groups = is_admin or user_is_finance(request)
+    effective_group, _, _ = resolve_dashboard_business_group(
+        request, user_profile, can_view_all_groups
+    )
+
     commissions = Commission.objects.all()
-    
-    if not is_admin:
+
+    if not is_admin and not user_is_finance(request):
         possible_emails = [user.email]
-        if user_profile.employee_id:
+        if user_profile and user_profile.employee_id:
             possible_emails.append(f"{user_profile.employee_id}@company.com")
         commissions = commissions.filter(employee__email__in=possible_emails)
-    
-    # Group by employee
-    earnings_data = commissions.values('employee__name', 'employee__email', 'employee_id').annotate(
+
+    commissions = apply_business_group_to_commissions(commissions, effective_group)
+
+    q = (request.query_params.get("q") or "").strip()
+    if q and is_admin:
+        from .list_scope import commission_employee_search_q
+        commissions = commissions.filter(commission_employee_search_q(q))
+
+    earnings_data = commissions.values(
+        'employee__name', 'employee__email', 'employee_id'
+    ).annotate(
         total_earnings=Sum('commission_amount'),
         commission_count=Count('id'),
         avg_commission=Sum('commission_amount')
     ).order_by('-total_earnings')
-    
+
+    limit = list_limit_for_request(request, searching=bool(q)) if is_admin else None
+    total_count = earnings_data.count()
+    earnings_list = []
+    for row in earnings_data[:limit] if limit else earnings_data:
+        profile = UserProfile.objects.filter(email=row.get("employee__email")).first()
+        earnings_list.append(
+            {
+                **row,
+                "business_group": profile.business_group if profile else "",
+                "currency": currency_for_business_group(
+                    profile.business_group if profile else effective_group,
+                    profile.personal_currency if profile else None,
+                ),
+            }
+        )
+
     return Response({
-        'earnings': list(earnings_data),
+        'earnings': earnings_list,
         'is_admin': is_admin,
+        'limited': bool(limit and total_count > limit),
+        'count': total_count,
     })
 
 
@@ -1332,52 +1614,182 @@ def employee_earnings_report(request):
 def period_analytics_report(request):
     """
     Period-wise Analytics Report
-    Monthly, Quarterly, Annual metrics
+    Monthly, quarterly, or annual commission totals (respects date filters).
     """
     from django.db.models import Sum, Count
-    from datetime import datetime, timedelta
+    from django.utils.dateparse import parse_date
+    from datetime import date, timedelta
     from dateutil.relativedelta import relativedelta
-    
+
+    from .currencies import active_currency_totals, normalize_currency, primary_currency_from_totals
+    from .business_groups import (
+        apply_business_group_to_commissions,
+        currency_for_business_group,
+        resolve_dashboard_business_group,
+    )
+    from .permissions import user_is_finance
+
     user = request.user
+    user_profile = None
     try:
         user_profile = UserProfile.objects.get(email=user.email)
         is_admin = user_profile.role.lower() in ['admin', 'administrator']
-    except:
+    except UserProfile.DoesNotExist:
         is_admin = False
-    
-    period = request.query_params.get('period', 'monthly')  # monthly, quarterly, annual
-    
+        user_profile = None
+
+    can_view_all_groups = is_admin or user_is_finance(request)
+    effective_group, _, _ = resolve_dashboard_business_group(
+        request, user_profile, can_view_all_groups
+    )
+
+    period = request.query_params.get('period', 'monthly')
+    start_date = parse_date(request.query_params.get("start_date") or "")
+    end_date = parse_date(request.query_params.get("end_date") or "")
+
+    if not end_date:
+        end_date = date.today()
+    if not start_date:
+        if period == 'annual':
+            start_date = end_date - relativedelta(years=4)
+        elif period == 'quarterly':
+            start_date = end_date - relativedelta(months=15)
+        else:
+            start_date = end_date - relativedelta(months=11)
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+
     commissions = Commission.objects.all()
-    
-    if not is_admin:
+    org = getattr(request, "organization", None)
+    if org:
+        commissions = commissions.filter(sale__order__organization=org)
+
+    if not is_admin and not user_is_finance(request):
         possible_emails = [user.email]
-        if user_profile.employee_id:
+        if user_profile and user_profile.employee_id:
             possible_emails.append(f"{user_profile.employee_id}@company.com")
         commissions = commissions.filter(employee__email__in=possible_emails)
-    
-    # Group by period
+
+    commissions = apply_business_group_to_commissions(commissions, effective_group)
+    commissions = commissions.filter(
+        sale__order__order_date__gte=start_date,
+        sale__order__order_date__lte=end_date,
+    )
+
+    def quarter_start(value):
+        quarter_month = ((value.month - 1) // 3) * 3 + 1
+        return date(value.year, quarter_month, 1)
+
+    def iter_buckets():
+        if period == 'annual':
+            cursor = date(start_date.year, 1, 1)
+            while cursor <= end_date:
+                bucket_start = max(cursor, start_date)
+                bucket_end = min(date(cursor.year, 12, 31), end_date)
+                yield bucket_start, bucket_end, str(cursor.year)
+                cursor = date(cursor.year + 1, 1, 1)
+            return
+
+        if period == 'quarterly':
+            cursor = quarter_start(start_date)
+            while cursor <= end_date:
+                next_quarter = cursor + relativedelta(months=3)
+                bucket_start = max(cursor, start_date)
+                bucket_end = min(next_quarter - timedelta(days=1), end_date)
+                quarter_num = (cursor.month - 1) // 3 + 1
+                yield bucket_start, bucket_end, f"Q{quarter_num} {cursor.year}"
+                cursor = next_quarter
+            return
+
+        cursor = date(start_date.year, start_date.month, 1)
+        while cursor <= end_date:
+            next_month = cursor + relativedelta(months=1)
+            bucket_start = max(cursor, start_date)
+            bucket_end = min(next_month - timedelta(days=1), end_date)
+            yield bucket_start, bucket_end, cursor.strftime('%b %Y')
+            cursor = next_month
+
     period_data = []
-    
-    if period == 'monthly':
-        # Last 12 months
-        for i in range(12, 0, -1):
-            month_start = datetime.now() - relativedelta(months=i)
-            month_end = month_start + relativedelta(months=1)
-            
-            month_commission = commissions.filter(
-                calculated_at__gte=month_start,
-                calculated_at__lt=month_end
-            ).aggregate(total=Sum('commission_amount'), count=Count('id'))
-            
-            period_data.append({
-                'period': month_start.strftime('%B %Y'),
-                'total': float(month_commission['total'] or 0),
-                'count': month_commission['count'] or 0,
-            })
-    
+    period_primary_currency = (
+        currency_for_business_group(effective_group, user_profile.personal_currency if user_profile else None)
+        if effective_group
+        else None
+    )
+    for bucket_start, bucket_end, label in iter_buckets():
+        bucket_qs = commissions.filter(
+            sale__order__order_date__gte=bucket_start,
+            sale__order__order_date__lte=bucket_end,
+        )
+        if period_primary_currency:
+            bucket_total = bucket_qs.aggregate(total=Sum("commission_amount"))["total"] or 0
+            totals_by_currency = active_currency_totals(
+                [{"currency": period_primary_currency, "total": float(bucket_total)}]
+            )
+        else:
+            totals_by_currency = active_currency_totals(
+                [
+                    {
+                        "currency": normalize_currency(row["sale__order__currency"]),
+                        "total": float(row["total"] or 0),
+                    }
+                    for row in bucket_qs.values("sale__order__currency").annotate(
+                        total=Sum("commission_amount")
+                    )
+                ]
+            )
+        total = sum(item["total"] for item in totals_by_currency)
+        period_data.append({
+            'period': label,
+            'total': float(total),
+            'count': bucket_qs.count(),
+            'totals_by_currency': totals_by_currency,
+            'currency': (
+                totals_by_currency[0]["currency"]
+                if len(totals_by_currency) == 1
+                else None
+            ),
+        })
+
+    personal_currency = normalize_currency(
+        user_profile.personal_currency if user_profile else None
+    )
+    if effective_group:
+        primary_currency = currency_for_business_group(effective_group, personal_currency)
+        overall_totals = active_currency_totals(
+            [
+                {
+                    "currency": primary_currency,
+                    "total": float(
+                        commissions.aggregate(total=Sum("commission_amount"))["total"] or 0
+                    ),
+                }
+            ]
+        )
+    else:
+        overall_totals = active_currency_totals(
+            [
+                {
+                    "currency": normalize_currency(row["sale__order__currency"]),
+                    "total": float(row["total"] or 0),
+                }
+                for row in commissions.values("sale__order__currency").annotate(
+                    total=Sum("commission_amount")
+                )
+            ]
+        )
+        primary_currency = primary_currency_from_totals(
+            overall_totals, fallback=personal_currency
+        )
+
     return Response({
         'period': period,
+        'start_date': str(start_date),
+        'end_date': str(end_date),
         'data': period_data,
+        'totals_by_currency': overall_totals,
+        'business_group': effective_group,
+        'personal_currency': personal_currency,
+        'primary_currency': primary_currency,
         'is_admin': is_admin,
     })
 
@@ -1467,11 +1879,15 @@ def commission_payroll_export(request):
         )
     if status_param == "approved":
         queryset = queryset.filter(status=Commission.STATUS_APPROVED)
+    elif status_param == "manager_approved":
+        queryset = queryset.filter(status=Commission.STATUS_MANAGER_APPROVED)
+    elif status_param == "paid":
+        queryset = queryset.filter(status=Commission.STATUS_PAID)
     elif status_param == "calculated":
         queryset = queryset.filter(status=Commission.STATUS_CALCULATED)
     elif status_param != "all":
         return Response(
-            {"error": "status must be approved, calculated, or all"},
+            {"error": "status must be approved, manager_approved, paid, calculated, or all"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -1521,7 +1937,12 @@ def recalculate_commissions_view(request):
     """
     Recalculate commissions for orders in a date range (admin).
 
-    Body: { "start_date": "2025-01-01", "end_date": "2025-01-31", "force": true }
+    Body: {
+      "start_date": "2025-01-01",
+      "end_date": "2025-01-31",
+      "force": true,
+      "q": "adwik22"   // optional — only orders for matching employees
+    }
     force=true replaces approved commissions; default skips approved orders.
     """
     require_admin(request)
@@ -1534,11 +1955,13 @@ def recalculate_commissions_view(request):
         )
 
     force = bool(request.data.get("force", False))
+    employee_q = (request.data.get("q") or "").strip()
     stats = recalculate_orders_in_range(
         start_date,
         end_date,
         force=force,
         organization=getattr(request, "organization", None),
+        employee_q=employee_q or None,
     )
     record_audit(
         request,
@@ -1547,6 +1970,7 @@ def recalculate_commissions_view(request):
             "start_date": str(start_date),
             "end_date": str(end_date),
             "force": force,
+            "employee_q": employee_q,
             **stats,
         },
     )
@@ -1556,8 +1980,10 @@ def recalculate_commissions_view(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def audit_log_list(request):
-    """Recent audit events (admin / finance)."""
-    require_finance_or_admin(request)
+    """Recent audit events (admin / finance / manager)."""
+    if not (user_can_view_finance_data(request) or user_is_manager(request)):
+        from rest_framework.exceptions import PermissionDenied
+        raise PermissionDenied("Only administrators, finance, or managers can access audit logs")
     limit = min(int(request.query_params.get("limit", 100)), 500)
     logs = AuditLog.objects.select_related("user").order_by("-created_at")
     logs = filter_queryset_by_organization(
@@ -1576,9 +2002,6 @@ def audit_log_list(request):
         for row in logs
     ]
     return Response({"count": len(data), "results": data})
-
-
-email_login.throttle_scope = "login"
 
 
 @api_view(["GET"])

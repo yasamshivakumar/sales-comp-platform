@@ -1,0 +1,345 @@
+/* Commissions — compact enterprise payroll layout */
+
+.commissions-page {
+  --comm-primary: #0070d2;
+  --comm-border: var(--border-light);
+  --comm-header-bg: var(--bg-light);
+  --comm-row-hover: rgba(0, 112, 210, 0.06);
+}
+
+.commissions-page .page-header__title {
+  font-size: 1.35rem;
+}
+
+.commissions-toolbar {
+  padding: 14px 18px;
+  margin-bottom: 16px;
+}
+
+.commissions-toolbar__section {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.commissions-toolbar__section + .commissions-toolbar__section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--comm-border);
+}
+
+.commissions-toolbar__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+
+/* Filters: status, dates — same size as search bar */
+.commissions-page .commissions-toolbar .search-bar {
+  padding: 0 10px;
+  height: 38px;
+}
+
+.commissions-page .commissions-toolbar .search-bar__input,
+.commissions-page .commissions-toolbar .input {
+  padding: 11px 14px;
+  font-size: 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-darker);
+  color: var(--text-primary);
+  margin-bottom: 0;
+  box-sizing: border-box;
+  height: auto;
+  line-height: 1.25;
+}
+
+.commissions-page .commissions-toolbar .search-bar__input {
+  padding: 10px 0 !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+[data-theme="dark"] .commissions-page .commissions-toolbar .input {
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.commissions-page .btn-primary,
+.commissions-page .btn-secondary,
+.commissions-page .btn-success {
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  min-height: 32px;
+}
+
+.commissions-page .btn-primary {
+  background: var(--comm-primary);
+}
+
+.commissions-filter-search {
+  flex: 0 0 auto;
+  width: 200px;
+  min-width: 0;
+  max-width: 200px;
+}
+
+.commissions-filter-search.search-bar {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.commissions-filter-status {
+  width: 132px;
+  max-width: 132px;
+  flex: 0 0 auto;
+}
+
+.commissions-filter-date {
+  width: 112px;
+  max-width: 112px;
+  flex: 0 0 auto;
+}
+
+.commissions-banner {
+  padding: 8px 12px;
+  margin-top: 10px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+.commissions-banner--info {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+}
+
+.commissions-records {
+  padding: 0;
+  overflow: hidden;
+}
+
+.commissions-records__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--comm-border);
+  background: var(--comm-header-bg);
+}
+
+.commissions-records__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.commissions-records__count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  border: 1px solid var(--comm-border);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+
+.commissions-records__hint {
+  margin: 0;
+  padding: 8px 16px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.commissions-table-wrap {
+  overflow-x: auto;
+}
+
+.commissions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.commissions-table thead {
+  background: var(--comm-header-bg);
+  border-bottom: 1px solid var(--comm-border);
+}
+
+.commissions-table th {
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.commissions-table th.commissions-table__num {
+  text-align: right;
+}
+
+.commissions-table td {
+  padding: 9px 12px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--comm-border);
+  vertical-align: middle;
+}
+
+.commissions-table td.commissions-table__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.commissions-table tbody tr:hover {
+  background: var(--comm-row-hover);
+}
+
+.commissions-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.commissions-table__employee {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.commissions-table__email {
+  font-size: 11px;
+  color: var(--text-muted);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commissions-table__emp-id {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: rgba(0, 112, 210, 0.08);
+  color: var(--comm-primary);
+}
+
+.commissions-table__order-id {
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--comm-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.commissions-table__amount {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.commissions-table__date {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.commissions-table__status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.commissions-table__actions {
+  white-space: nowrap;
+}
+
+.commissions-table__dispute-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.commissions-table__dispute-open {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--warning-color, #b54708);
+}
+
+.commissions-table__amount-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+.commissions-table__amount-btn:hover {
+  filter: brightness(1.1);
+}
+
+.commissions-table__state {
+  padding: 36px 16px !important;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.commissions-table__state-icon {
+  font-size: 28px;
+  margin-bottom: 8px;
+  opacity: 0.7;
+}
+
+.commissions-table__state-title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.commissions-table__state-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.commissions-page .status-pill--compact {
+  padding: 0.1rem 0.38rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+}
+
+.commissions-page .disputes-panel {
+  margin-top: 16px;
+}
+
+[data-theme="dark"] .commissions-page {
+  --comm-row-hover: rgba(0, 112, 210, 0.1);
+}
+
+[data-theme="dark"] .commissions-table__emp-id {
+  background: rgba(0, 112, 210, 0.15);
+  color: #7cb8f0;
+}
+
+[data-theme="dark"] .commissions-table__order-id {
+  color: #7cb8f0;
+}

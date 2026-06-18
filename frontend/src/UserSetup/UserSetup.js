@@ -9,12 +9,13 @@ import TitleSection from "./components/TitleSection";
 import PositionSection from "./components/PositionSection";
 import HierarchySection from "./components/HierarchySection";
 import BulkUploadSection from "./components/BulkUploadSection";
+import { CURRENCY_OPTIONS } from "../utils/currency";
 
 const INITIAL_FORM = {
   enable_login: false,
   name: "",
   email: "",
-  role: "Sales Rep",
+  role: "",
   username: "",
   first_name: "",
   last_name: "",
@@ -23,6 +24,7 @@ const INITIAL_FORM = {
   personal_target: "",
   personal_currency: "INR",
   business_group: "India",
+  territory: "",
   title: "",
   pay_period_type: "Monthly",
   position_name: "",
@@ -43,6 +45,7 @@ const TABS = [
 
 function UserSetup() {
   const [users, setUsers] = useState([]);
+  const [territories, setTerritories] = useState([]);
   const [file, setFile] = useState(null);
   const [activeTab, setActiveTab] = useState("User");
   const [form, setForm] = useState(INITIAL_FORM);
@@ -51,6 +54,7 @@ function UserSetup() {
 
   useEffect(() => {
     fetchUsers();
+    api.get("territories/").then((res) => setTerritories(res.data)).catch(() => {});
   }, []);
 
   const fetchUsers = () => {
@@ -62,7 +66,7 @@ function UserSetup() {
     setForm({ ...form, [name]: type === "checkbox" ? checked : value });
   };
 
-  const renderField = (name, label, type = "text") => (
+  const renderField = (name, label, type = "text", placeholder = "") => (
     <div className="form-field">
       <label htmlFor={name}>{label}</label>
       <input
@@ -71,6 +75,7 @@ function UserSetup() {
         name={name}
         value={form[name] ?? ""}
         onChange={handleChange}
+        placeholder={placeholder || undefined}
       />
     </div>
   );
@@ -112,9 +117,36 @@ function UserSetup() {
       return;
     }
 
+    const emailKey = form.email.trim().toLowerCase();
+    const empKey = form.employee_id.trim().toLowerCase();
+    const dupEmail = users.find(
+      (u) => (u.email || "").trim().toLowerCase() === emailKey
+    );
+    if (dupEmail) {
+      warning(
+        `Email already exists (${dupEmail.name || dupEmail.employee_id || dupEmail.email}).`
+      );
+      return;
+    }
+    const dupEmp = users.find(
+      (u) => (u.employee_id || "").trim().toLowerCase() === empKey
+    );
+    if (dupEmp) {
+      warning(
+        `Employee ID already exists (${dupEmp.name || dupEmp.email || dupEmp.employee_id}).`
+      );
+      return;
+    }
+
     setSaving(true);
     try {
-      await api.post("user-setup/", form);
+      const payload = { ...form };
+      if (!payload.territory) {
+        delete payload.territory;
+      } else {
+        payload.territory = parseInt(payload.territory, 10);
+      }
+      await api.post("user-setup/", payload);
 
       if (form.parent_participant && form.child_participant && form.split_percentage) {
         await api.post("hierarchy-relationships/", {
@@ -124,7 +156,8 @@ function UserSetup() {
         });
       }
 
-      success("Participant saved successfully");
+      success("Participant created successfully");
+      setForm(INITIAL_FORM);
       fetchUsers();
     } catch (err) {
       error(err.response?.data?.error || "Failed to save participant");
@@ -144,8 +177,19 @@ function UserSetup() {
 
     try {
       const res = await api.post("user-setup-upload/", formData);
-      success(`Upload done — ${res.data.success} succeeded, ${res.data.failed} failed`);
-      fetchUsers();
+      const { success: ok = 0, failed = 0, errors = [] } = res.data || {};
+      if (failed > 0) {
+        const detail = errors
+          .slice(0, 3)
+          .map((e) => `Row ${e.row}: ${e.error}`)
+          .join(" ");
+        warning(
+          `Upload finished — ${ok} succeeded, ${failed} failed.${detail ? ` ${detail}` : ""}`
+        );
+      } else {
+        success(`Upload done — ${ok} user${ok === 1 ? "" : "s"} imported`);
+      }
+      if (ok > 0) fetchUsers();
       setFile(null);
     } catch (err) {
       if (err.response?.status === 401) {
@@ -165,7 +209,23 @@ function UserSetup() {
       case "User":
         return <UserSection {...props} />;
       case "People":
-        return <PeopleSection {...props} />;
+        return (
+          <PeopleSection
+            {...props}
+            renderSelect={(name, label) => renderSelect(name, label, CURRENCY_OPTIONS)}
+            renderTerritorySelect={() =>
+              renderSelect("territory", "Territory", [
+                { value: "", label: "— None —" },
+                ...territories
+                  .filter((t) => t.is_active)
+                  .map((t) => ({
+                    value: String(t.id),
+                    label: `${t.name} (${t.code})`,
+                  })),
+              ])
+            }
+          />
+        );
       case "Title":
         return <TitleSection {...props} />;
       case "Position":
@@ -184,7 +244,6 @@ function UserSetup() {
       <PageHeader
         badge="Administration"
         title="User Setup"
-        // subtitle="Configure participants, positions, hierarchy, and bulk-import your sales team."
       />
 
       <div className="tabs setup-tabs">

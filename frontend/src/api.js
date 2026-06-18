@@ -1,21 +1,21 @@
 import axios from "axios";
 
-// ============================================================================
-// API CONFIGURATION (local dev vs Vercel → Render)
-// ============================================================================
 function normalizeBaseUrl(url) {
   if (!url) return "";
   return String(url).trim().replace(/\/+$/, "");
 }
 
+const isDevelopment = process.env.NODE_ENV !== "production";
+
+// Local dev: use "/api" + package.json proxy → avoids CORS issues
+const envBase = normalizeBaseUrl(process.env.REACT_APP_API_BASE_URL);
 const apiHost = normalizeBaseUrl(
   process.env.REACT_APP_API_HOST || "http://localhost:8000"
 );
 const apiBaseURL =
-  normalizeBaseUrl(process.env.REACT_APP_API_BASE_URL) ||
-  `${apiHost}/api`;
+  envBase ||
+  (isDevelopment ? "/api" : `${apiHost}/api`);
 
-const isDevelopment = process.env.NODE_ENV !== "production";
 const isDebugEnabled = process.env.REACT_APP_DEBUG === "true";
 
 if (isDevelopment && isDebugEnabled) {
@@ -36,6 +36,9 @@ api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) {
     config.headers.Authorization = `Token ${token}`;
+  }
+  if (config.data instanceof FormData) {
+    delete config.headers["Content-Type"];
   }
   return config;
 });
@@ -66,13 +69,17 @@ api.interceptors.response.use(
   }
 );
 
-/** Human-readable hint when the browser blocks the request (CORS / wrong API URL). */
 export function getApiErrorMessage(err, fallback = "Request failed") {
   if (!err.response) {
-    return `Cannot reach API at ${apiBaseURL}. Check REACT_APP_API_BASE_URL on Vercel and CORS on Render.`;
+    return `Cannot reach API (${apiBaseURL}). Start the backend: cd backend → python manage.py runserver`;
   }
   const data = err.response.data;
-  if (typeof data === "string") return data;
+  if (typeof data === "string") {
+    if (data.trim().startsWith("<!DOCTYPE") || data.trim().startsWith("<html")) {
+      return `API returned an HTML ${err.response.status} page. Check that the Incentra backend is running on the configured API URL.`;
+    }
+    return data;
+  }
   if (data?.error) return data.error;
   if (data?.detail) return data.detail;
   if (typeof data === "object" && data) {

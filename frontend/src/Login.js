@@ -1,7 +1,22 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link as RouterLink } from "react-router-dom";
+import {
+  Box,
+  Button,
+  Card,
+  CircularProgress,
+  Link,
+  Stack,
+  Typography,
+} from "@mui/material";
+import BoltIcon from "@mui/icons-material/Bolt";
+import SecurityIcon from "@mui/icons-material/Security";
+import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import api, { getApiErrorMessage } from "./api";
 import { useToast } from "./Components/Toast";
+import AuthTextField from "./Components/AuthTextField";
+import AuthPageLayout, { authFormCardSx } from "./Components/AuthPageLayout";
+import { enterprise } from "./theme/muiTheme";
 
 const apiHost = process.env.REACT_APP_API_HOST || "http://localhost:8000";
 const oidcEnabled = process.env.REACT_APP_OIDC_ENABLED === "true";
@@ -18,7 +33,10 @@ function Login() {
     const token = params.get("token");
     if (token) {
       localStorage.setItem("token", token);
-      success("SSO login successful! Redirecting...");
+      success({
+        title: "SSO sign-in complete",
+        message: "Redirecting to your workspace…",
+      });
       window.history.replaceState({}, "", "/login");
       setTimeout(() => navigate("/"), 800);
     }
@@ -26,12 +44,17 @@ function Login() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      error("Please enter email and password");
+      error({
+        title: "Missing credentials",
+        message: "Enter both your email address and password to continue.",
+      });
       return;
     }
-
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      error("Please enter a valid email address");
+      error({
+        title: "Invalid email",
+        message: "Use a valid company email address (example: you@company.com).",
+      });
       return;
     }
 
@@ -46,94 +69,122 @@ function Login() {
       localStorage.setItem("user_id", res.data.user_id);
       localStorage.setItem("role", res.data.role);
       localStorage.setItem("name", res.data.name);
-      success("Login successful! Redirecting...");
+      success({
+        title: "Welcome back",
+        message: `Signed in as ${res.data.name || res.data.email}. Opening dashboard…`,
+      });
       setTimeout(() => navigate("/"), 1000);
     } catch (err) {
-      error(getApiErrorMessage(err, "Login failed"));
+      error({
+        title: "Sign in failed",
+        message: getApiErrorMessage(err, "We couldn't verify your credentials. Try again."),
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleKeyPress = (e) => {
-    if (e.key === "Enter" && email && password) {
-      handleLogin();
-    }
-  };
+  const brandPanel = (
+    <>
+      <Box
+        sx={{
+          width: 52,
+          height: 52,
+          borderRadius: 2,
+          bgcolor: enterprise.accent,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          mb: 3,
+          boxShadow: "0 8px 24px rgba(1,118,211,0.35)",
+        }}
+      >
+        <BoltIcon />
+      </Box>
+      <Typography variant="h3" fontWeight={800} sx={{ mb: 1.5, lineHeight: 1.2 }}>
+        Enterprise sales compensation
+      </Typography>
+      <Typography sx={{ opacity: 0.78, lineHeight: 1.7, mb: 4 }}>
+        Plan incentives, calculate commissions, and pay reps with confidence — built for
+        finance and sales ops teams.
+      </Typography>
+      <Stack spacing={2}>
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <TrendingUpIcon sx={{ opacity: 0.85 }} />
+          <Typography variant="body2">Real-time commission analytics</Typography>
+        </Stack>
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <SecurityIcon sx={{ opacity: 0.85 }} />
+          <Typography variant="body2">Role-based access & audit trails</Typography>
+        </Stack>
+      </Stack>
+    </>
+  );
 
   return (
-    <div className="auth-page">
-      <div className="auth-page__bg" aria-hidden="true" />
+    <AuthPageLayout brand={brandPanel}>
+      <Card elevation={0} sx={authFormCardSx}>
+        <Typography variant="h4" fontWeight={800} gutterBottom>
+          Sign in
+        </Typography>
+        <Typography color="text.secondary" sx={{ mb: 3 }}>
+          Access your Incentra workspace
+        </Typography>
 
-      <div className="auth-card">
-        <div className="auth-card__brand">
-          <div className="auth-card__logo">⚡</div>
-          <h2 className="auth-card__title">Welcome back</h2>
-          <p className="auth-card__subtitle">Sign in to IncentivePro</p>
-        </div>
-
-        <div className="auth-form">
-          <div className="auth-form__group">
-            <label className="auth-form__label" htmlFor="login-email">
-              Email address
-            </label>
-            <input
-              id="login-email"
-              type="email"
-              placeholder="you@company.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyPress={handleKeyPress}
-              disabled={loading}
-            />
-          </div>
-
-          <div className="auth-form__group">
-            <label className="auth-form__label" htmlFor="login-password">
-              Password
-            </label>
-            <input
-              id="login-password"
-              type="password"
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyPress={handleKeyPress}
-              disabled={loading}
-            />
-          </div>
-
-          <button
-            type="button"
-            className="btn-primary auth-form__submit"
+        <Stack spacing={2}>
+          <AuthTextField
+            label="Work email"
+            type="email"
+            placeholder="you@company.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+            disabled={loading}
+            autoComplete="email"
+          />
+          <AuthTextField
+            label="Password"
+            type="password"
+            placeholder="Enter your password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+            disabled={loading}
+            autoComplete="current-password"
+          />
+          <Button
+            variant="contained"
+            size="large"
+            fullWidth
             onClick={handleLogin}
             disabled={loading}
+            startIcon={loading ? <CircularProgress size={18} color="inherit" /> : null}
           >
-            {loading ? "Signing in…" : "Sign in"}
-          </button>
-        </div>
+            {loading ? "Signing in…" : "Sign in securely"}
+          </Button>
+        </Stack>
 
         {oidcEnabled && (
-          <div className="auth-form" style={{ marginTop: "1rem" }}>
-            <button
-              type="button"
-              className="btn-secondary"
-              style={{ width: "100%" }}
-              onClick={() => {
-                window.location.href = `${apiHost}/oidc/authenticate/`;
-              }}
-            >
-              Sign in with SSO
-            </button>
-          </div>
+          <Button
+            variant="outlined"
+            fullWidth
+            sx={{ mt: 2 }}
+            onClick={() => {
+              window.location.href = `${apiHost}/oidc/authenticate/`;
+            }}
+          >
+            Continue with SSO
+          </Button>
         )}
 
-        <div className="auth-card__footer">
-          Don&apos;t have an account?{" "}
-          <Link to="/signup">Create one</Link>
-        </div>
-      </div>
-    </div>
+        <Typography align="center" sx={{ mt: 3 }} color="text.secondary" variant="body2">
+          New to Incentra?{" "}
+          <Link component={RouterLink} to="/signup" fontWeight={700}>
+            Request access
+          </Link>
+        </Typography>
+      </Card>
+    </AuthPageLayout>
   );
 }
 

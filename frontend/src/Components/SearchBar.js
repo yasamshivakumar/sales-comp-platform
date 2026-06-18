@@ -1,17 +1,17 @@
-import React from "react";
+import SearchIcon from "@mui/icons-material/Search";
 
-function SearchBar({ placeholder, value, onChange, className = "" }) {
+function SearchBar({ placeholder, value, onChange, onKeyDown, className = "" }) {
   return (
     <div className={`search-bar ${className}`.trim()}>
-      <span className="search-bar__icon" aria-hidden="true">
-        🔍
-      </span>
+      <SearchIcon className="search-bar__icon" aria-hidden="true" />
       <input
-        type="text"
+        type="search"
         className="search-bar__input"
         placeholder={placeholder}
         value={value}
         onChange={onChange}
+        onKeyDown={onKeyDown}
+        aria-label={placeholder || "Search"}
       />
     </div>
   );

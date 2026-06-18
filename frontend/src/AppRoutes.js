@@ -2,13 +2,18 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Login from "./Login";
 import Signup from "./Signup";
-import App from "./App";
+import Dashboard from "./Dashboard/Dashboard";
 
-import Sidebar from "./Components/Sidebar";
+import AppLayout from "./Components/layout/AppLayout";
 import CompensationPlans from "./CompensationPlans/CompensationPlans";
+import CommissionRules from "./CommissionRules/CommissionRules";
 import UserSetup from "./UserSetup/UserSetup";
 import Orders from "./Orders/Orders";
 import Commissions from "./Dashboard/Commissions";
+import MyStatement from "./Dashboard/MyStatement";
+import AuditLogs from "./Enterprise/AuditLogs";
+import Territories from "./Enterprise/Territories";
+import Payouts from "./Enterprise/Payouts";
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem("token");
@@ -16,15 +21,7 @@ function PrivateRoute({ children }) {
 }
 
 function Layout({ children }) {
-  return (
-    <div className="app-shell">
-      <div className="app-shell__bg" aria-hidden="true" />
-      <Sidebar />
-      <main className="app-main">
-        <div className="page-content">{children}</div>
-      </main>
-    </div>
-  );
+  return <AppLayout>{children}</AppLayout>;
 }
 
 function AppRoutes() {
@@ -39,7 +36,7 @@ function AppRoutes() {
           element={
             <PrivateRoute>
               <Layout>
-                <App />
+                <Dashboard />
               </Layout>
             </PrivateRoute>
           }
@@ -68,11 +65,33 @@ function AppRoutes() {
         />
 
         <Route
+          path="/commission-rules"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <CommissionRules />
+              </Layout>
+            </PrivateRoute>
+          }
+        />
+
+        <Route
           path="/orders"
           element={
             <PrivateRoute>
               <Layout>
                 <Orders />
+              </Layout>
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/statement"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <MyStatement />
               </Layout>
             </PrivateRoute>
           }
@@ -88,6 +107,41 @@ function AppRoutes() {
             </PrivateRoute>
           }
         />
+
+        <Route
+          path="/audit-logs"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <AuditLogs />
+              </Layout>
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/territories"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <Territories />
+              </Layout>
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/payouts"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <Payouts />
+              </Layout>
+            </PrivateRoute>
+          }
+        />
+
+        <Route path="/integrations" element={<Navigate to="/orders?tab=connect" replace />} />
       </Routes>
     </BrowserRouter>
   );

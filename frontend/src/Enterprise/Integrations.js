@@ -1,0 +1,366 @@
+import { useState, useEffect } from "react";
+import api from "../api";
+import PageHeader from "../Components/PageHeader";
+import "../Components/enterprise.css";
+
+const CREDENTIAL_FIELDS = {
+  salesforce: [
+    { key: "instance_url", label: "Instance URL", placeholder: "https://yourorg.my.salesforce.com" },
+    { key: "access_token", label: "Access token (optional if using OAuth below)", type: "password" },
+    { key: "client_id", label: "Connected App Client ID" },
+    { key: "client_secret", label: "Client Secret", type: "password" },
+    { key: "username", label: "Username" },
+    { key: "password", label: "Password", type: "password" },
+    { key: "security_token", label: "Security token", type: "password" },
+  ],
+  generic_rest: [
+    { key: "access_token", label: "Bearer token / API key", type: "password" },
+    { key: "auth_type", label: "Auth type (bearer or api_key_header)" },
+    { key: "api_key_header", label: "API key header name (if api_key_header)" },
+  ],
+  webhook: [],
+  hubspot: [
+    { key: "access_token", label: "Private app access token", type: "password" },
+    { key: "auth_type", label: "Auth type", placeholder: "bearer" },
+  ],
+};
+
+function Integrations({ embedded = false, inline = false, onClose, onOrdersSynced }) {
+  const [providers, setProviders] = useState([]);
+  const [defaultConfig, setDefaultConfig] = useState({});
+  const [integrations, setIntegrations] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [logs, setLogs] = useState([]);
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const [form, setForm] = useState({
+    name: "",
+    provider: "salesforce",
+    is_active: true,
+    credentials: {},
+    configText: "",
+  });
+
+  const loadAll = async () => {
+    setLoading(true);
+    try {
+      const [provRes, intRes] = await Promise.all([
+        api.get("integrations/providers/"),
+        api.get("integrations/"),
+      ]);
+      setProviders(provRes.data.providers || []);
+      setDefaultConfig(provRes.data.default_config || {});
+      setIntegrations(intRes.data || []);
+    } catch (err) {
+      setMessage(err.response?.data?.error || "Failed to load integrations.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAll();
+  }, []);
+
+  const loadLogs = async (id) => {
+    try {
+      const res = await api.get(`integrations/${id}/sync-logs/`);
+      setLogs(res.data || []);
+    } catch {
+      setLogs([]);
+    }
+  };
+
+  const selectIntegration = (item) => {
+    setSelectedId(item.id);
+    setForm({
+      name: item.name,
+      provider: item.provider,
+      is_active: item.is_active,
+      credentials: {},
+      configText: JSON.stringify(item.config || {}, null, 2),
+    });
+    loadLogs(item.id);
+  };
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    setMessage("");
+    try {
+      let config = defaultConfig[form.provider] || {};
+      if (form.configText.trim()) {
+        config = JSON.parse(form.configText);
+      }
+      await api.post("integrations/", {
+        name: form.name,
+        provider: form.provider,
+        is_active: form.is_active,
+        credentials: form.credentials,
+        config,
+      });
+      setMessage("Integration created.");
+      setForm({ name: "", provider: form.provider, is_active: true, credentials: {}, configText: "" });
+      loadAll();
+    } catch (err) {
+      setMessage(err.response?.data?.error || err.message || "Create failed.");
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!selectedId) return;
+    setMessage("");
+    try {
+      const payload = {
+        name: form.name,
+        is_active: form.is_active,
+      };
+      if (Object.keys(form.credentials).some((k) => form.credentials[k])) {
+        payload.credentials = form.credentials;
+      }
+      if (form.configText.trim()) {
+        payload.config = JSON.parse(form.configText);
+      }
+      await api.patch(`integrations/${selectedId}/`, payload);
+      setMessage("Integration updated.");
+      loadAll();
+    } catch (err) {
+      setMessage(err.response?.data?.error || "Update failed.");
+    }
+  };
+
+  const runAction = async (action) => {
+    if (!selectedId) return;
+    setMessage("");
+    try {
+      const res = await api.post(`integrations/${selectedId}/${action}/`);
+      setMessage(
+        action.includes("sync")
+          ? `Sync done: ${res.data.result?.success ?? 0} succeeded, ${res.data.result?.failed ?? 0} failed.`
+          : res.data.message || "OK"
+      );
+      loadLogs(selectedId);
+      loadAll();
+      if (action.includes("sync/orders") && onOrdersSynced) {
+        onOrdersSynced(res.data);
+      }
+    } catch (err) {
+      setMessage(err.response?.data?.error || err.response?.data?.message || "Action failed.");
+    }
+  };
+
+  const selected = integrations.find((i) => i.id === selectedId);
+  const credFields = CREDENTIAL_FIELDS[form.provider] || [];
+
+  return (
+    <div
+      className={[
+        embedded ? "integrations-panel integrations-panel--embedded" : "",
+        inline ? "integrations-panel--orders" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {!embedded && (
+        <PageHeader badge="Integrations" title="CRM & data connections" />
+      )}
+      {embedded && (
+        <div className="integrations-panel__head">
+          <div>
+            <h2 id="integrations-dialog-title" className="integrations-panel__title">
+              {inline ? "Connect CRM" : "CRM integrations"}
+            </h2>
+            <p className="integrations-panel__subtitle">
+              Pull orders and users from Salesforce, REST APIs, or webhooks. CSV upload and manual entry still work on other tabs.
+            </p>
+          </div>
+          {onClose && (
+            <button type="button" className="btn-secondary" onClick={onClose} aria-label="Close">
+              ✕ Close
+            </button>
+          )}
+        </div>
+      )}
+
+      {!embedded && (
+      <div className="banner" style={{ marginBottom: "1rem" }}>
+        Existing <strong>CSV uploads</strong> and manual entry are unchanged. Integrations add an optional sync path from CRM tools (Salesforce, HubSpot via REST, Zapier webhooks).
+      </div>
+      )}
+
+      {message && <p className="banner">{message}</p>}
+
+      <div className="panel" style={{ marginBottom: "1rem" }}>
+        <h3 className="panel__title">Add connection</h3>
+        <form onSubmit={handleCreate}>
+          <div className="enterprise-form-row">
+            <label>
+              Name
+              <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+            </label>
+            <label>
+              Provider
+              <select
+                className="input"
+                value={form.provider}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    provider: e.target.value,
+                    configText: JSON.stringify(defaultConfig[e.target.value] || {}, null, 2),
+                  })
+                }
+              >
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {credFields.length > 0 && (
+            <div className="enterprise-form-row">
+              {credFields.map((field) => (
+                <label key={field.key}>
+                  {field.label}
+                  <input
+                    className="input"
+                    type={field.type || "text"}
+                    placeholder={field.placeholder || ""}
+                    value={form.credentials[field.key] || ""}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        credentials: { ...form.credentials, [field.key]: e.target.value },
+                      })
+                    }
+                  />
+                </label>
+              ))}
+            </div>
+          )}
+
+          <label style={{ display: "block", marginBottom: "0.75rem" }}>
+            Config (SOQL, URLs, field mappings) — JSON
+            <textarea
+              className="input"
+              rows={10}
+              style={{ width: "100%", fontFamily: "monospace", fontSize: "0.85rem" }}
+              value={form.configText || JSON.stringify(defaultConfig[form.provider] || {}, null, 2)}
+              onChange={(e) => setForm({ ...form, configText: e.target.value })}
+            />
+          </label>
+
+          <button type="submit" className="btn-primary">Create integration</button>
+        </form>
+      </div>
+
+      <div className="panel">
+        <h3 className="panel__title">Connections</h3>
+        {loading ? (
+          <p>Loading…</p>
+        ) : integrations.length === 0 ? (
+          <p>No integrations yet.</p>
+        ) : (
+          <table className="enterprise-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Provider</th>
+                <th>Status</th>
+                <th>Last user sync</th>
+                <th>Last order sync</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {integrations.map((item) => (
+                <tr key={item.id}>
+                  <td>{item.name}</td>
+                  <td>{item.provider}</td>
+                  <td>{item.is_active ? "Active" : "Inactive"}</td>
+                  <td>{item.last_user_sync_at ? new Date(item.last_user_sync_at).toLocaleString() : "—"}</td>
+                  <td>{item.last_order_sync_at ? new Date(item.last_order_sync_at).toLocaleString() : "—"}</td>
+                  <td>
+                    <button type="button" className="btn-secondary" onClick={() => selectIntegration(item)}>
+                      Manage
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {selected && (
+        <div className="panel" style={{ marginTop: "1rem" }}>
+          <h3 className="panel__title">Manage: {selected.name}</h3>
+
+          {selected.provider === "webhook" && selected.webhook_urls && (
+            <div className="banner" style={{ marginBottom: "1rem" }}>
+              <strong>Webhook URLs</strong> (POST JSON from Zapier / Make / CRM)
+              <br />
+              Users: <code>{selected.webhook_urls.users}</code>
+              <br />
+              Orders: <code>{selected.webhook_urls.orders}</code>
+            </div>
+          )}
+
+          <div className="enterprise-form-row">
+            <button type="button" className="btn-secondary" onClick={() => runAction("test/")}>
+              Test connection
+            </button>
+            {selected.provider !== "webhook" && (
+              <>
+                <button type="button" className="btn-secondary" onClick={() => runAction("sync/users/")}>
+                  Sync users
+                </button>
+                <button type="button" className="btn-secondary" onClick={() => runAction("sync/orders/")}>
+                  Sync orders
+                </button>
+              </>
+            )}
+            <button type="button" className="btn-primary" onClick={handleUpdate}>
+              Save changes
+            </button>
+          </div>
+
+          {logs.length > 0 && (
+            <>
+              <h4 style={{ marginTop: "1rem" }}>Recent sync logs</h4>
+              <table className="enterprise-table">
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Fetched</th>
+                    <th>Result</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logs.map((log) => (
+                    <tr key={log.id}>
+                      <td>{new Date(log.started_at).toLocaleString()}</td>
+                      <td>{log.sync_type}</td>
+                      <td>{log.status}</td>
+                      <td>{log.records_fetched}</td>
+                      <td>
+                        {log.result?.success != null
+                          ? `${log.result.success} ok / ${log.result.failed} failed`
+                          : log.error_message || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default Integrations;
