@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
-import { useNavigate, Link as RouterLink } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   Box,
   Button,
   Card,
   CircularProgress,
-  Link,
   Stack,
   Typography,
 } from "@mui/material";
@@ -178,10 +177,7 @@ function Login() {
         )}
 
         <Typography align="center" sx={{ mt: 3 }} color="text.secondary" variant="body2">
-          New to Incentra?{" "}
-          <Link component={RouterLink} to="/signup" fontWeight={700}>
-            Request access
-          </Link>
+          Employees sign in after an admin adds them in User Setup.
         </Typography>
       </Card>
     </AuthPageLayout>

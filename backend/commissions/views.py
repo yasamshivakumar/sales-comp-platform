@@ -238,6 +238,18 @@ def signup(request):
     email = request.data.get('email')
     password = request.data.get('password')
 
+    admin_exists = UserProfile.objects.filter(role__iexact="Admin").exists()
+    if admin_exists:
+        return Response(
+            {
+                'error': (
+                    'Public signup is disabled. Ask an admin to add you in User Setup, '
+                    'then sign in with your employee credentials.'
+                )
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     # Validate required fields
     if not username or not password:
         return Response(
