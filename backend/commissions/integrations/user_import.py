@@ -26,9 +26,9 @@ def _parse_hire_date(value):
     raise ValueError(f"Invalid hire_date format: {text}")
 
 
-def process_users_rows(organization, rows):
+def process_users_rows(organization, rows, *, allow_updates=True):
     """
-    Upsert UserProfile rows from dicts (CSV / CRM column names).
+    Import UserProfile rows from dicts (CSV / CRM column names).
     Returns {success, failed, errors, total_rows}.
     """
     success = 0
@@ -107,10 +107,22 @@ def process_users_rows(organization, rows):
                     "Login email is already used in another organization."
                 )
 
-            profile, _created = UserProfile.objects.update_or_create(
-                **profile_lookup,
-                defaults=defaults,
-            )
+            if allow_updates:
+                profile, _created = UserProfile.objects.update_or_create(
+                    **profile_lookup,
+                    defaults=defaults,
+                )
+            else:
+                from ..field_rules import find_user_profile_duplicates
+
+                dup_errors = find_user_profile_duplicates(
+                    organization,
+                    email,
+                    employee_id_val,
+                )
+                if dup_errors:
+                    raise ValueError(" ".join(dup_errors))
+                profile = UserProfile.objects.create(email=email, **defaults)
 
             email_to_profile[email] = profile
             username_to_profile[username] = profile

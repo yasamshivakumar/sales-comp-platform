@@ -186,6 +186,15 @@ def process_orders_csv(organization, decoded_csv):
     return result
 
 
+def process_users_csv(organization, decoded_csv):
+    """Process user setup rows for one organization."""
+    from .integrations.user_import import process_users_rows
+
+    csv_reader = csv.DictReader(io.StringIO(decoded_csv))
+    rows = list(csv_reader)
+    return process_users_rows(organization, rows, allow_updates=False)
+
+
 def run_import_job(job_id):
     """Execute a stored ImportJob (orders CSV)."""
     job = ImportJob.objects.select_related("organization").get(pk=job_id)
@@ -201,6 +210,8 @@ def run_import_job(job_id):
 
         if job.job_type == ImportJob.JOB_ORDERS:
             result = process_orders_csv(job.organization, decoded)
+        elif job.job_type == ImportJob.JOB_USERS:
+            result = process_users_csv(job.organization, decoded)
         else:
             raise ValueError(f"Unsupported job type: {job.job_type}")
 

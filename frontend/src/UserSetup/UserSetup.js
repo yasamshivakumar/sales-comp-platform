@@ -177,6 +177,13 @@ function UserSetup() {
 
     try {
       const res = await api.post("user-setup-upload/", formData);
+      if (res.status === 202 || res.data?.job_id) {
+        success(
+          `Upload queued — ${res.data?.row_count || "many"} users will import in the background.`
+        );
+        setFile(null);
+        return;
+      }
       const { success: ok = 0, failed = 0, errors = [] } = res.data || {};
       if (failed > 0) {
         const detail = errors
