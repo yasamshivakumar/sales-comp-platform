@@ -216,7 +216,10 @@ def _commission_owner_profile(commission, order):
     try:
         employee = commission.employee
         if employee and employee.email:
-            return UserProfile.objects.filter(email=employee.email).first()
+            return UserProfile.objects.filter(
+                email__iexact=employee.email,
+                organization=getattr(commission, "organization", None),
+            ).first()
     except Exception:
         pass
     return None

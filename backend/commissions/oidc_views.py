@@ -16,13 +16,14 @@ class TokenOIDCCallbackView(OIDCAuthenticationCallbackView):
         if not user.is_authenticated:
             return response
 
-        profile = UserProfile.objects.filter(email=user.email).first()
+        org = get_default_organization()
+        profile = UserProfile.objects.filter(email__iexact=user.email, organization=org).first()
         if not profile:
             UserProfile.objects.create(
                 email=user.email,
                 name=user.get_full_name() or user.username,
                 role="Sales Rep",
-                organization=get_default_organization(),
+                organization=org,
                 enable_login=True,
             )
 

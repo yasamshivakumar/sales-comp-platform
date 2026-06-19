@@ -18,16 +18,38 @@ class Organization(models.Model):
 
 
 class Employee(models.Model):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="employees",
+        null=True,
+        blank=True,
+    )
 
     name = models.CharField(max_length=100)
 
-    email = models.EmailField(unique=True)
+    email = models.EmailField(db_index=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "email"],
+                name="uniq_employee_email_per_org",
+            ),
+        ]
 
     def __str__(self):
         return self.name
 
 
 class Sale(models.Model):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="sales",
+        null=True,
+        blank=True,
+    )
 
     order = models.OneToOneField(
         "Order",
@@ -103,6 +125,15 @@ class Commission(models.Model):
         db_index=True
     )
 
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="commissions",
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
     sale = models.ForeignKey(
         Sale,
         on_delete=models.CASCADE,
@@ -176,6 +207,10 @@ class Commission(models.Model):
 
     class Meta:
         indexes = [
+            models.Index(
+                fields=["organization", "status", "calculated_at"],
+                name="commission_org_status_calc_idx",
+            ),
             models.Index(fields=["status", "calculated_at"]),
         ]
 

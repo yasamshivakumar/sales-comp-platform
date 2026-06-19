@@ -120,6 +120,15 @@ def process_orders_rows(organization, rows):
 
             territory_id = row.get("territory") or row.get("territory_id")
             if territory_id and "territory" in order_model_fields:
+                from .models import Territory
+
+                if not Territory.objects.filter(
+                    pk=territory_id,
+                    organization=organization,
+                ).exists():
+                    raise ValueError(
+                        "Territory does not belong to this organization."
+                    )
                 defaults["territory_id"] = territory_id
 
             if (

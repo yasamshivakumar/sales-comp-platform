@@ -6,7 +6,7 @@ from datetime import datetime
 from django.conf import settings
 from django.contrib.auth.models import User
 
-from ..models import HierarchyRelationship, UserProfile
+from ..models import HierarchyRelationship, Territory, UserProfile
 
 logger = logging.getLogger("commissions")
 
@@ -91,7 +91,21 @@ def process_users_rows(organization, rows):
                 "position_title": str(row.get("position_title", "")).strip(),
             }
             if territory_id:
+                if not Territory.objects.filter(
+                    pk=territory_id,
+                    organization=organization,
+                ).exists():
+                    raise ValueError(
+                        "Territory does not belong to this organization."
+                    )
                 defaults["territory_id"] = territory_id
+
+            if enable_login and UserProfile.objects.filter(
+                email__iexact=email,
+            ).exclude(organization=organization).exists():
+                raise ValueError(
+                    "Login email is already used in another organization."
+                )
 
             profile, _created = UserProfile.objects.update_or_create(
                 **profile_lookup,

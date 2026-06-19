@@ -109,11 +109,12 @@ def _webhook_urls(request, secret):
 def test_integration_connection(request, integration_id):
     require_admin(request)
     org = getattr(request, "organization", None)
-    integration = ExternalIntegration.objects.filter(pk=integration_id).first()
+    integration = ExternalIntegration.objects.filter(
+        pk=integration_id,
+        organization=org,
+    ).first()
     if not integration:
         return Response({"error": "Integration not found"}, status=404)
-    if org and integration.organization_id != org.id:
-        return Response({"error": "Forbidden"}, status=403)
     result = test_integration(integration)
     return Response(result, status=200 if result["ok"] else 400)
 
@@ -134,11 +135,13 @@ def sync_integration_orders(request, integration_id):
 
 def _run_sync(request, integration_id, sync_type):
     org = getattr(request, "organization", None)
-    integration = ExternalIntegration.objects.filter(pk=integration_id, is_active=True).first()
+    integration = ExternalIntegration.objects.filter(
+        pk=integration_id,
+        organization=org,
+        is_active=True,
+    ).first()
     if not integration:
         return Response({"error": "Integration not found or inactive"}, status=404)
-    if org and integration.organization_id != org.id:
-        return Response({"error": "Forbidden"}, status=403)
     if integration.provider == ExternalIntegration.PROVIDER_WEBHOOK:
         return Response(
             {"error": "Webhook integrations receive data via POST; use webhook URLs."},
@@ -162,11 +165,12 @@ def _run_sync(request, integration_id, sync_type):
 def integration_sync_logs(request, integration_id):
     require_admin(request)
     org = getattr(request, "organization", None)
-    integration = ExternalIntegration.objects.filter(pk=integration_id).first()
+    integration = ExternalIntegration.objects.filter(
+        pk=integration_id,
+        organization=org,
+    ).first()
     if not integration:
         return Response({"error": "Integration not found"}, status=404)
-    if org and integration.organization_id != org.id:
-        return Response({"error": "Forbidden"}, status=403)
     logs = integration.sync_logs.all()[:50]
     return Response(IntegrationSyncLogSerializer(logs, many=True).data)
 

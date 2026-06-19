@@ -90,7 +90,7 @@ def mark_payout_run_paid(payout_run, payment_reference="", paid_by_user=None):
 
     org = payout_run.organization_id
     if org:
-        commissions = commissions.filter(sale__order__organization_id=org)
+        commissions = commissions.filter(organization_id=org)
 
     if payment_reference:
         payout_run.payment_reference = payment_reference
@@ -117,5 +117,6 @@ def mark_payout_run_paid(payout_run, payment_reference="", paid_by_user=None):
 def order_has_locked_commissions(order):
     return Commission.objects.filter(
         sale__order=order,
+        organization=getattr(order, "organization", None),
         status__in=Commission.LOCKED_STATUSES,
     ).exists()

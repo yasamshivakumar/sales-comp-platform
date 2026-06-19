@@ -106,54 +106,69 @@ def resolve_dashboard_business_group(request, user_profile, can_view_all_groups)
     return selected, False, available
 
 
-def commission_business_group_q(business_group):
+def commission_business_group_q(business_group, organization=None):
     from .models import UserProfile
 
     group = normalize_business_group(business_group, default="")
     if not group:
         return Q()
 
-    employee_ids = UserProfile.objects.filter(
+    profiles = UserProfile.objects.filter(
         business_group__iexact=group
-    ).exclude(employee_id="").values_list("employee_id", flat=True)
+    )
+    if organization is not None:
+        profiles = profiles.filter(organization=organization)
+    employee_ids = profiles.exclude(employee_id="").values_list("employee_id", flat=True)
 
     return Q(sale__order__business_group__iexact=group) | Q(
         sale__order__employee_id__in=employee_ids
     )
 
 
-def order_business_group_q(business_group):
+def order_business_group_q(business_group, organization=None):
     from .models import UserProfile
 
     group = normalize_business_group(business_group, default="")
     if not group:
         return Q()
 
-    employee_ids = UserProfile.objects.filter(
+    profiles = UserProfile.objects.filter(
         business_group__iexact=group
-    ).exclude(employee_id="").values_list("employee_id", flat=True)
+    )
+    if organization is not None:
+        profiles = profiles.filter(organization=organization)
+    employee_ids = profiles.exclude(employee_id="").values_list("employee_id", flat=True)
 
     return Q(business_group__iexact=group) | Q(employee_id__in=employee_ids)
 
 
-def apply_business_group_to_commissions(queryset, business_group):
+def apply_business_group_to_commissions(queryset, business_group, organization=None):
     if not business_group:
         return queryset
-    return queryset.filter(commission_business_group_q(business_group))
+    return queryset.filter(commission_business_group_q(business_group, organization))
 
 
-def apply_business_group_to_orders(queryset, business_group):
+def apply_business_group_to_orders(queryset, business_group, organization=None):
     if not business_group:
         return queryset
-    return queryset.filter(order_business_group_q(business_group))
+    return queryset.filter(order_business_group_q(business_group, organization))
 
 
-def commission_totals_by_business_group(queryset, *, amount_field="commission_amount"):
+def commission_totals_by_business_group(
+    queryset,
+    *,
+    amount_field="commission_amount",
+    organization=None,
+):
     from django.db.models import Sum
 
     results = []
     for item in BUSINESS_GROUPS:
-        scoped = apply_business_group_to_commissions(queryset, item["value"])
+        scoped = apply_business_group_to_commissions(
+            queryset,
+            item["value"],
+            organization=organization,
+        )
         total = scoped.aggregate(total=Sum(amount_field))["total"] or 0
         count = scoped.count()
         if not total and not count:
@@ -170,12 +185,16 @@ def commission_totals_by_business_group(queryset, *, amount_field="commission_am
     return results
 
 
-def sales_totals_by_business_group(queryset):
+def sales_totals_by_business_group(queryset, organization=None):
     from django.db.models import Sum
 
     results = []
     for item in BUSINESS_GROUPS:
-        scoped = apply_business_group_to_orders(queryset, item["value"])
+        scoped = apply_business_group_to_orders(
+            queryset,
+            item["value"],
+            organization=organization,
+        )
         total = scoped.aggregate(total=Sum("sales_amount"))["total"] or 0
         count = scoped.count()
         if not total and not count:

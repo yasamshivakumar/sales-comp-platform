@@ -31,13 +31,16 @@ def profile_search_q(term: str) -> Q:
     )
 
 
-def commission_employee_search_q(term: str) -> Q:
+def commission_employee_search_q(term: str, organization=None) -> Q:
     term = (term or "").strip()
     if not term:
         return Q()
     from .models import UserProfile
 
-    profile_emails = UserProfile.objects.filter(profile_search_q(term)).values_list(
+    profiles = UserProfile.objects.filter(profile_search_q(term))
+    if organization is not None:
+        profiles = profiles.filter(organization=organization)
+    profile_emails = profiles.values_list(
         "email", flat=True
     )
     q = (
@@ -52,14 +55,17 @@ def commission_employee_search_q(term: str) -> Q:
     return q
 
 
-def order_employee_search_q(term: str) -> Q:
+def order_employee_search_q(term: str, organization=None) -> Q:
     """Filter orders by employee_id or matching User Setup profile."""
     term = (term or "").strip()
     if not term:
         return Q()
     from .models import UserProfile
 
-    profile_employee_ids = UserProfile.objects.filter(profile_search_q(term)).exclude(
+    profiles = UserProfile.objects.filter(profile_search_q(term))
+    if organization is not None:
+        profiles = profiles.filter(organization=organization)
+    profile_employee_ids = profiles.exclude(
         employee_id=""
     ).values_list("employee_id", flat=True)
     return Q(employee_id__icontains=term) | Q(employee_id__in=profile_employee_ids)

@@ -16,6 +16,7 @@ from .models import (
     CompensationPlan,
     CompensationTier,
     Order,
+    Organization,
 )
 from decimal import Decimal, InvalidOperation
 from .serializers import (
@@ -55,10 +56,33 @@ from .emails import notify_admins
 from .models import AuditLog, ImportJob
 from .imports import process_orders_csv, should_use_async_import
 from .list_scope import order_search_q
-from .tenants import filter_queryset_by_organization, get_default_organization
+from .tenants import (
+    filter_queryset_by_organization,
+    get_default_organization,
+    get_profile_for_user,
+)
 
 
-def _ensure_self_signup_admin_profile(user):
+def _organization_for_signup(data):
+    name = (
+        str(data.get("organization_name") or data.get("company_name") or "").strip()
+        if data
+        else ""
+    )
+    if not name:
+        return get_default_organization()
+
+    base_slug = slugify(str(data.get("organization_slug") or name))[:60] or "company"
+    slug = base_slug
+    suffix = 2
+    while Organization.objects.filter(slug=slug).exclude(name__iexact=name).exists():
+        slug = f"{base_slug[:55]}-{suffix}"
+        suffix += 1
+    org, _ = Organization.objects.get_or_create(slug=slug, defaults={"name": name})
+    return org
+
+
+def _ensure_self_signup_admin_profile(user, organization=None):
     """
     Self-signup is the tenant bootstrap path: the account owner becomes admin,
     then uses User Setup to add reps/employees.
@@ -69,8 +93,9 @@ def _ensure_self_signup_admin_profile(user):
     email = user.email.strip().lower()
     name = user.get_full_name() or user.username or email
     employee_id = user.username or email.split("@")[0]
+    organization = organization or get_default_organization()
     profile, _ = UserProfile.objects.update_or_create(
-        organization=get_default_organization(),
+        organization=organization,
         email=email,
         defaults={
             "enable_login": True,
@@ -89,16 +114,20 @@ def _ensure_self_signup_admin_profile(user):
 
 def _orders_queryset_for_request(request):
     """Orders visible to the user, with commission data prefetched."""
+    org = getattr(request, "organization", None)
     queryset = filter_queryset_by_organization(
         Order.objects.select_related("sale_record")
         .prefetch_related(
             Prefetch(
                 "sale_record__commission_set",
-                queryset=Commission.objects.order_by("id"),
+                queryset=filter_queryset_by_organization(
+                    Commission.objects.order_by("id"),
+                    org,
+                ),
             )
         )
         .order_by("-order_date", "-id"),
-        getattr(request, "organization", None),
+        org,
     )
 
     search_term = (
@@ -113,7 +142,12 @@ def _orders_queryset_for_request(request):
 
     user = request.user
     try:
-        user_profile = UserProfile.objects.get(email=user.email)
+        user_profile = get_profile_for_user(
+            user,
+            organization=getattr(request, "organization", None),
+        )
+        if not user_profile:
+            raise UserProfile.DoesNotExist
         is_admin = user_profile.role.lower() in ["admin", "administrator"]
         if is_admin:
             return queryset
@@ -128,6 +162,7 @@ from django.db import transaction
 from django.db.models import Prefetch
 from django.http import HttpResponse
 from django.utils.dateparse import parse_date
+from django.utils.text import slugify
 
 logger = logging.getLogger("commissions")
 
@@ -137,8 +172,14 @@ from .auth_utils import provision_login_user
 
 
 class EmployeeViewSet(viewsets.ModelViewSet):
-    queryset = Employee.objects.all()
+    queryset = Employee.objects.none()
     serializer_class = EmployeeSerializer
+
+    def get_queryset(self):
+        return filter_queryset_by_organization(
+            Employee.objects.all(),
+            getattr(self.request, "organization", None),
+        )
 
 
 class CommissionViewSet(viewsets.ModelViewSet):
@@ -154,7 +195,12 @@ class CommissionViewSet(viewsets.ModelViewSet):
         user = self.request.user
         
         try:
-            user_profile = UserProfile.objects.get(email=user.email)
+            user_profile = get_profile_for_user(
+                user,
+                organization=getattr(self.request, "organization", None),
+            )
+            if not user_profile:
+                raise UserProfile.DoesNotExist
             is_admin = user_profile.role.lower() in ['admin', 'administrator']
             is_finance = user_is_finance(self.request)
             is_manager = user_is_manager(self.request)
@@ -172,7 +218,6 @@ class CommissionViewSet(viewsets.ModelViewSet):
                 queryset = filter_queryset_by_organization(
                     queryset,
                     getattr(self.request, "organization", None),
-                    field="sale__order__organization",
                 )
             else:
                 from django.db.models import Q
@@ -184,9 +229,14 @@ class CommissionViewSet(viewsets.ModelViewSet):
                     "sale__order",
                     "compensation_plan",
                 )
+                queryset = filter_queryset_by_organization(
+                    queryset,
+                    getattr(self.request, "organization", None),
+                )
         except UserProfile.DoesNotExist:
             queryset = Commission.objects.filter(
-                employee__email=user.email
+                employee__email=user.email,
+                organization=getattr(self.request, "organization", None),
             ).select_related("employee", "sale", "sale__order")
 
         status_filter = self.request.query_params.get("status")
@@ -196,16 +246,15 @@ class CommissionViewSet(viewsets.ModelViewSet):
         return queryset
 
     def _payroll_can_see_all(self, request):
-        try:
-            user_profile = UserProfile.objects.get(email=request.user.email)
-            role = user_profile.role.lower()
-            return (
-                role in ["admin", "administrator"]
-                or user_is_finance(request)
-                or user_is_manager(request)
-            )
-        except UserProfile.DoesNotExist:
+        user_profile = get_request_user_profile(request)
+        if not user_profile:
             return False
+        role = user_profile.role.lower()
+        return (
+            role in ["admin", "administrator"]
+            or user_is_finance(request)
+            or user_is_manager(request)
+        )
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
@@ -214,7 +263,12 @@ class CommissionViewSet(viewsets.ModelViewSet):
 
             q = (request.query_params.get("q") or "").strip()
             if q:
-                queryset = queryset.filter(commission_employee_search_q(q))
+                queryset = queryset.filter(
+                    commission_employee_search_q(
+                        q,
+                        organization=getattr(request, "organization", None),
+                    )
+                )
             limit = list_limit_for_request(request, searching=bool(q))
             total_count = queryset.count()
             queryset = queryset.order_by("-calculated_at", "-id")[:limit]
@@ -238,22 +292,10 @@ def signup(request):
     email = request.data.get('email')
     password = request.data.get('password')
 
-    admin_exists = UserProfile.objects.filter(role__iexact="Admin").exists()
-    if admin_exists:
-        return Response(
-            {
-                'error': (
-                    'Public signup is disabled. Ask an admin to add you in User Setup, '
-                    'then sign in with your employee credentials.'
-                )
-            },
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
     # Validate required fields
-    if not username or not password:
+    if not username or not email or not password:
         return Response(
-            {'error': 'Username and password are required'},
+            {'error': 'Username, email, and password are required'},
             status=400
         )
 
@@ -264,13 +306,42 @@ def signup(request):
             status=400
         )
 
+    organization = _organization_for_signup(request.data)
+
+    admin_exists = UserProfile.objects.filter(
+        role__iexact="Admin",
+        organization=organization,
+    ).exists()
+    if admin_exists:
+        return Response(
+            {
+                'error': (
+                    'Public signup is disabled. Ask an admin to add you in User Setup, '
+                    'then sign in with your employee credentials.'
+                )
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    if email and UserProfile.objects.filter(email__iexact=email).exclude(
+        organization=organization,
+    ).exists():
+        return Response(
+            {
+                'error': (
+                    'Email is already used by another organization. '
+                    'Use a unique admin email.'
+                )
+            },
+            status=400,
+        )
+
     # Create user
     user = User.objects.create_user(
         username=username,
         email=email,
         password=password
     )
-    profile = _ensure_self_signup_admin_profile(user)
+    profile = _ensure_self_signup_admin_profile(user, organization=organization)
 
     # Create authentication token
     token, _ = Token.objects.get_or_create(user=user)
@@ -281,6 +352,8 @@ def signup(request):
         'token': token.key,
         'role': profile.role if profile else 'Admin',
         'name': profile.name if profile else user.username,
+        'organization_slug': organization.slug,
+        'organization_name': organization.name,
     })
 
 
@@ -456,6 +529,18 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
                     {"error": " ".join(dup_errors)},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            if enable_login and UserProfile.objects.filter(
+                email__iexact=email,
+            ).exclude(organization=org).exists():
+                return Response(
+                    {
+                        "error": (
+                            "Login email is already used in another organization. "
+                            "Use a unique email for login-enabled users."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             # ---------------------------------------------------
             # Create UserProfile
@@ -488,6 +573,13 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
             )
             territory_id = data.get("territory")
             if territory_id:
+                from .models import Territory
+
+                if not Territory.objects.filter(pk=territory_id, organization=org).exists():
+                    return Response(
+                        {"error": "Selected territory does not belong to this organization."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
                 profile.territory_id = territory_id
                 profile.save(update_fields=["territory"])
 
@@ -511,11 +603,13 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
             if parent_participant and child_participant:
 
                 parent_profile = UserProfile.objects.filter(
-                    id=parent_participant
+                    id=parent_participant,
+                    organization=getattr(request, "organization", None),
                 ).first()
 
                 child_profile = UserProfile.objects.filter(
-                    id=child_participant
+                    id=child_participant,
+                    organization=getattr(request, "organization", None),
                 ).first()
 
                 if parent_profile and child_profile:
@@ -700,6 +794,12 @@ class UserProfileUploadView(APIView):
                 )
                 if dup_errors:
                     raise Exception(" ".join(dup_errors))
+                if enable_login and UserProfile.objects.filter(
+                    email__iexact=email,
+                ).exclude(organization=org).exists():
+                    raise Exception(
+                        "Login email is already used in another organization."
+                    )
 
                 profile = UserProfile.objects.create(
                     organization=org,
@@ -769,13 +869,16 @@ class UserProfileUploadView(APIView):
                         or employee_id_to_profile.get(parent_value)
                         or email_to_profile.get(parent_value)
                         or UserProfile.objects.filter(
-                            username=parent_value
+                            username=parent_value,
+                            organization=getattr(request, "organization", None),
                         ).first()
                         or UserProfile.objects.filter(
-                            employee_id=parent_value
+                            employee_id=parent_value,
+                            organization=getattr(request, "organization", None),
                         ).first()
                         or UserProfile.objects.filter(
-                            email=parent_value
+                            email__iexact=parent_value,
+                            organization=getattr(request, "organization", None),
                         ).first()
                     )
 
@@ -784,13 +887,16 @@ class UserProfileUploadView(APIView):
                         or employee_id_to_profile.get(child_value)
                         or email_to_profile.get(child_value)
                         or UserProfile.objects.filter(
-                            username=child_value
+                            username=child_value,
+                            organization=getattr(request, "organization", None),
                         ).first()
                         or UserProfile.objects.filter(
-                            employee_id=child_value
+                            employee_id=child_value,
+                            organization=getattr(request, "organization", None),
                         ).first()
                         or UserProfile.objects.filter(
-                            email=child_value
+                            email__iexact=child_value,
+                            organization=getattr(request, "organization", None),
                         ).first()
                     )
 
@@ -843,18 +949,30 @@ class UserProfileUploadView(APIView):
 
 
 class HierarchyRelationshipListCreateView(generics.ListCreateAPIView):
-    queryset = HierarchyRelationship.objects.filter(
-        is_active=True
-    ).order_by('parent_participant') 
-
     serializer_class = HierarchyRelationshipSerializer
     permission_classes = [IsAuthenticated]
 
+    def get_queryset(self):
+        qs = HierarchyRelationship.objects.filter(is_active=True)
+        org = getattr(self.request, "organization", None)
+        if org:
+            qs = qs.filter(
+                parent_participant__organization=org,
+                child_participant__organization=org,
+            )
+        return qs.order_by('parent_participant')
+
 
 class CompensationTierListCreateView(generics.ListCreateAPIView):
-    queryset = CompensationTier.objects.all().order_by('plan', 'min_sales')
     serializer_class = CompensationTierSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = CompensationTier.objects.all()
+        org = getattr(self.request, "organization", None)
+        if org:
+            qs = qs.filter(plan__organization=org)
+        return qs.order_by('plan', 'min_sales')
 
 
 
@@ -1051,10 +1169,28 @@ def email_login(request):
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    profile = (
-        UserProfile.objects.filter(email__iexact=email, enable_login=True).first()
-        or UserProfile.objects.filter(employee_id__iexact=email, enable_login=True).first()
+    profile_matches = UserProfile.objects.filter(
+        email__iexact=email,
+        enable_login=True,
     )
+    employee_id_matches = UserProfile.objects.filter(
+        employee_id__iexact=email,
+        enable_login=True,
+    )
+    profiles = list((profile_matches | employee_id_matches).distinct()[:2])
+    if len(profiles) > 1:
+        return Response(
+            {
+                "error": (
+                    "This login matches multiple companies. Use a unique email "
+                    "or ask your administrator to update your employee login."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    profile = profiles[0] if profiles else None
+    if profile and profile.organization_id:
+        request.organization = profile.organization
 
     user = User.objects.filter(email__iexact=email).first()
     if not user:
@@ -1105,7 +1241,10 @@ def email_login(request):
         
         # Get user profile for additional info
         user_profile = (
-            UserProfile.objects.filter(email=user.email).first()
+            UserProfile.objects.filter(
+                email__iexact=user.email,
+                organization=getattr(request, "organization", None),
+            ).first()
             or _ensure_self_signup_admin_profile(user)
         )
         
@@ -1224,7 +1363,9 @@ def get_user_profile(request):
     user = request.user
     
     try:
-        user_profile = UserProfile.objects.get(email=user.email)
+        user_profile = get_request_user_profile(request)
+        if not user_profile:
+            raise UserProfile.DoesNotExist
         is_admin = user_profile.role.lower() in ['admin', 'administrator']
         
         org = user_profile.organization
@@ -1306,6 +1447,9 @@ def employee_directory(request):
     if profile_ids:
         for rel in HierarchyRelationship.objects.filter(
             child_participant_id__in=profile_ids
+        ).filter(
+            parent_participant__organization=org,
+            child_participant__organization=org,
         ).select_related("parent_participant"):
             manager_by_child[rel.child_participant_id] = rel.parent_participant
 
@@ -1345,11 +1489,10 @@ def commission_summary_report(request):
     
     user = request.user
     user_profile = None
-    try:
-        user_profile = UserProfile.objects.get(email=user.email)
-        is_admin = user_profile.role.lower() in ['admin', 'administrator']
-    except UserProfile.DoesNotExist:
-        is_admin = False
+    user_profile = get_request_user_profile(request)
+    is_admin = bool(
+        user_profile and user_profile.role.lower() in ['admin', 'administrator']
+    )
     
     start_date = parse_date(request.query_params.get("start_date") or "")
     end_date = parse_date(request.query_params.get("end_date") or "")
@@ -1371,7 +1514,7 @@ def commission_summary_report(request):
     commissions = Commission.objects.all()
     org = getattr(request, "organization", None)
     if org:
-        commissions = commissions.filter(sale__order__organization=org)
+        commissions = commissions.filter(organization=org)
 
     if start_date and end_date:
         commissions = commissions.filter(
@@ -1390,7 +1533,11 @@ def commission_summary_report(request):
         commissions = commissions.filter(employee__email__in=possible_emails)
 
     base_commissions = commissions
-    commissions = apply_business_group_to_commissions(commissions, effective_group)
+    commissions = apply_business_group_to_commissions(
+        commissions,
+        effective_group,
+        organization=org,
+    )
     
     from .currencies import active_currency_totals, normalize_currency, primary_currency_from_totals
 
@@ -1403,7 +1550,10 @@ def commission_summary_report(request):
         user_profile.personal_currency if user_profile else None
     )
     by_business_group = (
-        commission_totals_by_business_group(base_commissions) if view_all_groups else []
+        commission_totals_by_business_group(
+            base_commissions,
+            organization=org,
+        ) if view_all_groups else []
     )
     if effective_group:
         primary_currency = currency_for_business_group(effective_group, personal_currency)
@@ -1435,7 +1585,10 @@ def commission_summary_report(request):
             total=Sum('commission_amount'),
             count=Count('id'),
         ).order_by('-total')[:5]:
-            profile = UserProfile.objects.filter(email=row["employee__email"]).first()
+            profile = UserProfile.objects.filter(
+                email__iexact=row["employee__email"],
+                organization=org,
+            ).first()
             top_earners.append(
                 {
                     **row,
@@ -1477,11 +1630,10 @@ def sales_performance_report(request):
 
     user = request.user
     user_profile = None
-    try:
-        user_profile = UserProfile.objects.get(email=user.email)
-        is_admin = user_profile.role.lower() in ['admin', 'administrator']
-    except UserProfile.DoesNotExist:
-        is_admin = False
+    user_profile = get_request_user_profile(request)
+    is_admin = bool(
+        user_profile and user_profile.role.lower() in ['admin', 'administrator']
+    )
 
     start_date = parse_date(request.query_params.get("start_date") or "")
     end_date = parse_date(request.query_params.get("end_date") or "")
@@ -1519,7 +1671,11 @@ def sales_performance_report(request):
         orders = orders.filter(employee_id__in=possible_employee_ids)
 
     base_orders = orders
-    orders = apply_business_group_to_orders(orders, effective_group)
+    orders = apply_business_group_to_orders(
+        orders,
+        effective_group,
+        organization=org,
+    )
 
     from .currencies import active_currency_totals, normalize_currency, primary_currency_from_totals
     from .models import UserProfile as UP
@@ -1537,7 +1693,10 @@ def sales_performance_report(request):
         user_profile.personal_currency if user_profile else None
     )
     by_business_group = (
-        sales_totals_by_business_group(base_orders) if view_all_groups else []
+        sales_totals_by_business_group(
+            base_orders,
+            organization=org,
+        ) if view_all_groups else []
     )
     if effective_group:
         primary_currency = currency_for_business_group(effective_group, personal_currency)
@@ -1604,12 +1763,10 @@ def employee_earnings_report(request):
     from .list_scope import list_limit_for_request
 
     user = request.user
-    user_profile = None
-    try:
-        user_profile = UserProfile.objects.get(email=user.email)
-        is_admin = user_profile.role.lower() in ['admin', 'administrator']
-    except UserProfile.DoesNotExist:
-        is_admin = False
+    user_profile = get_request_user_profile(request)
+    is_admin = bool(
+        user_profile and user_profile.role.lower() in ['admin', 'administrator']
+    )
 
     from .business_groups import (
         apply_business_group_to_commissions,
@@ -1624,6 +1781,10 @@ def employee_earnings_report(request):
     )
 
     commissions = Commission.objects.all()
+    commissions = filter_queryset_by_organization(
+        commissions,
+        getattr(request, "organization", None),
+    )
 
     if not is_admin and not user_is_finance(request):
         possible_emails = [user.email]
@@ -1631,12 +1792,18 @@ def employee_earnings_report(request):
             possible_emails.append(f"{user_profile.employee_id}@company.com")
         commissions = commissions.filter(employee__email__in=possible_emails)
 
-    commissions = apply_business_group_to_commissions(commissions, effective_group)
+    commissions = apply_business_group_to_commissions(
+        commissions,
+        effective_group,
+        organization=getattr(request, "organization", None),
+    )
 
     q = (request.query_params.get("q") or "").strip()
     if q and is_admin:
         from .list_scope import commission_employee_search_q
-        commissions = commissions.filter(commission_employee_search_q(q))
+        commissions = commissions.filter(
+            commission_employee_search_q(q, organization=getattr(request, "organization", None))
+        )
 
     earnings_data = commissions.values(
         'employee__name', 'employee__email', 'employee_id'
@@ -1650,7 +1817,10 @@ def employee_earnings_report(request):
     total_count = earnings_data.count()
     earnings_list = []
     for row in earnings_data[:limit] if limit else earnings_data:
-        profile = UserProfile.objects.filter(email=row.get("employee__email")).first()
+        profile = UserProfile.objects.filter(
+            email__iexact=row.get("employee__email"),
+            organization=getattr(request, "organization", None),
+        ).first()
         earnings_list.append(
             {
                 **row,
@@ -1691,13 +1861,10 @@ def period_analytics_report(request):
     from .permissions import user_is_finance
 
     user = request.user
-    user_profile = None
-    try:
-        user_profile = UserProfile.objects.get(email=user.email)
-        is_admin = user_profile.role.lower() in ['admin', 'administrator']
-    except UserProfile.DoesNotExist:
-        is_admin = False
-        user_profile = None
+    user_profile = get_request_user_profile(request)
+    is_admin = bool(
+        user_profile and user_profile.role.lower() in ['admin', 'administrator']
+    )
 
     can_view_all_groups = is_admin or user_is_finance(request)
     effective_group, _, _ = resolve_dashboard_business_group(
@@ -1723,7 +1890,7 @@ def period_analytics_report(request):
     commissions = Commission.objects.all()
     org = getattr(request, "organization", None)
     if org:
-        commissions = commissions.filter(sale__order__organization=org)
+        commissions = commissions.filter(organization=org)
 
     if not is_admin and not user_is_finance(request):
         possible_emails = [user.email]
@@ -1731,7 +1898,11 @@ def period_analytics_report(request):
             possible_emails.append(f"{user_profile.employee_id}@company.com")
         commissions = commissions.filter(employee__email__in=possible_emails)
 
-    commissions = apply_business_group_to_commissions(commissions, effective_group)
+    commissions = apply_business_group_to_commissions(
+        commissions,
+        effective_group,
+        organization=org,
+    )
     commissions = commissions.filter(
         sale__order__order_date__gte=start_date,
         sale__order__order_date__lte=end_date,
@@ -1867,6 +2038,10 @@ def _commission_queryset_for_export(request):
         "sale__order",
         "compensation_plan",
     )
+    queryset = filter_queryset_by_organization(
+        queryset,
+        getattr(request, "organization", None),
+    )
     if user_can_view_finance_data(request):
         return queryset
     profile = get_request_user_profile(request)
@@ -1896,7 +2071,7 @@ def approve_commissions_view(request):
         queryset = queryset.filter(id__in=ids)
     org = getattr(request, "organization", None)
     if org:
-        queryset = queryset.filter(sale__order__organization=org)
+        queryset = queryset.filter(organization=org)
     if start_date and end_date:
         queryset = queryset.filter(
             sale__order__order_date__range=[start_date, end_date]
@@ -1971,7 +2146,10 @@ def commission_payroll_export(request):
 
     for comm in queryset.order_by("sale__order__order_date", "employee__name"):
         order = comm.sale.order if comm.sale_id and comm.sale.order_id else None
-        profile = UserProfile.objects.filter(email=comm.employee.email).first()
+        profile = UserProfile.objects.filter(
+            email__iexact=comm.employee.email,
+            organization=getattr(request, "organization", None),
+        ).first()
         writer.writerow([
             comm.id,
             profile.employee_id if profile else "",

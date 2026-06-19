@@ -1,13 +1,12 @@
 from rest_framework.exceptions import PermissionDenied
 
-from .models import UserProfile
-
-
 def get_request_user_profile(request):
-    try:
-        return UserProfile.objects.get(email=request.user.email)
-    except UserProfile.DoesNotExist:
-        return None
+    from .tenants import get_profile_for_user
+
+    return get_profile_for_user(
+        request.user,
+        organization=getattr(request, "organization", None),
+    )
 
 
 def _normalized_role(request):

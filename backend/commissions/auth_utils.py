@@ -48,6 +48,15 @@ def provision_login_user(profile, *, reset_password=False):
     if not email:
         return None
 
+    from .models import UserProfile
+
+    if UserProfile.objects.filter(email__iexact=email).exclude(
+        organization=profile.organization
+    ).exists():
+        raise ValueError(
+            "Login email is already used in another organization."
+        )
+
     username = (profile.username or email).strip()
 
     # Prefer the auth row already tied to this email so login and provisioning

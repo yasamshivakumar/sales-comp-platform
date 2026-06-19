@@ -56,10 +56,9 @@ def _plan_queryset_for_order(order):
     qs = CompensationPlan.objects.filter(status="Active")
     org_id = getattr(order, "organization_id", None)
     if org_id:
-        # Legacy plans created before multi-tenant may have organization=NULL
-        qs = qs.filter(
-            models.Q(organization_id=org_id) | models.Q(organization__isnull=True)
-        )
+        qs = qs.filter(organization_id=org_id)
+    else:
+        qs = qs.filter(organization__isnull=True)
     order_territory_id = getattr(order, "territory_id", None)
     if not order_territory_id:
         user_profile = _get_user_profile_for_order(order)
@@ -342,8 +341,10 @@ def _calculate_amount_for_plan(plan, sales_amount, order=None):
 
 
 def _get_or_create_employee_for_order(order, user_profile):
+    org = getattr(order, "organization", None) or getattr(user_profile, "organization", None)
     if user_profile:
         employee, _ = Employee.objects.get_or_create(
+            organization=org,
             email=user_profile.email,
             defaults={
                 "name": user_profile.name or user_profile.employee_id,
@@ -352,6 +353,7 @@ def _get_or_create_employee_for_order(order, user_profile):
         return employee
 
     employee, _ = Employee.objects.get_or_create(
+        organization=org,
         email=f"{order.employee_id}@company.com",
         defaults={"name": order.employee_id or "Unknown"},
     )
@@ -398,6 +400,7 @@ def _apply_hierarchy_split(order, commission_amount):
                 or parent_user.email
             )
             parent_employee, _ = Employee.objects.get_or_create(
+                organization=getattr(parent_user, "organization", None),
                 email=parent_user.email,
                 defaults={"name": parent_name},
             )
@@ -501,6 +504,7 @@ def calculate_commission_for_order(order, replace_existing=True, force=False):
     employee = _get_or_create_employee_for_order(order, user_profile)
 
     sale = Sale.objects.create(
+        organization=getattr(order, "organization", None),
         order=order,
         employee=employee,
         employee_salary=Decimal("0.00"),
@@ -512,6 +516,7 @@ def calculate_commission_for_order(order, replace_existing=True, force=False):
     )
 
     commission = Commission.objects.create(
+        organization=getattr(order, "organization", None),
         employee=employee,
         sale=sale,
         commission_amount=employee_amount,
@@ -528,6 +533,7 @@ def calculate_commission_for_order(order, replace_existing=True, force=False):
 
     if parent_employee and parent_amount > 0:
         Commission.objects.create(
+            organization=getattr(order, "organization", None),
             employee=parent_employee,
             sale=sale,
             commission_amount=parent_amount,
@@ -558,7 +564,9 @@ def recalculate_orders_in_range(
     if employee_q:
         from .list_scope import order_employee_search_q
 
-        orders = orders.filter(order_employee_search_q(employee_q))
+        orders = orders.filter(
+            order_employee_search_q(employee_q, organization=organization)
+        )
     orders = orders.order_by("order_date", "order_id")
     stats = {
         "processed": 0,

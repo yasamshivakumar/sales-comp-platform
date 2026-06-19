@@ -52,7 +52,7 @@ from .workflow import (
 
 
 def _commission_base_queryset(request):
-    return Commission.objects.select_related(
+    queryset = Commission.objects.select_related(
         "employee",
         "sale",
         "sale__order",
@@ -61,16 +61,15 @@ def _commission_base_queryset(request):
         "approved_by",
         "payout_run",
     )
+    return filter_queryset_by_organization(
+        queryset,
+        getattr(request, "organization", None),
+    )
 
 
 def _commissions_for_user(request):
     queryset = _commission_base_queryset(request)
     if user_can_view_finance_data(request) or user_is_manager(request):
-        queryset = filter_queryset_by_organization(
-            queryset,
-            getattr(request, "organization", None),
-            field="sale__order__organization",
-        )
         return queryset
 
     profile = get_request_user_profile(request)
@@ -105,7 +104,11 @@ def _apply_commission_filters(queryset, request):
     effective_group, _, _ = resolve_dashboard_business_group(
         request, profile, can_view_all_groups
     )
-    queryset = apply_business_group_to_commissions(queryset, effective_group)
+    queryset = apply_business_group_to_commissions(
+        queryset,
+        effective_group,
+        organization=getattr(request, "organization", None),
+    )
     return queryset, start_date, end_date
 
 
@@ -116,7 +119,7 @@ def _parse_approval_body(request):
     queryset = _commission_base_queryset(request)
     org = getattr(request, "organization", None)
     if org:
-        queryset = queryset.filter(sale__order__organization=org)
+        queryset = queryset.filter(organization=org)
     if ids:
         queryset = queryset.filter(id__in=ids)
     elif start_date and end_date:
@@ -490,7 +493,7 @@ def leaderboard(request):
 
     q = (request.query_params.get("q") or "").strip()
     if q:
-        queryset = queryset.filter(commission_employee_search_q(q))
+        queryset = queryset.filter(commission_employee_search_q(q, organization=org))
 
     ranked = (
         queryset.values("employee_id", "employee__name", "employee__email")
@@ -506,7 +509,10 @@ def leaderboard(request):
 
     results = []
     for idx, row in enumerate(ranked[:limit], start=1):
-        profile = UserProfile.objects.filter(email=row["employee__email"]).first()
+        profile = UserProfile.objects.filter(
+            email__iexact=row["employee__email"],
+            organization=getattr(request, "organization", None),
+        ).first()
         results.append({
             "rank": idx,
             "employee_id": profile.employee_id if profile else None,
@@ -580,7 +586,7 @@ def mark_payout_run_paid_view(request, run_id):
     """Mark a payout run as paid and update linked commissions."""
     require_finance_or_admin(request)
     org = getattr(request, "organization", None)
-    payout_run = PayoutRun.objects.filter(pk=run_id).first()
+    payout_run = PayoutRun.objects.filter(pk=run_id, organization=org).first()
     if not payout_run:
         return Response({"error": "Payout run not found"}, status=404)
     if org and payout_run.organization_id != org.id:
@@ -623,9 +629,7 @@ class CommissionDisputeViewSet(viewsets.ModelViewSet):
         if user_can_view_finance_data(self.request) or user_is_manager(self.request):
             org = getattr(self.request, "organization", None)
             if org:
-                qs = qs.filter(
-                    commission__sale__order__organization=org
-                )
+                qs = qs.filter(commission__organization=org)
             return qs.order_by("-created_at")
 
         comm_ids = _commissions_for_user(self.request).values_list("id", flat=True)
@@ -680,11 +684,7 @@ def _user_can_access_dispute(request, dispute):
     if user_can_view_finance_data(request) or user_is_manager(request):
         org = getattr(request, "organization", None)
         if org:
-            return (
-                dispute.commission.sale.order.organization_id == org.id
-                if dispute.commission.sale_id
-                else False
-            )
+            return dispute.commission.organization_id == org.id
         return True
     return _commissions_for_user(request).filter(pk=dispute.commission_id).exists()
 
@@ -712,7 +712,14 @@ def resolve_commission_dispute(request, dispute_id):
     if not (user_is_manager(request) or user_can_view_finance_data(request)):
         return Response({"error": "Forbidden"}, status=403)
 
-    dispute = CommissionDispute.objects.filter(pk=dispute_id).select_related("commission").first()
+    dispute = (
+        CommissionDispute.objects.filter(
+            pk=dispute_id,
+            commission__organization=getattr(request, "organization", None),
+        )
+        .select_related("commission")
+        .first()
+    )
     if not dispute:
         return Response({"error": "Dispute not found"}, status=404)
     if dispute.status != CommissionDispute.STATUS_OPEN:
@@ -742,7 +749,10 @@ def resolve_commission_dispute(request, dispute_id):
 def acknowledge_commission_dispute(request, dispute_id):
     """Employee confirms they accept the resolved/rejected outcome."""
     dispute = (
-        CommissionDispute.objects.filter(pk=dispute_id)
+        CommissionDispute.objects.filter(
+            pk=dispute_id,
+            commission__organization=getattr(request, "organization", None),
+        )
         .select_related("commission", "commission__sale", "commission__sale__order")
         .first()
     )
@@ -895,8 +905,6 @@ def advanced_analytics_report(request):
         current=Sum("commission_amount")
     )
     prev_queryset = _commission_base_queryset(request)
-    if org:
-        prev_queryset = prev_queryset.filter(sale__order__organization=org)
     if scoped_to_self:
         prev_queryset = _commissions_for_user(request)
     prev_queryset = prev_queryset.filter(
@@ -920,7 +928,10 @@ def advanced_analytics_report(request):
             growth_pct = 100.0
         else:
             growth_pct = 0.0
-        profile = UserProfile.objects.filter(email=email).first()
+        profile = UserProfile.objects.filter(
+            email__iexact=email,
+            organization=org,
+        ).first()
         top_growth_reps.append(
             {
                 "employee_id": profile.employee_id if profile else None,

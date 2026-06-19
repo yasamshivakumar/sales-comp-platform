@@ -9,6 +9,7 @@ from rest_framework.authtoken.models import Token
 
 from .tenants import get_default_organization
 from .models import (
+    Organization,
     UserProfile,
     CompensationPlan,
     SCRateTable,
@@ -17,6 +18,7 @@ from .models import (
     Order,
     Commission,
     Employee,
+    Sale,
 )
 from .services import (
     resolve_compensation_plan,
@@ -1249,3 +1251,107 @@ class OrderStatusCommissionTests(TestCase):
         self.assertEqual(body["order_status"], "Success")
         self.assertTrue(body["has_commission"])
         self.assertEqual(float(body["commission_amount"]), 1000.0)
+
+
+class TenantIsolationAPITests(TestCase):
+    def setUp(self):
+        self.org_a = Organization.objects.create(slug="company-a", name="Company A")
+        self.org_b = Organization.objects.create(slug="company-b", name="Company B")
+
+        self.admin_a = User.objects.create_user(
+            username="admin-a@test.com",
+            email="admin-a@test.com",
+            password="test",
+        )
+        self.admin_b = User.objects.create_user(
+            username="admin-b@test.com",
+            email="admin-b@test.com",
+            password="test",
+        )
+        UserProfile.objects.create(
+            organization=self.org_a,
+            email=self.admin_a.email,
+            username=self.admin_a.username,
+            employee_id="A-ADMIN",
+            name="Admin A",
+            role="Admin",
+            enable_login=True,
+        )
+        UserProfile.objects.create(
+            organization=self.org_b,
+            email=self.admin_b.email,
+            username=self.admin_b.username,
+            employee_id="B-ADMIN",
+            name="Admin B",
+            role="Admin",
+            enable_login=True,
+        )
+        self.token_a = Token.objects.create(user=self.admin_a)
+        self.client_a = Client(HTTP_AUTHORIZATION=f"Token {self.token_a.key}")
+
+        self.comm_a = self._commission(self.org_a, "A-REP", "rep-a@test.com", "A-ORDER")
+        self.comm_b = self._commission(self.org_b, "B-REP", "rep-b@test.com", "B-ORDER")
+
+    def _commission(self, organization, employee_id, email, order_id):
+        employee = Employee.objects.create(
+            organization=organization,
+            name=employee_id,
+            email=email,
+        )
+        order = Order.objects.create(
+            organization=organization,
+            order_id=order_id,
+            order_date=date(2025, 1, 15),
+            employee_id=employee_id,
+            sales_amount=Decimal("10000.00"),
+            order_status="Success",
+        )
+        sale = Sale.objects.create(
+            organization=organization,
+            order=order,
+            employee=employee,
+            employee_salary=Decimal("0.00"),
+            amount=order.sales_amount,
+        )
+        return Commission.objects.create(
+            organization=organization,
+            employee=employee,
+            sale=sale,
+            commission_amount=Decimal("1000.00"),
+        )
+
+    def test_commission_list_only_returns_current_tenant_rows(self):
+        response = self.client_a.get("/api/commissions/")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        results = payload["results"] if isinstance(payload, dict) else payload
+        ids = {row["id"] for row in results}
+
+        self.assertIn(self.comm_a.id, ids)
+        self.assertNotIn(self.comm_b.id, ids)
+
+    def test_cross_tenant_commission_explanation_is_not_found(self):
+        response = self.client_a.get(
+            f"/api/commissions/{self.comm_b.id}/explanation/"
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_cross_tenant_approval_id_is_ignored(self):
+        response = self.client_a.post(
+            "/api/commissions/approve/",
+            {"ids": [self.comm_b.id]},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["approved"], 0)
+
+        self.comm_b.refresh_from_db()
+        self.assertEqual(self.comm_b.status, Commission.STATUS_CALCULATED)
+
+    def test_dashboard_summary_excludes_other_tenant(self):
+        response = self.client_a.get("/api/reports/commission-summary/")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        self.assertEqual(payload["total_count"], 1)
+        self.assertEqual(float(payload["total_commission"]), 1000.0)

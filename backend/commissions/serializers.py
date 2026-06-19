@@ -15,6 +15,23 @@ from .models import (
     CommissionRuleCondition,
     CommissionRuleResult,
 )
+
+
+def _request_organization(serializer):
+    request = serializer.context.get("request") if hasattr(serializer, "context") else None
+    return getattr(request, "organization", None)
+
+
+def _validate_tenant_owned(obj, organization, field_name):
+    if obj is None or organization is None:
+        return
+    obj_org_id = getattr(obj, "organization_id", None)
+    if obj_org_id and obj_org_id != organization.id:
+        raise serializers.ValidationError(
+            {field_name: "Selected value does not belong to this organization."}
+        )
+
+
 class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
@@ -73,12 +90,16 @@ class CommissionSerializer(serializers.ModelSerializer):
 
     def get_employee_id(self, obj):
         # Try to get employee_id from UserProfile if available
-        try:
-            user_profile = UserProfile.objects.get(email=obj.employee.email)
+        order = getattr(obj.sale, "order", None) if obj.sale_id else None
+        qs = UserProfile.objects.filter(email__iexact=obj.employee.email)
+        org_id = getattr(obj, "organization_id", None) or getattr(order, "organization_id", None)
+        if org_id:
+            qs = qs.filter(organization_id=org_id)
+        user_profile = qs.first()
+        if user_profile:
             return user_profile.employee_id
-        except UserProfile.DoesNotExist:
-            # Fallback: return a derived ID from employee email if no profile
-            return obj.employee.email.split('@')[0]
+        # Fallback: return a derived ID from employee email if no profile
+        return obj.employee.email.split('@')[0]
 
     def get_currency(self, obj):
         from .currencies import normalize_currency
@@ -95,6 +116,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
         from .currencies import normalize_currency
         from .field_rules import validate_user_profile_fields
 
+        org = _request_organization(self)
+        _validate_tenant_owned(attrs.get("territory"), org, "territory")
         raw = getattr(self, "initial_data", None) or {}
         if hasattr(raw, "dict"):
             raw = raw.dict()
@@ -263,6 +286,8 @@ class CompensationPlanSerializer(serializers.ModelSerializer):
             raw = raw.dict()
         merged = normalize_compensation_plan_payload({**raw, **attrs})
         validate_compensation_plan_fields(merged, partial=self.partial)
+        org = _request_organization(self)
+        _validate_tenant_owned(attrs.get("territory"), org, "territory")
 
         # Drop UI-only aliases before model create/update.
         merged.pop("comp_period", None)
@@ -393,7 +418,10 @@ class OrderSerializer(serializers.ModelSerializer):
         from .models import Commission
 
         return (
-            Commission.objects.filter(sale__order=obj).order_by("id").first()
+            Commission.objects.filter(
+                sale__order=obj,
+                organization=getattr(obj, "organization", None),
+            ).order_by("id").first()
         )
 
     def get_has_commission(self, obj):
@@ -409,6 +437,8 @@ class OrderSerializer(serializers.ModelSerializer):
         from .currencies import normalize_currency
         from .field_rules import validate_order_fields
 
+        org = _request_organization(self)
+        _validate_tenant_owned(attrs.get("territory"), org, "territory")
         raw = getattr(self, "initial_data", None) or {}
         if hasattr(raw, "dict"):
             raw = raw.dict()
@@ -509,6 +539,11 @@ class CommissionDisputeSerializer(serializers.ModelSerializer):
             "created_at",
         ]
 
+    def validate(self, attrs):
+        org = _request_organization(self)
+        _validate_tenant_owned(attrs.get("commission"), org, "commission")
+        return attrs
+
     def get_can_acknowledge(self, obj):
         from .enterprise_views import _dispute_can_acknowledge
 
@@ -547,7 +582,8 @@ class CommissionDisputeSerializer(serializers.ModelSerializer):
             from .models import UserProfile
 
             profile = UserProfile.objects.filter(
-                email=obj.commission.employee.email
+                email__iexact=obj.commission.employee.email,
+                organization=getattr(obj.commission, "organization", None),
             ).first()
             return profile.employee_id if profile else None
         except Exception:

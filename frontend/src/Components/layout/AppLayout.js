@@ -222,7 +222,10 @@ function NavList({ items, location, onNavigate }) {
   );
 }
 
-function AppTopBar({ pageTitle, displayName, initials }) {
+function AppTopBar({ pageTitle, displayName, initials, profile }) {
+  const roleLabel = profile?.role || "Workspace user";
+  const organizationLabel = profile?.organization_name || profile?.organization_slug || "";
+
   return (
     <Box
       sx={{
@@ -243,11 +246,51 @@ function AppTopBar({ pageTitle, displayName, initials }) {
       <Typography variant="subtitle2" color="text.secondary" sx={{ letterSpacing: "0.04em" }}>
         INCENTRA / {pageTitle?.toUpperCase()}
       </Typography>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-        <Typography variant="body2" color="text.secondary" fontWeight={600}>
-          {displayName}
-        </Typography>
-        <Avatar sx={{ width: 32, height: 32, fontSize: 12, bgcolor: "primary.main" }}>
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 1.25,
+          minWidth: 0,
+          px: 1.25,
+          py: 0.65,
+          borderRadius: 999,
+          border: "1px solid",
+          borderColor: "divider",
+          bgcolor: "background.default",
+          boxShadow: "0 8px 24px rgba(15, 23, 42, 0.06)",
+        }}
+      >
+        <Box sx={{ minWidth: 0, textAlign: "right" }}>
+          <Typography
+            variant="body2"
+            color="text.primary"
+            fontWeight={800}
+            noWrap
+            sx={{ maxWidth: 180, lineHeight: 1.15 }}
+          >
+            {displayName}
+          </Typography>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            noWrap
+            sx={{ display: "block", maxWidth: 180, lineHeight: 1.15 }}
+          >
+            {organizationLabel ? `${roleLabel} · ${organizationLabel}` : roleLabel}
+          </Typography>
+        </Box>
+        <Avatar
+          sx={{
+            width: 36,
+            height: 36,
+            fontSize: 12,
+            fontWeight: 800,
+            bgcolor: "primary.main",
+            color: "primary.contrastText",
+            boxShadow: "0 6px 16px rgba(25, 118, 210, 0.28)",
+          }}
+        >
           {initials}
         </Avatar>
       </Box>
@@ -278,7 +321,13 @@ function AppLayout({ children }) {
 
   const menuItems = getMenuItems(profile);
   const displayName = profile?.name || localStorage.getItem("name") || "User";
-  const initials = displayName.slice(0, 2).toUpperCase();
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "U";
 
   const pageTitle = useMemo(() => {
     const match = menuItems.find(
@@ -423,6 +472,7 @@ function AppLayout({ children }) {
           pageTitle={pageTitle}
           displayName={displayName}
           initials={initials}
+          profile={profile}
         />
         <Box
           className="container-fluid"

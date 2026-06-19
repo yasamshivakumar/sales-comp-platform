@@ -421,12 +421,14 @@ def build_commission_explanation(commission: Commission) -> dict:
 def _period_sales_and_commission(profile, start_date, end_date):
     qs = Commission.objects.filter(
         employee__email=profile.email,
+        organization=getattr(profile, "organization", None),
         sale__order__order_date__gte=start_date,
         sale__order__order_date__lte=end_date,
     )
     total_commission = sum(_decimal(c.commission_amount) for c in qs)
     order_qs = Order.objects.filter(
         employee_id=profile.employee_id,
+        organization=getattr(profile, "organization", None),
         order_date__gte=start_date,
         order_date__lte=end_date,
     )
@@ -866,10 +868,9 @@ def answer_commission_question(commission: Commission, question: str, request) -
 
 
 def get_request_profile(request):
-    try:
-        return UserProfile.objects.get(email=request.user.email)
-    except UserProfile.DoesNotExist:
-        return None
+    from .permissions import get_request_user_profile
+
+    return get_request_user_profile(request)
 
 
 def simulate_what_if(request, extra_sales: Decimal, start_date, end_date) -> dict:
@@ -904,6 +905,7 @@ def simulate_what_if(request, extra_sales: Decimal, start_date, end_date) -> dic
             CompensationPlan.objects.filter(
                 status="Active",
                 role__iexact=profile.role or "",
+                organization=profile.organization,
             )
             .order_by("-updated_at")
             .first()
