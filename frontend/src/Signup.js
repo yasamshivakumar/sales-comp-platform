@@ -17,6 +17,7 @@ import AuthPageLayout, { authFormCardSx } from "./Components/AuthPageLayout";
 import { enterprise } from "./theme/muiTheme";
 
 function Signup() {
+  const [companyName, setCompanyName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,7 +27,7 @@ function Signup() {
   const { success, error } = useToast();
 
   const validateForm = () => {
-    if (!username || !email || !password || !confirmPassword) {
+    if (!companyName || !username || !email || !password || !confirmPassword) {
       error({ title: "Required fields", message: "All fields must be completed." });
       return false;
     }
@@ -50,6 +51,7 @@ function Signup() {
     setLoading(true);
     try {
       await api.post("auth/signup/", {
+        organization_name: companyName.trim(),
         username,
         email: email.trim().toLowerCase(),
         password,
@@ -106,6 +108,15 @@ function Signup() {
         </Typography>
 
         <Stack spacing={2}>
+          <AuthTextField
+            label="Company name"
+            placeholder="Example: Acme Sales Pvt Ltd"
+            value={companyName}
+            onChange={(e) => setCompanyName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSignup()}
+            disabled={loading}
+            autoComplete="organization"
+          />
           <AuthTextField
             label="Username"
             placeholder="Choose a username"
