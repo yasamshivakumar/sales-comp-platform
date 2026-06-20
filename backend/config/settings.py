@@ -109,6 +109,8 @@ REST_FRAMEWORK = {
     },
 }
 
+TOKEN_TTL_MINUTES = int(os.getenv("TOKEN_TTL_MINUTES", "60"))
+
 ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [
@@ -218,13 +220,17 @@ def _cors_allowed_origins():
         "CORS_ALLOWED_ORIGINS",
         "http://localhost:3000,http://127.0.0.1:3000",
     )
+
+    def add_origin(origin):
+        if origin and origin not in origins:
+            origins.append(origin)
+
     frontend = os.getenv("FRONTEND_URL", "").strip().rstrip("/")
-    if frontend and frontend not in origins:
-        origins.append(frontend)
+    add_origin(frontend)
     if frontend.startswith("https://") and "://www." not in frontend:
-        www = frontend.replace("https://", "https://www.", 1)
-        if www not in origins:
-            origins.append(www)
+        add_origin(frontend.replace("https://", "https://www.", 1))
+    if frontend.startswith("https://www."):
+        add_origin(frontend.replace("https://www.", "https://", 1))
     return origins
 
 

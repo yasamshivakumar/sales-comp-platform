@@ -17,6 +17,8 @@ const apiBaseURL =
   (isDevelopment ? "/api" : `${apiHost}/api`);
 
 const isDebugEnabled = process.env.REACT_APP_DEBUG === "true";
+const SESSION_EXPIRES_AT_KEY = "token_expires_at";
+let logoutTimer = null;
 
 if (isDevelopment && isDebugEnabled) {
   console.log("[API] Host:", apiHost);
@@ -32,7 +34,65 @@ const api = axios.create({
   },
 });
 
+export function clearAuthStorage() {
+  localStorage.removeItem("token");
+  localStorage.removeItem(SESSION_EXPIRES_AT_KEY);
+  localStorage.removeItem("username");
+  localStorage.removeItem("email");
+  localStorage.removeItem("role");
+  localStorage.removeItem("user_id");
+  localStorage.removeItem("name");
+}
+
+function sessionExpiresAtMs() {
+  const value = localStorage.getItem(SESSION_EXPIRES_AT_KEY);
+  if (!value) return null;
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+export function isSessionExpired() {
+  const expiresAt = sessionExpiresAtMs();
+  return Boolean(expiresAt && Date.now() >= expiresAt);
+}
+
+export function scheduleAutoLogout() {
+  if (logoutTimer) {
+    clearTimeout(logoutTimer);
+    logoutTimer = null;
+  }
+  const expiresAt = sessionExpiresAtMs();
+  if (!expiresAt) return;
+  const delay = Math.max(expiresAt - Date.now(), 0);
+  logoutTimer = setTimeout(() => {
+    clearAuthStorage();
+    window.dispatchEvent(new CustomEvent("session-expired"));
+    if (window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
+  }, delay);
+}
+
+export function saveAuthSession(data) {
+  localStorage.setItem("token", data.token);
+  localStorage.setItem("email", data.email || "");
+  localStorage.setItem("user_id", data.user_id || "");
+  localStorage.setItem("role", data.role || "");
+  localStorage.setItem("name", data.name || "");
+  if (data.token_expires_at) {
+    localStorage.setItem(SESSION_EXPIRES_AT_KEY, data.token_expires_at);
+  } else {
+    localStorage.removeItem(SESSION_EXPIRES_AT_KEY);
+  }
+  scheduleAutoLogout();
+}
+
 api.interceptors.request.use((config) => {
+  if (isSessionExpired()) {
+    clearAuthStorage();
+    window.dispatchEvent(new CustomEvent("session-expired"));
+    return Promise.reject(new Error("Session expired. Please sign in again."));
+  }
   const token = localStorage.getItem("token");
   if (token) {
     config.headers.Authorization = `Token ${token}`;
@@ -52,12 +112,7 @@ api.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("username");
-      localStorage.removeItem("email");
-      localStorage.removeItem("role");
-      localStorage.removeItem("user_id");
-      localStorage.removeItem("name");
+      clearAuthStorage();
       window.dispatchEvent(new CustomEvent("unauthorized"));
     }
 
@@ -68,6 +123,8 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+scheduleAutoLogout();
 
 export function getApiErrorMessage(err, fallback = "Request failed") {
   if (!err.response) {

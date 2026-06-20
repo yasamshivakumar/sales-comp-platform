@@ -169,6 +169,7 @@ logger = logging.getLogger("commissions")
 
 from .user_scope import profile_commission_q
 from .auth_utils import provision_login_user
+from .authentication import token_expires_at
 
 
 class EmployeeViewSet(viewsets.ModelViewSet):
@@ -1032,8 +1033,10 @@ def email_login(request):
         )
     
     try:
-        # Get or create token
-        token, _ = Token.objects.get_or_create(user=user)
+        # Rotate the token on login so the session timeout starts now.
+        Token.objects.filter(user=user).delete()
+        token = Token.objects.create(user=user)
+        expires_at = token_expires_at(token)
         
         # Get user profile for additional info
         user_profile = (
@@ -1054,6 +1057,7 @@ def email_login(request):
             'user_id': user.id,
             'role': user_profile.role if user_profile else 'Sales Rep',
             'name': user_profile.name if user_profile else user.get_full_name() or user.username,
+            'token_expires_at': expires_at.isoformat() if expires_at else None,
         })
         
     except Exception as e:
@@ -1120,13 +1124,15 @@ def change_password(request):
         Token.objects.filter(user=user).delete()
         
         # Create new token for current session
-        token, _ = Token.objects.get_or_create(user=user)
+        token = Token.objects.create(user=user)
+        expires_at = token_expires_at(token)
         
         logger.info(f"Password changed successfully for user: {user.email}")
         
         return Response({
             'message': 'Password changed successfully',
-            'token': token.key
+            'token': token.key,
+            'token_expires_at': expires_at.isoformat() if expires_at else None,
         })
         
     except Exception as e:

@@ -11,7 +11,7 @@ import {
 import BoltIcon from "@mui/icons-material/Bolt";
 import SecurityIcon from "@mui/icons-material/Security";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
-import api, { getApiErrorMessage } from "./api";
+import api, { getApiErrorMessage, saveAuthSession } from "./api";
 import { useToast } from "./Components/Toast";
 import AuthTextField from "./Components/AuthTextField";
 import AuthPageLayout, { authFormCardSx } from "./Components/AuthPageLayout";
@@ -63,11 +63,7 @@ function Login() {
         email: email.trim().toLowerCase(),
         password,
       });
-      localStorage.setItem("token", res.data.token);
-      localStorage.setItem("email", res.data.email);
-      localStorage.setItem("user_id", res.data.user_id);
-      localStorage.setItem("role", res.data.role);
-      localStorage.setItem("name", res.data.name);
+      saveAuthSession(res.data);
       success({
         title: "Welcome back",
         message: `Signed in as ${res.data.name || res.data.email}. Opening dashboard…`,
