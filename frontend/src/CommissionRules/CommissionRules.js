@@ -3,8 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import api from "../api";
 import { useToast } from "../Components/Toast";
 import PageHeader from "../Components/PageHeader";
-import { formatMoney } from "../utils/currency";
-import { currencyForBusinessGroup } from "../utils/businessGroups";
+import { formatMoney, normalizeCurrency } from "../utils/currency";
+import { businessGroupLabel, currencyForBusinessGroup } from "../utils/businessGroups";
 import RuleEditor from "./RuleEditor";
 import "./commissionRules.css";
 
@@ -80,19 +80,35 @@ function normalizeResult(row, index) {
   };
 }
 
-function planCurrency(plan) {
-  return plan?.currency || currencyForBusinessGroup(plan?.business_group || "");
+function conditionCurrency(conditions = []) {
+  const currencyCondition = conditions.find(
+    (row) => row.field === "currency" && row.value
+  );
+  if (!currencyCondition) return "";
+  const firstCurrency = String(currencyCondition.value).split(",")[0].trim();
+  return normalizeCurrency(firstCurrency, "");
+}
+
+function planCurrency(plan, draft) {
+  return (
+    conditionCurrency(draft?.conditions) ||
+    plan?.currency ||
+    currencyForBusinessGroup(plan?.business_group || "", "")
+  );
 }
 
 function resultSummary(result, currency, fallbackResult) {
   if (!result || result.rate_value == null) return "";
   const value = result.rate_value;
   const type = fallbackResult?.result_rate_type || result.result_rate_type;
+  const money = currency
+    ? formatMoney(value, currency)
+    : `${Number(value).toFixed(2)} in order currency`;
   if (type === "add_bonus") {
-    return `Bonus ${formatMoney(value, currency)}`;
+    return `Bonus ${money}`;
   }
   if (type === "flat_amount" || type === "override") {
-    return `Amount ${formatMoney(value, currency)}`;
+    return `Amount ${money}`;
   }
   if (type === "override_tier_pct" || type === "percentage") {
     return `Rate ${Number(value).toFixed(2)}%`;
@@ -114,6 +130,8 @@ function CommissionRules() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const { success, error } = useToast();
+  const selectedPlan = plans.find((plan) => String(plan.id) === String(draft?.compensation_plan));
+  const selectedCurrency = planCurrency(selectedPlan, draft);
 
   const fetchRules = useCallback(() => {
     setLoading(true);
@@ -188,8 +206,6 @@ function CommissionRules() {
       return;
     }
     setSaving(true);
-    const selectedPlan = plans.find((plan) => String(plan.id) === String(draft.compensation_plan));
-    const selectedCurrency = planCurrency(selectedPlan);
     const payload = {
       name: draft.name.trim(),
       rule_type: draft.rule_type || "commission_rate",
@@ -275,7 +291,10 @@ function CommissionRules() {
             <option value="">All plans</option>
             {plans.map((plan) => (
               <option key={plan.id} value={plan.id}>
-                {plan.plan_name} ({plan.role || "—"})
+                {plan.plan_name} ({plan.role || "—"}
+                {plan.business_group
+                  ? ` · ${businessGroupLabel(plan.business_group)} ${currencyForBusinessGroup(plan.business_group, "")}`
+                  : ""})
               </option>
             ))}
           </select>
@@ -329,9 +348,7 @@ function CommissionRules() {
                 setDraft={setDraft}
                 choices={choices}
                 plans={plans}
-            currency={planCurrency(
-              plans.find((plan) => String(plan.id) === String(draft.compensation_plan))
-            )}
+                currency={selectedCurrency}
               />
               <div className="cr-actions">
                 <button

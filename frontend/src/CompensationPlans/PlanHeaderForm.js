@@ -2,6 +2,7 @@ import { useState } from "react";
 import api, { getApiErrorMessage } from "../api";
 import { useToast } from "../Components/Toast";
 import MonthPickerField from "../Components/MonthPickerField";
+import { BUSINESS_GROUP_OPTIONS } from "../utils/businessGroups";
 
 const INITIAL_FORM = {
   plan_name: "",
@@ -152,6 +153,20 @@ function PlanHeaderForm({ onPlanCreated, onCancel }) {
             <option value="flat">SC Flat Rate Table (single %)</option>
             <option value="lookup">SC Lookup Table (product / service / distribution)</option>
           </select>
+        </div>
+        <div className="form-field">
+          <label>Business group / currency</label>
+          <select name="business_group" value={form.business_group} onChange={handleChange}>
+            <option value="">Use order currency</option>
+            {BUSINESS_GROUP_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label} ({option.currency})
+              </option>
+            ))}
+          </select>
+          <small style={{ color: "var(--text-muted)", fontSize: 12 }}>
+            Used to show rule bonus amounts in the right currency.
+          </small>
         </div>
         {form.table_type !== "lookup" && (
         <div className="form-field">

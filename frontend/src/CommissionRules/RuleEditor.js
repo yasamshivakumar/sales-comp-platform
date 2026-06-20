@@ -56,6 +56,7 @@ function resultDefaultsForType(resultType, sequence) {
 
 function RuleEditor({ draft, setDraft, choices, plans, currency = "INR" }) {
   const update = (patch) => setDraft({ ...draft, ...patch });
+  const amountCurrencyLabel = currency || "order currency";
 
   const updateCondition = (index, patch) => {
     const conditions = [...(draft.conditions || [])];
@@ -73,9 +74,9 @@ function RuleEditor({ draft, setDraft, choices, plans, currency = "INR" }) {
     if (row.result_rate_type === "override_tier_pct" || row.result_rate_type === "percentage") {
       return "Override tier rate (%) *";
     }
-    if (row.result_rate_type === "add_bonus") return `Bonus amount (${currency}) *`;
+    if (row.result_rate_type === "add_bonus") return `Bonus amount (${amountCurrencyLabel}) *`;
     if (row.result_rate_type === "flat_amount" || row.result_rate_type === "override") {
-      return `Amount (${currency}) *`;
+      return `Amount (${amountCurrencyLabel}) *`;
     }
     if (row.result_rate_type === "multiplier") return "Multiplier *";
     return "Value *";

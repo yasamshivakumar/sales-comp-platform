@@ -39,7 +39,7 @@ export function currencyForBusinessGroup(businessGroup, personalCurrency) {
   const normalized = normalizeBusinessGroup(businessGroup, "");
   const item = BY_VALUE[normalized];
   if (item) return item.currency;
-  return normalizeCurrency(personalCurrency);
+  return normalizeCurrency(personalCurrency, "");
 }
 
 export function businessGroupLabel(value) {
