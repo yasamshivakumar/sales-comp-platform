@@ -5,12 +5,16 @@ import {
   Button,
   Card,
   CircularProgress,
+  IconButton,
+  InputAdornment,
   Stack,
   Typography,
 } from "@mui/material";
 import BoltIcon from "@mui/icons-material/Bolt";
 import SecurityIcon from "@mui/icons-material/Security";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import api, { getApiErrorMessage, saveAuthSession } from "./api";
 import { useToast } from "./Components/Toast";
 import AuthTextField from "./Components/AuthTextField";
@@ -23,6 +27,7 @@ const oidcEnabled = process.env.REACT_APP_OIDC_ENABLED === "true";
 function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { success, error } = useToast();
@@ -139,13 +144,27 @@ function Login() {
           />
           <AuthTextField
             label="Password"
-            type="password"
+            type={showPassword ? "text" : "password"}
             placeholder="Enter your password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleLogin()}
             disabled={loading}
             autoComplete="current-password"
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    edge="end"
+                    onClick={() => setShowPassword((value) => !value)}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
           />
           <Button
             variant="contained"

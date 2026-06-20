@@ -162,7 +162,7 @@ def _statement_line_from_commission(comm, profile):
         "id": comm.id,
         "order_id": order.order_id if order else None,
         "order_date": str(order.order_date) if order else None,
-        "product": order.service_name if order else None,
+        "product": (order.product_name or order.service_name) if order else None,
         "sales_amount": str(sales) if sales is not None else None,
         "commission_amount": str(amount),
         "currency": currency,
@@ -204,6 +204,25 @@ def employee_statement(request):
 
     profile = get_request_user_profile(request)
     profile_employee_id = profile.employee_id if profile else None
+
+    if profile_employee_id:
+        employee_orders = Order.objects.filter(employee_id=profile_employee_id)
+        if start_date and end_date:
+            employee_orders = employee_orders.filter(order_date__range=[start_date, end_date])
+        org = getattr(request, "organization", None)
+        if org:
+            employee_orders = employee_orders.filter(organization=org)
+
+        # A rep statement must not show an order as "No commission" when a commission
+        # exists but was filtered out by a report/business-group scope.
+        missed_commissions = (
+            _commission_base_queryset(request)
+            .filter(sale__order__in=employee_orders)
+            .filter(profile_commission_q(profile, request.user.email))
+            .exclude(pk__in=queryset.values("pk"))
+        )
+        if missed_commissions.exists():
+            queryset = queryset | missed_commissions
 
     orders = []
     credits = []
@@ -267,7 +286,7 @@ def employee_statement(request):
                     "id": None,
                     "order_id": order.order_id,
                     "order_date": str(order.order_date),
-                    "product": order.service_name,
+                    "product": order.product_name or order.service_name,
                     "sales_amount": str(order.sales_amount),
                     "commission_amount": "0.00",
                     "currency": normalize_currency(getattr(order, "currency", None)),

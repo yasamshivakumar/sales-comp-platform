@@ -5,11 +5,15 @@ import {
   Button,
   Card,
   CircularProgress,
+  IconButton,
+  InputAdornment,
   Link,
   Stack,
   Typography,
 } from "@mui/material";
 import BoltIcon from "@mui/icons-material/Bolt";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import api, { getApiErrorMessage } from "./api";
 import { useToast } from "./Components/Toast";
 import AuthTextField from "./Components/AuthTextField";
@@ -22,6 +26,8 @@ function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { success, error } = useToast();
@@ -138,23 +144,51 @@ function Signup() {
           />
           <AuthTextField
             label="Password"
-            type="password"
+            type={showPassword ? "text" : "password"}
             placeholder="At least 6 characters"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSignup()}
             disabled={loading}
             autoComplete="new-password"
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    edge="end"
+                    onClick={() => setShowPassword((value) => !value)}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
           />
           <AuthTextField
             label="Confirm password"
-            type="password"
+            type={showConfirmPassword ? "text" : "password"}
             placeholder="Re-enter password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSignup()}
             disabled={loading}
             autoComplete="new-password"
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                    edge="end"
+                    onClick={() => setShowConfirmPassword((value) => !value)}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    {showConfirmPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
           />
           <Button
             variant="contained"

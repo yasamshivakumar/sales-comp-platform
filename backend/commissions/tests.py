@@ -896,6 +896,76 @@ class UserSetupDuplicateTests(TestCase):
         self.assertIn("Employee ID", res.json()["errors"][0]["error"])
 
 
+class EmployeeStatementTests(TestCase):
+    def setUp(self):
+        self.org = get_default_organization()
+        self.start = date(2026, 6, 12)
+        self.rep_user = User.objects.create_user(
+            username="rep-statement@test.com",
+            email="rep-statement@test.com",
+            password="testpass",
+        )
+        UserProfile.objects.create(
+            organization=self.org,
+            employee_id="EMP91",
+            email="rep-statement@test.com",
+            name="Kodi",
+            role="Sales Rep",
+            business_group="",
+            enable_login=True,
+        )
+        plan = CompensationPlan.objects.create(
+            organization=self.org,
+            plan_name="Rep Statement Plan",
+            effective_start_date=date(2026, 6, 1),
+            effective_end_date=date(2026, 6, 30),
+            status="Active",
+            role="Sales Rep",
+            commission_table_type="RATE",
+        )
+        SCRateTable.objects.create(
+            compensation_plan=plan,
+            from_amount=Decimal("0"),
+            to_amount=None,
+            commission_rate=Decimal("10"),
+            bonus_amount=Decimal("0"),
+            is_active=True,
+            sequence=1,
+        )
+        self.order = Order.objects.create(
+            organization=self.org,
+            order_id="ORDERID92",
+            order_date=self.start,
+            employee_id="EMP91",
+            product_name="Enterprise Subscription",
+            sales_amount=Decimal("150000"),
+            order_status="Success",
+            currency="USD",
+            business_group="",
+        )
+        self.commission = calculate_commission_for_order(self.order)
+        self.commission.status = Commission.STATUS_APPROVED
+        self.commission.save(update_fields=["status"])
+        token = Token.objects.create(user=self.rep_user)
+        self.auth = {"HTTP_AUTHORIZATION": f"Token {token.key}"}
+        self.client = Client()
+
+    def test_employee_statement_reconciles_generated_commission_for_own_order(self):
+        response = self.client.get("/api/statements/me/", **self.auth)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["summary"]["total_commission_earned"], "15000.00")
+        self.assertEqual(len(payload["orders"]), 1)
+        line = payload["orders"][0]
+        self.assertEqual(line["order_id"], "ORDERID92")
+        self.assertEqual(line["product"], "Enterprise Subscription")
+        self.assertEqual(line["commission_amount"], "15000.00")
+        self.assertEqual(line["currency"], "USD")
+        self.assertEqual(line["status"], Commission.STATUS_APPROVED)
+        self.assertIsNotNone(line["id"])
+
+
 class EmployeeDisputeTests(TestCase):
     def setUp(self):
         self.org = get_default_organization()
