@@ -156,9 +156,25 @@ function Signup() {
                 <InputAdornment position="end">
                   <IconButton
                     aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
                     edge="end"
+                    size="small"
+                    type="button"
                     onClick={() => setShowPassword((value) => !value)}
                     onMouseDown={(e) => e.preventDefault()}
+                    sx={{
+                      width: "32px !important",
+                      minWidth: "32px !important",
+                      height: "32px",
+                      p: "4px !important",
+                      bgcolor: "transparent !important",
+                      boxShadow: "none !important",
+                      color: "text.secondary",
+                      "&:hover": {
+                        bgcolor: "action.hover !important",
+                        transform: "none",
+                      },
+                    }}
                   >
                     {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
                   </IconButton>
@@ -180,9 +196,25 @@ function Signup() {
                 <InputAdornment position="end">
                   <IconButton
                     aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showConfirmPassword}
                     edge="end"
+                    size="small"
+                    type="button"
                     onClick={() => setShowConfirmPassword((value) => !value)}
                     onMouseDown={(e) => e.preventDefault()}
+                    sx={{
+                      width: "32px !important",
+                      minWidth: "32px !important",
+                      height: "32px",
+                      p: "4px !important",
+                      bgcolor: "transparent !important",
+                      boxShadow: "none !important",
+                      color: "text.secondary",
+                      "&:hover": {
+                        bgcolor: "action.hover !important",
+                        transform: "none",
+                      },
+                    }}
                   >
                     {showConfirmPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
                   </IconButton>
