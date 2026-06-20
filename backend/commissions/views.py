@@ -1303,7 +1303,6 @@ def commission_summary_report(request):
         apply_business_group_to_commissions,
         business_group_choices_for_api,
         commission_totals_by_business_group,
-        currency_for_business_group,
         resolve_dashboard_business_group,
     )
     from .permissions import user_is_finance
@@ -1357,36 +1356,38 @@ def commission_summary_report(request):
             organization=org,
         ) if view_all_groups else []
     )
-    if effective_group:
-        primary_currency = currency_for_business_group(effective_group, personal_currency)
-    else:
-        primary_currency = primary_currency_from_totals(
-            [
-                {"currency": row["currency"], "total": row["total"]}
-                for row in by_business_group
-            ],
-            fallback=personal_currency,
-        )
-    totals_by_currency = (
-        active_currency_totals(
-            [{"currency": primary_currency, "total": float(total_commission)}]
-        )
-        if effective_group
-        else active_currency_totals(
-            [
-                {"currency": row["currency"], "total": row["total"]}
-                for row in by_business_group
-            ]
-        )
+    totals_by_currency = active_currency_totals(
+        [
+            {
+                "currency": normalize_currency(row["sale__order__currency"]),
+                "total": float(row["total"] or 0),
+            }
+            for row in commissions.values("sale__order__currency").annotate(
+                total=Sum("commission_amount")
+            )
+        ]
     )
+    primary_currency = primary_currency_from_totals(
+        totals_by_currency,
+        fallback=personal_currency,
+    )
+
+    def _commission_currency_for_row(row):
+        return normalize_currency(row.get("sale__order__currency"), primary_currency)
+
+    def _commission_group_fields(*fields):
+        return commissions.values(*fields, "sale__order__currency").annotate(
+            total=Sum("commission_amount"),
+            count=Count("id"),
+        )
 
     # Top earners (only for admin)
     top_earners = []
     if is_admin:
-        for row in commissions.values('employee__name', 'employee__email').annotate(
-            total=Sum('commission_amount'),
-            count=Count('id'),
-        ).order_by('-total')[:5]:
+        for row in _commission_group_fields(
+            "employee__name",
+            "employee__email",
+        ).order_by("-total")[:5]:
             profile = UserProfile.objects.filter(
                 email__iexact=row["employee__email"],
                 organization=org,
@@ -1395,10 +1396,7 @@ def commission_summary_report(request):
                 {
                     **row,
                     "business_group": profile.business_group if profile else "",
-                    "currency": currency_for_business_group(
-                        profile.business_group if profile else effective_group,
-                        profile.personal_currency if profile else primary_currency,
-                    ),
+                    "currency": _commission_currency_for_row(row),
                 }
             )
 
@@ -1443,7 +1441,6 @@ def sales_performance_report(request):
     from .business_groups import (
         apply_business_group_to_orders,
         business_group_choices_for_api,
-        currency_for_business_group,
         resolve_dashboard_business_group,
         sales_totals_by_business_group,
     )
@@ -1500,37 +1497,32 @@ def sales_performance_report(request):
             organization=org,
         ) if view_all_groups else []
     )
-    if effective_group:
-        primary_currency = currency_for_business_group(effective_group, personal_currency)
-    else:
-        primary_currency = primary_currency_from_totals(
-            [
-                {"currency": row["currency"], "total": row["total"]}
-                for row in by_business_group
-            ],
-            fallback=personal_currency,
-        )
-    totals_by_currency = (
-        active_currency_totals([{"currency": primary_currency, "total": float(total_sales)}])
-        if effective_group
-        else active_currency_totals(
-            [
-                {"currency": row["currency"], "total": row["total"]}
-                for row in by_business_group
-            ]
-        )
+    totals_by_currency = active_currency_totals(
+        [
+            {
+                "currency": normalize_currency(row["currency"]),
+                "total": float(row["total"] or 0),
+            }
+            for row in orders.values("currency").annotate(
+                total=Sum("sales_amount")
+            )
+        ]
     )
+    primary_currency = primary_currency_from_totals(
+        totals_by_currency,
+        fallback=personal_currency,
+    )
+
+    def _order_currency_for_row(row):
+        return normalize_currency(row.get("currency"), primary_currency)
+
     sales_rows = []
     for row in sales_data:
         profile = UP.objects.filter(employee_id=row["employee_id"]).first()
-        row_currency = currency_for_business_group(
-            profile.business_group if profile else effective_group,
-            row.get("currency") or primary_currency,
-        )
         sales_rows.append(
             {
                 **row,
-                "currency": row_currency,
+                "currency": _order_currency_for_row(row),
                 "business_group": profile.business_group if profile else "",
                 "total_sales": float(row["total_sales"] or 0),
                 "avg_order": float(row["avg_order"] or 0),
@@ -1572,7 +1564,6 @@ def employee_earnings_report(request):
 
     from .business_groups import (
         apply_business_group_to_commissions,
-        currency_for_business_group,
         resolve_dashboard_business_group,
     )
     from .permissions import user_is_finance
@@ -1607,8 +1598,10 @@ def employee_earnings_report(request):
             commission_employee_search_q(q, organization=getattr(request, "organization", None))
         )
 
+    from .currencies import normalize_currency
+
     earnings_data = commissions.values(
-        'employee__name', 'employee__email', 'employee_id'
+        'employee__name', 'employee__email', 'employee_id', 'sale__order__currency'
     ).annotate(
         total_earnings=Sum('commission_amount'),
         commission_count=Count('id'),
@@ -1627,10 +1620,7 @@ def employee_earnings_report(request):
             {
                 **row,
                 "business_group": profile.business_group if profile else "",
-                "currency": currency_for_business_group(
-                    profile.business_group if profile else effective_group,
-                    profile.personal_currency if profile else None,
-                ),
+                "currency": normalize_currency(row.get("sale__order__currency")),
             }
         )
 
@@ -1657,7 +1647,6 @@ def period_analytics_report(request):
     from .currencies import active_currency_totals, normalize_currency, primary_currency_from_totals
     from .business_groups import (
         apply_business_group_to_commissions,
-        currency_for_business_group,
         resolve_dashboard_business_group,
     )
     from .permissions import user_is_finance
@@ -1744,33 +1733,22 @@ def period_analytics_report(request):
             cursor = next_month
 
     period_data = []
-    period_primary_currency = (
-        currency_for_business_group(effective_group, user_profile.personal_currency if user_profile else None)
-        if effective_group
-        else None
-    )
     for bucket_start, bucket_end, label in iter_buckets():
         bucket_qs = commissions.filter(
             sale__order__order_date__gte=bucket_start,
             sale__order__order_date__lte=bucket_end,
         )
-        if period_primary_currency:
-            bucket_total = bucket_qs.aggregate(total=Sum("commission_amount"))["total"] or 0
-            totals_by_currency = active_currency_totals(
-                [{"currency": period_primary_currency, "total": float(bucket_total)}]
-            )
-        else:
-            totals_by_currency = active_currency_totals(
-                [
-                    {
-                        "currency": normalize_currency(row["sale__order__currency"]),
-                        "total": float(row["total"] or 0),
-                    }
-                    for row in bucket_qs.values("sale__order__currency").annotate(
-                        total=Sum("commission_amount")
-                    )
-                ]
-            )
+        totals_by_currency = active_currency_totals(
+            [
+                {
+                    "currency": normalize_currency(row["sale__order__currency"]),
+                    "total": float(row["total"] or 0),
+                }
+                for row in bucket_qs.values("sale__order__currency").annotate(
+                    total=Sum("commission_amount")
+                )
+            ]
+        )
         total = sum(item["total"] for item in totals_by_currency)
         period_data.append({
             'period': label,
@@ -1787,33 +1765,20 @@ def period_analytics_report(request):
     personal_currency = normalize_currency(
         user_profile.personal_currency if user_profile else None
     )
-    if effective_group:
-        primary_currency = currency_for_business_group(effective_group, personal_currency)
-        overall_totals = active_currency_totals(
-            [
-                {
-                    "currency": primary_currency,
-                    "total": float(
-                        commissions.aggregate(total=Sum("commission_amount"))["total"] or 0
-                    ),
-                }
-            ]
-        )
-    else:
-        overall_totals = active_currency_totals(
-            [
-                {
-                    "currency": normalize_currency(row["sale__order__currency"]),
-                    "total": float(row["total"] or 0),
-                }
-                for row in commissions.values("sale__order__currency").annotate(
-                    total=Sum("commission_amount")
-                )
-            ]
-        )
-        primary_currency = primary_currency_from_totals(
-            overall_totals, fallback=personal_currency
-        )
+    overall_totals = active_currency_totals(
+        [
+            {
+                "currency": normalize_currency(row["sale__order__currency"]),
+                "total": float(row["total"] or 0),
+            }
+            for row in commissions.values("sale__order__currency").annotate(
+                total=Sum("commission_amount")
+            )
+        ]
+    )
+    primary_currency = primary_currency_from_totals(
+        overall_totals, fallback=personal_currency
+    )
 
     return Response({
         'period': period,

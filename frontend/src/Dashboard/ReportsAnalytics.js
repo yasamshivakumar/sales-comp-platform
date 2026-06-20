@@ -9,7 +9,6 @@ import {
 import {
   BUSINESS_GROUP_OPTIONS,
   businessGroupLabel,
-  currencyForBusinessGroup,
 } from "../utils/businessGroups";
 import "./reportsAnalytics.css";
 
@@ -347,11 +346,9 @@ function ReportsAnalytics({ compact = false }) {
   const periodHasValues = periodSeries.some((value) => value > 0);
   const periodCurrencies = activeCurrencyTotals(periodData?.totals_by_currency);
   const trendCurrency =
-    businessGroup !== "all"
-      ? currencyForBusinessGroup(businessGroup, periodData?.personal_currency)
-      : periodCurrencies.length === 1
-        ? periodCurrencies[0].currency
-        : "";
+    periodCurrencies.length === 1
+      ? periodCurrencies[0].currency
+      : "";
   const trendScope =
     businessGroup === "all" ? "All business groups" : businessGroupLabel(businessGroup);
   const periodLabels = {
