@@ -205,9 +205,19 @@ function Commissions() {
       const scopeNote = s.scoped
         ? ` (filtered: "${s.employee_q}")`
         : " (all employees)";
-      setActionMessage(
-        `Recalculated ${s.processed} order(s)${scopeNote}. Skipped (approved): ${s.skipped_approved}. Failed: ${s.failed}.`
-      );
+      const skippedApproved = Number(s.skipped_approved || 0);
+      const failed = Number(s.failed || 0);
+      const resultParts = [`Recalculated ${s.processed} order(s)${scopeNote}.`];
+      if (skippedApproved > 0) {
+        resultParts.push(`Skipped ${skippedApproved} locked/approved order(s).`);
+      }
+      if (failed > 0) {
+        resultParts.push(`Failed: ${failed}.`);
+      }
+      if (skippedApproved === 0 && failed === 0) {
+        resultParts.push("No locked/approved orders were skipped.");
+      }
+      setActionMessage(resultParts.join(" "));
       fetchCommissions(searchTerm);
     } catch (err) {
       setActionMessage(err.response?.data?.error || "Recalculate failed.");
