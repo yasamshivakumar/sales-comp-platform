@@ -212,7 +212,7 @@ def employee_statement(request):
     paid_total = Decimal("0.00")
     totals_by_currency = {}
     payout_buckets = {
-        status: {"count": 0, "amount": Decimal("0.00")}
+        status: {"count": 0, "amount": Decimal("0.00"), "currency_totals": {}}
         for status, _ in Commission.STATUS_CHOICES
     }
 
@@ -242,6 +242,9 @@ def employee_statement(request):
         if bucket is not None:
             bucket["count"] += 1
             bucket["amount"] += amount
+            bucket["currency_totals"][currency] = (
+                bucket["currency_totals"].get(currency, Decimal("0.00")) + amount
+            )
 
         if line["line_type"] == "credit":
             credits.append(line)
@@ -307,6 +310,7 @@ def employee_statement(request):
                         dispute.resolved_at.isoformat() if dispute.resolved_at else None
                     ),
                     "commission_amount": str(dispute.commission.commission_amount),
+                    "currency": normalize_currency(getattr(order, "currency", None)),
                 }
             )
 
@@ -316,6 +320,12 @@ def employee_statement(request):
             "label": label,
             "count": payout_buckets[status]["count"],
             "amount": str(payout_buckets[status]["amount"]),
+            "currency_summary": [
+                {"currency": code, "amount": str(amount)}
+                for code, amount in sorted(
+                    payout_buckets[status]["currency_totals"].items()
+                )
+            ],
         }
         for status, label in Commission.STATUS_CHOICES
     ]
@@ -496,7 +506,12 @@ def leaderboard(request):
         queryset = queryset.filter(commission_employee_search_q(q, organization=org))
 
     ranked = (
-        queryset.values("employee_id", "employee__name", "employee__email")
+        queryset.values(
+            "employee_id",
+            "employee__name",
+            "employee__email",
+            "sale__order__currency",
+        )
         .annotate(
             total_commission=Sum("commission_amount"),
             deal_count=Count("id"),
@@ -521,9 +536,7 @@ def leaderboard(request):
             "territory": profile.territory.name if profile and profile.territory_id else None,
             "total_commission": str(row["total_commission"] or 0),
             "deal_count": row["deal_count"],
-            "currency": normalize_currency(
-                profile.personal_currency if profile else None
-            ),
+            "currency": normalize_currency(row.get("sale__order__currency")),
         })
 
     return Response({
@@ -857,7 +870,7 @@ def advanced_analytics_report(request):
         else:
             orders_qs = orders_qs.none()
 
-    sales_by_emp = orders_qs.values("employee_id").annotate(
+    sales_by_emp = orders_qs.values("employee_id", "currency").annotate(
         achievement=Sum("sales_amount"),
         order_count=Count("id"),
     )
@@ -888,8 +901,9 @@ def advanced_analytics_report(request):
                 "achievement": achievement,
                 "attainment_pct": attainment_pct,
                 "order_count": row["order_count"],
+                "currency": normalize_currency(row.get("currency")),
                 "personal_currency": normalize_currency(
-                    profile.personal_currency if profile else None
+                    row.get("currency") or (profile.personal_currency if profile else None)
                 ),
             }
         )
@@ -901,7 +915,11 @@ def advanced_analytics_report(request):
         else None
     )
 
-    current_by_emp = queryset.values("employee__email", "employee__name").annotate(
+    current_by_emp = queryset.values(
+        "employee__email",
+        "employee__name",
+        "sale__order__currency",
+    ).annotate(
         current=Sum("commission_amount")
     )
     prev_queryset = _commission_base_queryset(request)
@@ -911,8 +929,8 @@ def advanced_analytics_report(request):
         sale__order__order_date__range=[prev_start, prev_end]
     )
     prev_by_email = {
-        row["employee__email"]: float(row["previous"] or 0)
-        for row in prev_queryset.values("employee__email").annotate(
+        (row["employee__email"], normalize_currency(row.get("sale__order__currency"))): float(row["previous"] or 0)
+        for row in prev_queryset.values("employee__email", "sale__order__currency").annotate(
             previous=Sum("commission_amount")
         )
     }
@@ -920,8 +938,9 @@ def advanced_analytics_report(request):
     top_growth_reps = []
     for row in current_by_emp:
         email = row["employee__email"]
+        currency = normalize_currency(row.get("sale__order__currency"))
         current = float(row["current"] or 0)
-        previous = prev_by_email.get(email, 0)
+        previous = prev_by_email.get((email, currency), 0)
         if previous > 0:
             growth_pct = ((current - previous) / previous) * 100
         elif current > 0:
@@ -939,9 +958,7 @@ def advanced_analytics_report(request):
                 "current_commission": current,
                 "previous_commission": previous,
                 "growth_pct": round(growth_pct, 1),
-                "currency": normalize_currency(
-                    profile.personal_currency if profile else None
-                ),
+                "currency": currency,
             }
         )
     top_growth_reps.sort(key=lambda item: item["growth_pct"], reverse=True)

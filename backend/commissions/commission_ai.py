@@ -14,6 +14,7 @@ from .commission_explanation import (
     _period_sales_and_commission,
     get_request_profile,
 )
+from .currencies import format_currency_amount, normalize_currency
 from .models import UserProfile
 from .services import _get_user_profile_for_order
 
@@ -27,7 +28,7 @@ Ground rules:
 - Use ONLY the facts provided. Never invent numbers, names, rates, or policies.
 - Write like a helpful colleague: warm for greetings/small talk, precise for commission questions.
 - For "hi", "how are you", etc.: respond naturally in 1–2 sentences, then briefly mention what you can help with on this commission (use the real amount and order from the facts).
-- For commission questions: explain clearly using the breakdown and summary. Use ₹ for amounts.
+- For commission questions: explain clearly using the breakdown and summary. Use the currency shown in the facts for amounts.
 - Month-to-date totals in current_period are for the whole month; this_commission is the specific row being viewed — do not confuse them.
 - Never quote JSON keys, field names, or say "according to the context".
 - Do not do math or projections unless the user asks for them.
@@ -186,7 +187,7 @@ def _next_month_label(order_date) -> str:
     return start.strftime("%B %Y")
 
 
-def _teammate_snapshots(org_id, start, end, exclude_email=None, limit=5):
+def _teammate_snapshots(org_id, start, end, exclude_email=None, limit=5, currency=None):
     qs = UserProfile.objects.filter(organization_id=org_id).order_by("name")[:limit]
     snapshots = []
     for peer in qs:
@@ -197,11 +198,12 @@ def _teammate_snapshots(org_id, start, end, exclude_email=None, limit=5):
             {
                 "name": peer.name or peer.employee_id,
                 "employee_id": peer.employee_id,
-                "period_sales_inr": _decimal_str(stats["total_sales"]),
-                "period_commission_inr": _decimal_str(stats["total_commission"]),
+                "period_sales": _decimal_str(stats["total_sales"]),
+                "period_commission": _decimal_str(stats["total_commission"]),
                 "order_count": stats["order_count"],
-                "quota_target_inr": _decimal_str(stats["quota_target"]),
+                "quota_target": _decimal_str(stats["quota_target"]),
                 "quota_attainment_pct": stats["quota_attainment_pct"],
+                "currency": currency,
             }
         )
     return snapshots
@@ -225,11 +227,11 @@ def _commission_owner_profile(commission, order):
     return None
 
 
-def _format_inr_display(amount) -> str:
+def _format_money_display(amount, currency=None) -> str:
     try:
-        return f"₹{Decimal(str(amount)):,.2f}"
+        return format_currency_amount(Decimal(str(amount)), normalize_currency(currency))
     except Exception:
-        return f"₹{amount}"
+        return format_currency_amount(amount, normalize_currency(currency))
 
 
 def _build_context_narrative(context: dict) -> str:
@@ -240,7 +242,8 @@ def _build_context_narrative(context: dict) -> str:
     parts = []
 
     rep_name = rep.get("name") or rep.get("employee_id") or "The rep"
-    amount = _format_inr_display(comm.get("amount_inr", "0"))
+    currency = comm.get("currency")
+    amount = _format_money_display(comm.get("amount", "0"), currency)
     order_id = comm.get("order_id") or "—"
     parts.append(f"{rep_name} is viewing a commission of {amount} on order {order_id}.")
 
@@ -256,15 +259,15 @@ def _build_context_narrative(context: dict) -> str:
     if period:
         parts.append(
             f"Month-to-date ({period.get('label', 'this month')}): "
-            f"sales {_format_inr_display(period.get('sales_inr', 0))}, "
-            f"commission {_format_inr_display(period.get('commission_inr', 0))}, "
+            f"sales {_format_money_display(period.get('sales', 0), period.get('currency') or currency)}, "
+            f"commission {_format_money_display(period.get('commission', 0), period.get('currency') or currency)}, "
             f"{period.get('order_count', 0)} order(s)."
         )
-        if period.get("quota_target_inr") and Decimal(str(period["quota_target_inr"])) > 0:
+        if period.get("quota_target") and Decimal(str(period["quota_target"])) > 0:
             att = period.get("quota_attainment_pct")
             att_text = f"{att}%" if att is not None else "n/a"
             parts.append(
-                f"Quota target {_format_inr_display(period['quota_target_inr'])} "
+                f"Quota target {_format_money_display(period['quota_target'], period.get('currency') or currency)} "
                 f"({att_text} attainment)."
             )
 
@@ -287,6 +290,7 @@ def build_commission_context(commission, request, explanation) -> dict:
     profile = _commission_owner_profile(commission, order) or get_request_profile(request)
     viewer = get_request_profile(request)
     plan = commission.compensation_plan
+    currency = normalize_currency(getattr(order, "currency", None)) if order else normalize_currency(None)
 
     period = {}
     teammates = []
@@ -298,22 +302,23 @@ def build_commission_context(commission, request, explanation) -> dict:
             "label": start.strftime("%B %Y"),
             "start_date": str(start),
             "end_date": str(end),
-            "sales_inr": _decimal_str(stats["total_sales"]),
-            "commission_inr": _decimal_str(stats["total_commission"]),
+            "sales": _decimal_str(stats["total_sales"]),
+            "commission": _decimal_str(stats["total_commission"]),
             "order_count": stats["order_count"],
-            "quota_target_inr": _decimal_str(stats["quota_target"]),
+            "quota_target": _decimal_str(stats["quota_target"]),
             "quota_attainment_pct": stats["quota_attainment_pct"],
+            "currency": currency,
         }
         next_period = _next_month_label(order.order_date)
         if order.organization_id:
             teammates = _teammate_snapshots(
-                order.organization_id, start, end, exclude_email=profile.email
+                order.organization_id, start, end, exclude_email=profile.email, currency=currency
             )
 
     effective_rate_pct = None
-    if period.get("sales_inr") and Decimal(period["sales_inr"]) > 0:
+    if period.get("sales") and Decimal(period["sales"]) > 0:
         effective_rate_pct = float(
-            Decimal(period["commission_inr"]) / Decimal(period["sales_inr"]) * 100
+            Decimal(period["commission"]) / Decimal(period["sales"]) * 100
         )
 
     breakdown = [
@@ -330,14 +335,16 @@ def build_commission_context(commission, request, explanation) -> dict:
             "email": profile.email if profile else None,
             "employee_id": profile.employee_id if profile else None,
             "role": profile.role if profile else None,
-            "personal_target_inr": _decimal_str(profile.personal_target) if profile else None,
+            "personal_target": _decimal_str(profile.personal_target) if profile else None,
+            "currency": currency,
         },
         "viewer_is_rep": bool(
             viewer and profile and viewer.email == profile.email
         ),
         "this_commission": {
             "id": commission.id,
-            "amount_inr": _decimal_str(commission.commission_amount),
+            "amount": _decimal_str(commission.commission_amount),
+            "currency": currency,
             "status": commission.status or "calculated",
             "order_id": explanation.get("order_id"),
             "order_date": explanation.get("order_date"),

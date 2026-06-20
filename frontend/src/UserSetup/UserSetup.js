@@ -10,6 +10,7 @@ import PositionSection from "./components/PositionSection";
 import HierarchySection from "./components/HierarchySection";
 import BulkUploadSection from "./components/BulkUploadSection";
 import { CURRENCY_OPTIONS } from "../utils/currency";
+import { BUSINESS_GROUP_OPTIONS, currencyForBusinessGroup } from "../utils/businessGroups";
 
 const INITIAL_FORM = {
   enable_login: false,
@@ -63,7 +64,17 @@ function UserSetup() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setForm({ ...form, [name]: type === "checkbox" ? checked : value });
+    const nextValue = type === "checkbox" ? checked : value;
+    if (name === "business_group") {
+      const groupCurrency = currencyForBusinessGroup(value, "");
+      setForm({
+        ...form,
+        business_group: value,
+        personal_currency: groupCurrency || form.personal_currency,
+      });
+      return;
+    }
+    setForm({ ...form, [name]: nextValue });
   };
 
   const renderField = (name, label, type = "text", placeholder = "") => (
@@ -220,6 +231,16 @@ function UserSetup() {
           <PeopleSection
             {...props}
             renderSelect={(name, label) => renderSelect(name, label, CURRENCY_OPTIONS)}
+            renderBusinessGroupSelect={() =>
+              renderSelect(
+                "business_group",
+                "Business group",
+                BUSINESS_GROUP_OPTIONS.map((option) => ({
+                  value: option.value,
+                  label: `${option.label} (${option.currency})`,
+                }))
+              )
+            }
             renderTerritorySelect={() =>
               renderSelect("territory", "Territory", [
                 { value: "", label: "— None —" },

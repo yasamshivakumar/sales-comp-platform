@@ -1,13 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import api from "../api";
-
-function formatAmount(value) {
-  const amount = parseFloat(value) || 0;
-  return amount.toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
+import { formatMoney } from "../utils/currency";
 
 function formatOrderDate(value) {
   if (!value) return "";
@@ -24,7 +17,8 @@ function commissionLabel(commission) {
   const parts = [
     commission.order_id && `Order ${commission.order_id}`,
     commission.employee_name || commission.employee_id,
-    commission.commission_amount != null && `₹${formatAmount(commission.commission_amount)}`,
+    commission.commission_amount != null &&
+      formatMoney(commission.commission_amount, commission.currency),
     formatOrderDate(commission.order_date),
   ].filter(Boolean);
   return parts.join(" · ");
@@ -174,7 +168,7 @@ function CommissionSearchSelect({
                   <span className="commission-search__secondary">
                     {commission.employee_name || commission.employee_id || "—"}
                     {commission.commission_amount != null &&
-                      ` · ₹${formatAmount(commission.commission_amount)}`}
+                      ` · ${formatMoney(commission.commission_amount, commission.currency)}`}
                     {commission.order_date && ` · ${formatOrderDate(commission.order_date)}`}
                   </span>
                   {blocked && (

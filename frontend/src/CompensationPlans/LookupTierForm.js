@@ -1,6 +1,7 @@
 import { useState } from "react";
 import api from "../api";
 import { useToast } from "../Components/Toast";
+import { currencyForBusinessGroup } from "../utils/businessGroups";
 
 const EMPTY = {
   tier_name: "",
@@ -17,6 +18,8 @@ function LookupTierForm({ selectedPlan, onTierUpdated }) {
   const { error } = useToast();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(EMPTY);
+  const currency = selectedPlan?.currency || currencyForBusinessGroup(selectedPlan?.business_group || "", "");
+  const amountLabel = currency || "order currency";
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -114,11 +117,11 @@ function LookupTierForm({ selectedPlan, onTierUpdated }) {
           <input id="lookup_distribution" name="distribution" value={form.distribution} onChange={handleChange} placeholder="Any if blank" />
         </div>
         <div className="form-field">
-          <label htmlFor="lookup_from">From amount</label>
+          <label htmlFor="lookup_from">From amount ({amountLabel})</label>
           <input id="lookup_from" type="number" name="from_amount" value={form.from_amount} onChange={handleChange} min="0" />
         </div>
         <div className="form-field">
-          <label htmlFor="lookup_to">To amount</label>
+          <label htmlFor="lookup_to">To amount ({amountLabel})</label>
           <input id="lookup_to" type="number" name="to_amount" value={form.to_amount} onChange={handleChange} placeholder="Blank = no limit" />
         </div>
         <div className="form-field">
@@ -126,7 +129,7 @@ function LookupTierForm({ selectedPlan, onTierUpdated }) {
           <input id="lookup_rate" type="number" name="commission_rate" value={form.commission_rate} onChange={handleChange} min="0" step="0.01" />
         </div>
         <div className="form-field">
-          <label htmlFor="lookup_bonus">Bonus amount</label>
+          <label htmlFor="lookup_bonus">Bonus amount ({amountLabel})</label>
           <input id="lookup_bonus" type="number" name="bonus_amount" value={form.bonus_amount} onChange={handleChange} min="0" />
         </div>
       </div>

@@ -58,7 +58,7 @@ DEFAULT_CONFIG = {
         },
         "orders": {
             "soql": (
-                "SELECT Id, Name, Amount, CloseDate, OwnerId, StageName "
+                "SELECT Id, Name, Amount, CloseDate, OwnerId, StageName, CurrencyIsoCode "
                 "FROM Opportunity WHERE IsClosed = true AND IsWon = true"
             ),
             "field_map": {
@@ -67,7 +67,7 @@ DEFAULT_CONFIG = {
                 "order_date": "CloseDate",
                 "employee_id": "OwnerId",
                 "order_status": "=Booked",
-                "currency": "=INR",
+                "currency": "CurrencyIsoCode",
             },
         },
     },
@@ -90,6 +90,7 @@ DEFAULT_CONFIG = {
                 "order_date": "order_date",
                 "employee_id": "employee_id",
                 "sales_amount": "sales_amount",
+                "currency": "currency",
             },
         },
     },

@@ -17,6 +17,9 @@ from .services import (
 
 from django.conf import settings
 
+from .business_groups import currency_for_business_group
+from .currencies import normalize_currency
+
 logger = logging.getLogger("commissions")
 
 
@@ -104,8 +107,24 @@ def process_orders_rows(organization, rows):
                     str(row.get("order_status", "Booked")).strip() or "Booked"
                 )
             if "currency" in order_model_fields:
+                raw_currency = str(row.get("currency", "")).strip()
+                raw_group = str(row.get("business_group", "")).strip()
+                profile = None
+                if not raw_currency:
+                    from .models import UserProfile
+
+                    profile = UserProfile.objects.filter(
+                        employee_id__iexact=employee_id,
+                        organization=organization,
+                    ).first()
+                    raw_group = raw_group or (profile.business_group if profile else "")
                 defaults["currency"] = (
-                    str(row.get("currency", "INR")).strip() or "INR"
+                    normalize_currency(raw_currency)
+                    if raw_currency
+                    else currency_for_business_group(
+                        raw_group,
+                        profile.personal_currency if profile else None,
+                    )
                 )
             if "needs_recalculation" in order_model_fields:
                 defaults["needs_recalculation"] = False

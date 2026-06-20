@@ -165,7 +165,11 @@ function MyStatement() {
   };
 
   const summary = statement?.summary;
-  const defaultCurrency = statement?.personal_currency || "INR";
+  const defaultCurrency =
+    statement?.currency_summary?.[0]?.currency ||
+    statement?.lines?.find((row) => row.currency)?.currency ||
+    statement?.personal_currency ||
+    "INR";
   const money = (value, currency) => formatMoney(value, currency || defaultCurrency);
   const summaryAmount = (valueKey) => {
     const formatted = formatMoneyList(statement?.currency_summary, valueKey);
@@ -256,8 +260,11 @@ function MyStatement() {
   );
 
   const earnedByPlan = earnedRows.reduce((acc, row) => {
-    const key = row.plan_name || "Unassigned plan";
-    if (!acc[key]) acc[key] = { plan: key, count: 0, total: 0 };
+    const plan = row.plan_name || "Unassigned plan";
+    const key = `${plan}::${row.currency || defaultCurrency}`;
+    if (!acc[key]) {
+      acc[key] = { plan, count: 0, total: 0, currency: row.currency || defaultCurrency };
+    }
     acc[key].count += 1;
     acc[key].total += parseFloat(row.commission_amount) || 0;
     return acc;
@@ -411,7 +418,7 @@ function MyStatement() {
                     key: "total",
                     label: "Earned",
                     align: "right",
-                    render: (row) => money(row.total),
+                    render: (row) => money(row.total, row.currency),
                   },
                 ]}
                 rows={Object.values(earnedByPlan)}
@@ -444,7 +451,9 @@ function MyStatement() {
                 {(statement?.payout_status || []).map((bucket) => (
                   <div key={bucket.status} className="stmt-payout-card">
                     <StatusPill status={bucket.status} label={bucket.label} />
-                    <p className="stmt-payout-card__amount">{money(bucket.amount)}</p>
+                    <p className="stmt-payout-card__amount">
+                      {formatMoneyList(bucket.currency_summary, "amount") || money(bucket.amount)}
+                    </p>
                     <p className="stmt-payout-card__count">{bucket.count} line(s)</p>
                   </div>
                 ))}

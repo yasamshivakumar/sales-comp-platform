@@ -4,6 +4,7 @@ import { useToast } from "../Components/Toast";
 import EmployeeSearchSelect from "../Components/EmployeeSearchSelect";
 import DatePickerField from "../Components/DatePickerField";
 import { CURRENCY_OPTIONS } from "../utils/currency";
+import { currencyForBusinessGroup } from "../utils/businessGroups";
 
 const INITIAL_FORM = {
   order_id: "",
@@ -40,6 +41,16 @@ function OrderForm({ onOrderCreated }) {
     setForm({ ...form, [event.target.name]: event.target.value });
   };
 
+  const handleBusinessGroupChange = (event) => {
+    const businessGroup = event.target.value;
+    const groupCurrency = currencyForBusinessGroup(businessGroup, "");
+    setForm({
+      ...form,
+      business_group: businessGroup,
+      currency: groupCurrency || form.currency,
+    });
+  };
+
   const handleEmployeeSelect = (employee) => {
     if (!employee) {
       setForm((prev) => ({
@@ -53,12 +64,14 @@ function OrderForm({ onOrderCreated }) {
       return;
     }
 
+    const groupCurrency = currencyForBusinessGroup(employee.business_group || "", "");
     setForm((prev) => ({
       ...prev,
       employee_id: employee.employee_id || "",
       position_name: employee.position_name || "",
       business_group: employee.business_group || prev.business_group || "",
       territory: employee.territory_id || "",
+      currency: groupCurrency || prev.currency,
     }));
     setEmployeeMeta({
       display_name: employee.display_name || "",
@@ -249,8 +262,8 @@ function OrderForm({ onOrderCreated }) {
             id="business_group"
             name="business_group"
             value={form.business_group}
-            onChange={handleChange}
-            placeholder="India"
+            onChange={handleBusinessGroupChange}
+            placeholder="USA"
           />
         </div>
 

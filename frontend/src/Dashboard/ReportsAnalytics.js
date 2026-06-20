@@ -4,6 +4,7 @@ import {
   activeCurrencyTotals,
   formatMoney,
   formatDashboardAmount,
+  formatMoneyList,
   primaryCurrencyFromPayload,
 } from "../utils/currency";
 import {
@@ -108,8 +109,14 @@ function KpiCard({ label, value, variant = "navy", hint, icon }) {
 }
 
 function KpiStrip({ summary, sales, advanced, compact = false }) {
-  const commissionCurrency = primaryCurrencyFromPayload(summary);
-  const salesCurrency = primaryCurrencyFromPayload(sales);
+  const commissionCurrencies = activeCurrencyTotals(summary?.totals_by_currency);
+  const salesCurrencies = activeCurrencyTotals(sales?.totals_by_currency);
+  const commissionLabelCurrency =
+    commissionCurrencies.length === 1 ? commissionCurrencies[0].currency : "";
+  const salesLabelCurrency =
+    salesCurrencies.length === 1 ? salesCurrencies[0].currency : "";
+  const commissionCurrency = commissionLabelCurrency || primaryCurrencyFromPayload(summary);
+  const salesCurrency = salesLabelCurrency || primaryCurrencyFromPayload(sales);
   const commissionTotal = formatDashboardAmount(
     summary?.totals_by_currency,
     summary?.total_commission,
@@ -128,14 +135,14 @@ function KpiStrip({ summary, sales, advanced, compact = false }) {
       <KpiCard
         variant="navy"
         icon="💰"
-        label={`Total commission${commissionCurrency ? ` (${commissionCurrency})` : ""}`}
+        label={`Total commission${commissionLabelCurrency ? ` (${commissionLabelCurrency})` : ""}`}
         value={commissionTotal}
         hint={`${summary?.total_count ?? 0} payout records`}
       />
       <KpiCard
         variant="blue"
         icon="📈"
-        label={`Total sales${salesCurrency ? ` (${salesCurrency})` : ""}`}
+        label={`Total sales${salesLabelCurrency ? ` (${salesLabelCurrency})` : ""}`}
         value={salesTotal}
         hint="Order revenue in selected period"
       />
@@ -214,13 +221,13 @@ function QuotaAchievementChart({ rows, limit = 8 }) {
               <div className="ra-quota-stat">
                 <span className="ra-quota-stat__label">Quota</span>
                 <span className="ra-quota-stat__value">
-                  {formatMoney(quota, row.personal_currency || "INR", { compact: true })}
+                  {formatMoney(quota, row.currency || row.personal_currency, { compact: true })}
                 </span>
               </div>
               <div className="ra-quota-stat ra-quota-stat--achieved">
                 <span className="ra-quota-stat__label">Achieved</span>
                 <span className="ra-quota-stat__value">
-                  {formatMoney(achievement, row.personal_currency || "INR", { compact: true })}
+                  {formatMoney(achievement, row.currency || row.personal_currency, { compact: true })}
                 </span>
               </div>
             </div>
@@ -827,11 +834,8 @@ function ReportsAnalytics({ compact = false }) {
                         <tr key={idx}>
                           <td>{row.period}</td>
                           <td align="right">
-                            {formatMoney(
-                              row.total,
-                              row.currency || trendCurrency,
-                              { compact }
-                            )}
+                            {formatMoneyList(row.totals_by_currency, "total", { compact }) ||
+                              formatMoney(row.total, row.currency || trendCurrency, { compact })}
                           </td>
                           <td align="right">{row.count}</td>
                         </tr>

@@ -3,6 +3,7 @@ import api from "../api";
 import { useToast } from "../Components/Toast";
 import SearchBar from "../Components/SearchBar";
 import StatusPill from "../Components/StatusPill";
+import { formatMoney } from "../utils/currency";
 
 const STATUS_FILTERS = [
   { id: "booked", label: "Booked", param: "Booked" },
@@ -18,14 +19,6 @@ function formatDate(value) {
     day: "2-digit",
     month: "short",
     year: "numeric",
-  });
-}
-
-function formatAmount(value) {
-  const amount = parseFloat(value) || 0;
-  return amount.toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
   });
 }
 
@@ -140,7 +133,10 @@ function OrderList({ refreshKey = 0 }) {
       if (markSuccess) {
         if (updated.has_commission) {
           success(
-            `Order ${order.order_id} marked Success — commission ₹${formatAmount(updated.commission_amount)} calculated`
+            `Order ${order.order_id} marked Success — commission ${formatMoney(
+              updated.commission_amount,
+              updated.currency || order.currency
+            )} calculated`
           );
         } else {
           warning(
@@ -304,12 +300,14 @@ function OrderList({ refreshKey = 0 }) {
                     <td className="orders-list-product">
                       {order.product_name || order.service_name || "—"}
                     </td>
-                    <td className="orders-list-amount">₹{formatAmount(order.sales_amount)}</td>
+                    <td className="orders-list-amount">
+                      {formatMoney(order.sales_amount, order.currency)}
+                    </td>
                     <td className="orders-list-status">{orderStatusPill(order.order_status)}</td>
                     <td className="orders-list-commission-cell">
                       {order.has_commission ? (
                         <span className="orders-list-commission">
-                          ₹{formatAmount(order.commission_amount)}
+                          {formatMoney(order.commission_amount, order.currency)}
                         </span>
                       ) : (
                         <span className="orders-list-muted">—</span>

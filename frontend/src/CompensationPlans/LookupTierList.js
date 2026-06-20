@@ -1,3 +1,6 @@
+import { formatMoney } from "../utils/currency";
+import { currencyForBusinessGroup } from "../utils/businessGroups";
+
 function dimLabel(value) {
   const text = (value || "").trim();
   return text || "Any";
@@ -5,6 +8,8 @@ function dimLabel(value) {
 
 function LookupTierList({ selectedPlan }) {
   const rows = selectedPlan?.sc_lookup_tables || [];
+  const currency = selectedPlan?.currency || currencyForBusinessGroup(selectedPlan?.business_group || "", "");
+  const money = (value) => (currency ? formatMoney(value, currency) : value);
 
   return (
     <div className="panel">
@@ -23,10 +28,10 @@ function LookupTierList({ selectedPlan }) {
               Distribution: {dimLabel(row.distribution)}
             </p>
             <p>
-              Sales range: {row.from_amount} – {row.to_amount ?? "No limit"}
+              Sales range: {money(row.from_amount)} – {row.to_amount != null ? money(row.to_amount) : "No limit"}
             </p>
             <p>Commission: {row.commission_rate}%</p>
-            {parseFloat(row.bonus_amount) > 0 && <p>Bonus: {row.bonus_amount}</p>}
+            {parseFloat(row.bonus_amount) > 0 && <p>Bonus: {money(row.bonus_amount)}</p>}
           </div>
         ))
       )}

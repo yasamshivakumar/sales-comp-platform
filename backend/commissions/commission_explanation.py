@@ -96,8 +96,13 @@ def _tier_breakdown(plan, sales_amount, order=None):
             dims.append(f"Distribution: {tier.distribution}")
         dim_label = " · ".join(dims) if dims else "Any product/service/distribution"
         to_amt = tier.to_amount
-        band = f"₹{tier.from_amount:,.0f} – "
-        band += f"₹{to_amt:,.0f}" if to_amt is not None else "no upper limit"
+        currency = normalize_currency(getattr(order, "currency", None))
+        band = f"{format_currency_amount(tier.from_amount, currency)} – "
+        band += (
+            format_currency_amount(to_amt, currency)
+            if to_amt is not None
+            else "no upper limit"
+        )
         return tier, base, {
             "rate_pct": tier.commission_rate,
             "tier_bonus": tier.bonus_amount,
@@ -520,6 +525,7 @@ def _answer_earn_more_guidance(commission, request, explanation):
     order = commission.sale.order if commission.sale_id else None
     if not profile or not order:
         return None
+    currency = normalize_currency(getattr(order, "currency", None) or profile.personal_currency)
 
     start, end = _order_period_bounds(order)
     current = _period_sales_and_commission(profile, start, end)
@@ -541,8 +547,8 @@ def _answer_earn_more_guidance(commission, request, explanation):
         rate_pct = _effective_commission_rate_pct(plan, order, profile, sample)
 
     parts = [
-        f"In {month_label} you've earned {_inr(current_comm)} in commission "
-        f"from {_inr(current_sales)} in sales across {current['order_count']} order(s). ",
+        f"In {month_label} you've earned {_inr(current_comm, currency)} in commission "
+        f"from {_inr(current_sales, currency)} in sales across {current['order_count']} order(s). ",
         f"To earn more in {next_label} than this month, here is a practical plan: ",
     ]
 
@@ -554,21 +560,23 @@ def _answer_earn_more_guidance(commission, request, explanation):
             f"this month yet, so any approved sales in {next_label} will increase earnings"
         )
         if rate_pct:
+            sample_sales = Decimal("100000")
             tips.append(
-                f"each ₹1,00,000 in sales at your plan's ~{rate_pct:.1f}% effective rate "
-                f"is roughly {_inr(Decimal('100000') * Decimal(str(rate_pct)) / Decimal('100'))} in commission"
+                f"each {_inr(sample_sales, currency)} in sales at your plan's ~{rate_pct:.1f}% effective rate "
+                f"is roughly {_inr(sample_sales * Decimal(str(rate_pct)) / Decimal('100'), currency)} in commission"
             )
     elif rate_pct and rate_pct > 0:
         rate = Decimal(str(rate_pct)) / Decimal("100")
         sales_for_beat = (beat_target / rate).quantize(Decimal("1"))
         extra_sales = max(Decimal("0"), sales_for_beat - current_sales)
         tips.append(
-            f"increase sales by about {_inr(extra_sales)} "
-            f"(≈ {_inr(beat_target)} total commission at your recent ~{rate_pct:.1f}% effective rate)"
+            f"increase sales by about {_inr(extra_sales, currency)} "
+            f"(≈ {_inr(beat_target, currency)} total commission at your recent ~{rate_pct:.1f}% effective rate)"
         )
+        sample_sales = Decimal("100000")
         tips.append(
-            f"that means roughly {max(1, int(extra_sales / Decimal('100000')))} additional "
-            f"₹1L deal(s), depending on deal size and rules"
+            f"that means roughly {max(1, int(extra_sales / sample_sales))} additional "
+            f"{_inr(sample_sales, currency)} deal(s), depending on deal size and rules"
         )
     else:
         tips.append(
@@ -580,8 +588,8 @@ def _answer_earn_more_guidance(commission, request, explanation):
         if attainment is not None and attainment < 100:
             gap = current["quota_target"] - current_sales
             tips.append(
-                f"close the quota gap of {_inr(gap)} "
-                f"(you are at {attainment:.0f}% of {_inr(current['quota_target'])})"
+                f"close the quota gap of {_inr(gap, currency)} "
+                f"(you are at {attainment:.0f}% of {_inr(current['quota_target'], currency)})"
             )
         elif attainment is not None and attainment >= 100:
             tips.append(
@@ -726,6 +734,7 @@ def _answer_peer_comparison(commission, question, request, peer_name=None):
         return {"answer": "Your user profile was not found."}
     if not order:
         return {"answer": "This commission is not linked to an order."}
+    currency = normalize_currency(getattr(order, "currency", None) or profile.personal_currency)
 
     start, end = _order_period_bounds(order)
     yours = _period_sales_and_commission(profile, start, end)
@@ -734,13 +743,13 @@ def _answer_peer_comparison(commission, question, request, peer_name=None):
     peer_label = peer.name or peer.employee_id
 
     parts = [
-        f"In {start.strftime('%B %Y')}, you earned {_inr(yours['total_commission'])} "
+        f"In {start.strftime('%B %Y')}, you earned {_inr(yours['total_commission'], currency)} "
         f"on {yours['order_count']} order(s). "
-        f"{peer_label} earned {_inr(theirs['total_commission'])} "
+        f"{peer_label} earned {_inr(theirs['total_commission'], currency)} "
         f"on {theirs['order_count']} order(s).",
     ]
     if diff > 0:
-        parts.append(f"They earned {_inr(diff)} more than you this month.")
+        parts.append(f"They earned {_inr(diff, currency)} more than you this month.")
         reasons = []
         if (
             theirs["quota_attainment_pct"] is not None
@@ -753,8 +762,8 @@ def _answer_peer_comparison(commission, question, request, peer_name=None):
             )
         if theirs["total_sales"] > yours["total_sales"]:
             reasons.append(
-                f"their order volume was {_inr(theirs['total_sales'])} "
-                f"vs your {_inr(yours['total_sales'])}"
+                f"their order volume was {_inr(theirs['total_sales'], currency)} "
+                f"vs your {_inr(yours['total_sales'], currency)}"
             )
         if reasons:
             parts.append(" Likely reasons: " + "; ".join(reasons) + ".")
@@ -763,7 +772,7 @@ def _answer_peer_comparison(commission, question, request, peer_name=None):
                 " Differences may come from commission rules, product mix, or rate tiers."
             )
     elif diff < 0:
-        parts.append(f"You earned {_inr(-diff)} more than them this month.")
+        parts.append(f"You earned {_inr(-diff, currency)} more than them this month.")
     else:
         parts.append("You both earned the same total this month.")
 
@@ -775,6 +784,7 @@ def _answer_quota_question(commission, request):
     order = commission.sale.order if commission.sale_id else None
     if not profile or not order:
         return None
+    currency = normalize_currency(getattr(order, "currency", None) or profile.personal_currency)
 
     start, end = _order_period_bounds(order)
     stats = _period_sales_and_commission(profile, start, end)
@@ -790,15 +800,17 @@ def _answer_quota_question(commission, request):
     att_text = f"{attainment:.0f}%" if attainment is not None else "—"
     return {
         "answer": (
-            f"For {start.strftime('%B %Y')}, your sales are {_inr(stats['total_sales'])} "
-            f"against a target of {_inr(target)} ({att_text} attainment). "
-            f"Commission earned in this period: {_inr(stats['total_commission'])}."
+            f"For {start.strftime('%B %Y')}, your sales are {_inr(stats['total_sales'], currency)} "
+            f"against a target of {_inr(target, currency)} ({att_text} attainment). "
+            f"Commission earned in this period: {_inr(stats['total_commission'], currency)}."
         ),
     }
 
 
 def _answer_status_question(commission):
     status = commission.status or "calculated"
+    order = commission.sale.order if commission.sale_id else None
+    currency = normalize_currency(getattr(order, "currency", None))
     labels = {
         "calculated": "Calculated — pending manager review.",
         "manager_approved": "Manager approved — pending finance approval.",
@@ -809,7 +821,7 @@ def _answer_status_question(commission):
     return {
         "answer": (
             f"This commission status is {status.replace('_', ' ')}. {detail} "
-            f"Amount: {_inr(commission.commission_amount)}."
+            f"Amount: {_inr(commission.commission_amount, currency)}."
         ),
     }
 
@@ -891,6 +903,7 @@ def simulate_what_if(request, extra_sales: Decimal, start_date, end_date) -> dic
         return {"error": "Enter a positive extra sales amount."}
 
     order_date = end
+    currency = normalize_currency(profile.personal_currency)
     plan, _ = resolve_compensation_plan(
         Order(
             sales_amount=extra_sales,
@@ -898,6 +911,7 @@ def simulate_what_if(request, extra_sales: Decimal, start_date, end_date) -> dic
             employee_id=profile.employee_id,
             organization_id=profile.organization_id,
             position_name=profile.position_name or "",
+            currency=currency,
         )
     )
     if not plan:
@@ -923,6 +937,7 @@ def simulate_what_if(request, extra_sales: Decimal, start_date, end_date) -> dic
         employee_id=profile.employee_id,
         organization_id=profile.organization_id,
         position_name=profile.position_name or "",
+        currency=currency,
     )
     projected, _, _, _ = apply_commission_rules(
         plan, dummy_order, profile, projected
@@ -937,11 +952,12 @@ def simulate_what_if(request, extra_sales: Decimal, start_date, end_date) -> dic
         "projected_total_commission": str(
             (current["total_commission"] + projected).quantize(Decimal("0.01"))
         ),
+        "currency": currency,
         "plan_name": plan.plan_name,
         "summary": (
-            f"If you sell {_inr(extra_sales)} more this period under plan “{plan.plan_name}”, "
-            f"you could earn about {_inr(projected)} additional commission "
-            f"(≈ {_inr(current['total_commission'] + projected)} total for the period)."
+            f"If you sell {_inr(extra_sales, currency)} more this period under plan “{plan.plan_name}”, "
+            f"you could earn about {_inr(projected, currency)} additional commission "
+            f"(≈ {_inr(current['total_commission'] + projected, currency)} total for the period)."
         ),
     }
 

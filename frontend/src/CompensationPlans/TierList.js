@@ -1,8 +1,13 @@
+import { formatMoney } from "../utils/currency";
+import { currencyForBusinessGroup } from "../utils/businessGroups";
+
 function TierList({ selectedPlan }) {
   const isFlat = selectedPlan?.commission_table_type === "FLAT";
   const rateRows = selectedPlan?.sc_rate_tables || [];
   const flatRows = selectedPlan?.sc_flat_rate_tables || [];
   const hasRows = isFlat ? flatRows.length > 0 : rateRows.length > 0;
+  const currency = selectedPlan?.currency || currencyForBusinessGroup(selectedPlan?.business_group || "", "");
+  const money = (value) => (currency ? formatMoney(value, currency) : value);
 
   return (
     <div className="panel">
@@ -26,10 +31,10 @@ function TierList({ selectedPlan }) {
           <div key={row.id ?? index} className="tier-list-item">
             <strong>{row.tier_name || `Tier ${row.sequence || index + 1}`}</strong>
             <p>
-              Sales range: {row.from_amount} – {row.to_amount ?? "No limit"}
+              Sales range: {money(row.from_amount)} – {row.to_amount != null ? money(row.to_amount) : "No limit"}
             </p>
             <p>Commission: {row.commission_rate}%</p>
-            {parseFloat(row.bonus_amount) > 0 && <p>Bonus: {row.bonus_amount}</p>}
+            {parseFloat(row.bonus_amount) > 0 && <p>Bonus: {money(row.bonus_amount)}</p>}
           </div>
         ))
       )}

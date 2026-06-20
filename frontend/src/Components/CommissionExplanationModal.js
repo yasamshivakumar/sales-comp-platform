@@ -269,7 +269,7 @@ function CommissionExplanationModal({
               </p>
               <form className="ce-whatif-form" onSubmit={runWhatIf}>
                 <label className="ce-whatif-label">
-                  Extra sales (₹)
+                  Extra sales ({explanation?.currency || "order currency"})
                   <input
                     type="number"
                     className="input"
@@ -290,10 +290,16 @@ function CommissionExplanationModal({
                   <p>{whatIfResult.summary}</p>
                   <div className="ce-whatif-stats">
                     <span>
-                      Additional: {formatMoney(whatIfResult.projected_commission, explanation?.currency)}
+                      Additional: {formatMoney(
+                        whatIfResult.projected_commission,
+                        whatIfResult.currency || explanation?.currency
+                      )}
                     </span>
                     <span>
-                      Period total: {formatMoney(whatIfResult.projected_total_commission, explanation?.currency)}
+                      Period total: {formatMoney(
+                        whatIfResult.projected_total_commission,
+                        whatIfResult.currency || explanation?.currency
+                      )}
                     </span>
                   </div>
                 </div>

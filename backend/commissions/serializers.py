@@ -512,6 +512,7 @@ class CommissionDisputeSerializer(serializers.ModelSerializer):
     employee_id = serializers.SerializerMethodField()
     order_id = serializers.SerializerMethodField()
     order_date = serializers.SerializerMethodField()
+    currency = serializers.SerializerMethodField()
     commission_amount = serializers.DecimalField(
         source="commission.commission_amount",
         max_digits=10,
@@ -573,6 +574,12 @@ class CommissionDisputeSerializer(serializers.ModelSerializer):
     def get_order_date(self, obj):
         order = self._order_for_commission(obj)
         return order.order_date if order else None
+
+    def get_currency(self, obj):
+        from .currencies import normalize_currency
+
+        order = self._order_for_commission(obj)
+        return normalize_currency(getattr(order, "currency", None))
 
     def get_employee_id(self, obj):
         order = self._order_for_commission(obj)

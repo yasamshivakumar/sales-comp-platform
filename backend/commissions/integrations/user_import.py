@@ -6,6 +6,8 @@ from datetime import datetime
 from django.conf import settings
 from django.contrib.auth.models import User
 
+from ..business_groups import currency_for_business_group
+from ..currencies import normalize_currency
 from ..models import HierarchyRelationship, Territory, UserProfile
 
 logger = logging.getLogger("commissions")
@@ -65,6 +67,13 @@ def process_users_rows(organization, rows, *, allow_updates=True):
 
             hire_date = _parse_hire_date(row.get("hire_date", ""))
             username = str(row.get("username", "")).strip() or email
+            business_group = str(row.get("business_group", "India")).strip()
+            raw_currency = str(row.get("personal_currency", "")).strip()
+            personal_currency = (
+                normalize_currency(raw_currency)
+                if raw_currency
+                else currency_for_business_group(business_group)
+            )
 
             profile_lookup = {"email": email}
             if organization:
@@ -83,8 +92,8 @@ def process_users_rows(organization, rows, *, allow_updates=True):
                 "employee_id": employee_id_val,
                 "hire_date": hire_date,
                 "personal_target": personal_target,
-                "personal_currency": str(row.get("personal_currency", "INR")).strip(),
-                "business_group": str(row.get("business_group", "India")).strip(),
+                "personal_currency": personal_currency,
+                "business_group": business_group,
                 "title": str(row.get("title", "")).strip(),
                 "pay_period_type": str(row.get("pay_period_type", "Monthly")).strip(),
                 "position_name": str(row.get("position_name", "")).strip(),

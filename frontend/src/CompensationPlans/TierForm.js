@@ -1,6 +1,7 @@
 import { useState } from "react";
 import api from "../api";
 import { useToast } from "../Components/Toast";
+import { currencyForBusinessGroup } from "../utils/businessGroups";
 
 function TierForm({ selectedPlan, onTierUpdated }) {
   const { error } = useToast();
@@ -97,6 +98,8 @@ function TierForm({ selectedPlan, onTierUpdated }) {
   };
 
   const isFlat = selectedPlan.commission_table_type === "FLAT";
+  const currency = selectedPlan?.currency || currencyForBusinessGroup(selectedPlan?.business_group || "", "");
+  const amountLabel = currency || "order currency";
 
   return (
     <div className="panel">
@@ -131,7 +134,7 @@ function TierForm({ selectedPlan, onTierUpdated }) {
             />
           </div>
           <div className="form-field">
-            <label htmlFor="from_amount">From amount</label>
+            <label htmlFor="from_amount">From amount ({amountLabel})</label>
             <input
               id="from_amount"
               type="number"
@@ -142,7 +145,7 @@ function TierForm({ selectedPlan, onTierUpdated }) {
             />
           </div>
           <div className="form-field">
-            <label htmlFor="to_amount">To amount</label>
+            <label htmlFor="to_amount">To amount ({amountLabel})</label>
             <input
               id="to_amount"
               type="number"
@@ -166,7 +169,7 @@ function TierForm({ selectedPlan, onTierUpdated }) {
             />
           </div>
           <div className="form-field">
-            <label htmlFor="bonus_amount">Bonus amount</label>
+            <label htmlFor="bonus_amount">Bonus amount ({amountLabel})</label>
             <input
               id="bonus_amount"
               type="number"

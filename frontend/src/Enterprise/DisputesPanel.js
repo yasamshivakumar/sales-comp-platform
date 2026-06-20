@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import api from "../api";
 import StatusPill from "../Components/StatusPill";
 import CommissionSearchSelect from "../Components/CommissionSearchSelect";
+import { formatMoney } from "../utils/currency";
 import "../Components/enterprise.css";
 
 function formatDate(iso) {
@@ -12,14 +13,6 @@ function formatDate(iso) {
     year: "numeric",
     month: "short",
     day: "numeric",
-  });
-}
-
-function formatAmount(value) {
-  const amount = parseFloat(value) || 0;
-  return amount.toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
   });
 }
 
@@ -285,7 +278,12 @@ function DisputesPanel({
             </div>
             <div>
               <span className="disputes-form__summary-label">Amount</span>
-              <strong>₹{formatAmount(selectedCommission.commission_amount)}</strong>
+              <strong>
+                {formatMoney(
+                  selectedCommission.commission_amount,
+                  selectedCommission.currency
+                )}
+              </strong>
             </div>
             <div>
               <span className="disputes-form__summary-label">Status</span>
@@ -356,7 +354,7 @@ function DisputesPanel({
                   <td>{d.employee_name || d.employee_id || "—"}</td>
                   <td>
                     {d.commission_amount != null
-                      ? `₹${formatAmount(d.commission_amount)}`
+                      ? formatMoney(d.commission_amount, d.currency)
                       : "—"}
                   </td>
                   <td className="disputes-table__issue" title={d.message || ""}>
