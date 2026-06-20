@@ -3,6 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import api from "../api";
 import { useToast } from "../Components/Toast";
 import PageHeader from "../Components/PageHeader";
+import { formatMoney } from "../utils/currency";
+import { currencyForBusinessGroup } from "../utils/businessGroups";
 import RuleEditor from "./RuleEditor";
 import "./commissionRules.css";
 
@@ -76,6 +78,29 @@ function normalizeResult(row, index) {
     minimum_value: null,
     maximum_value: null,
   };
+}
+
+function planCurrency(plan) {
+  return plan?.currency || currencyForBusinessGroup(plan?.business_group || "");
+}
+
+function resultSummary(result, currency, fallbackResult) {
+  if (!result || result.rate_value == null) return "";
+  const value = result.rate_value;
+  const type = fallbackResult?.result_rate_type || result.result_rate_type;
+  if (type === "add_bonus") {
+    return `Bonus ${formatMoney(value, currency)}`;
+  }
+  if (type === "flat_amount" || type === "override") {
+    return `Amount ${formatMoney(value, currency)}`;
+  }
+  if (type === "override_tier_pct" || type === "percentage") {
+    return `Rate ${Number(value).toFixed(2)}%`;
+  }
+  if (type === "multiplier") {
+    return `Multiplier ${value}x`;
+  }
+  return `Value ${value}`;
 }
 
 function CommissionRules() {
@@ -163,6 +188,8 @@ function CommissionRules() {
       return;
     }
     setSaving(true);
+    const selectedPlan = plans.find((plan) => String(plan.id) === String(draft.compensation_plan));
+    const selectedCurrency = planCurrency(selectedPlan);
     const payload = {
       name: draft.name.trim(),
       rule_type: draft.rule_type || "commission_rate",
@@ -188,19 +215,24 @@ function CommissionRules() {
       results: (draft.results || []).map((row, index) => normalizeResult(row, index)),
     };
     try {
+      const savedMessage = (rule) => {
+        const summary = resultSummary(
+          rule?.results?.[0],
+          selectedCurrency,
+          payload.results?.[0]
+        );
+        return summary
+          ? `Rule saved (${summary}). Click Recalculate on Commissions to update existing orders.`
+          : "Rule saved. Click Recalculate on Commissions to update existing orders.";
+      };
       if (selectedId) {
         const res = await api.patch(`commission-rules/${selectedId}/`, payload);
-        const bonus = res.data?.results?.[0]?.rate_value;
-        success(
-          bonus != null
-            ? `Rule saved (bonus ₹${bonus}). Click Recalculate on Commissions to update existing orders.`
-            : "Rule saved. Click Recalculate on Commissions to update existing orders."
-        );
+        success(savedMessage(res.data));
         fetchRules();
         selectRule(selectedId);
       } else {
         const res = await api.post("commission-rules/", payload);
-        success("Rule created");
+        success(savedMessage(res.data).replace("Rule saved", "Rule created"));
         fetchRules();
         selectRule(res.data.id);
       }
@@ -297,6 +329,9 @@ function CommissionRules() {
                 setDraft={setDraft}
                 choices={choices}
                 plans={plans}
+            currency={planCurrency(
+              plans.find((plan) => String(plan.id) === String(draft.compensation_plan))
+            )}
               />
               <div className="cr-actions">
                 <button

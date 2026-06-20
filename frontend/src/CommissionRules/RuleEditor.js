@@ -29,7 +29,32 @@ function emptyResult(sequence) {
   };
 }
 
-function RuleEditor({ draft, setDraft, choices, plans }) {
+function resultDefaultsForType(resultType, sequence) {
+  if (resultType === "add_bonus") {
+    return {
+      result_name: `Bonus ${sequence}`,
+      value_unit_type: "currency",
+      earning_group: "bonus",
+      result_classification: "bonus",
+    };
+  }
+  if (resultType === "override_tier_pct" || resultType === "percentage") {
+    return {
+      result_name: `Rate override ${sequence}`,
+      value_unit_type: "percent",
+      earning_group: "base",
+      result_classification: "commission",
+    };
+  }
+  return {
+    result_name: `Result ${sequence}`,
+    value_unit_type: "currency",
+    earning_group: "base",
+    result_classification: "commission",
+  };
+}
+
+function RuleEditor({ draft, setDraft, choices, plans, currency = "INR" }) {
   const update = (patch) => setDraft({ ...draft, ...patch });
 
   const updateCondition = (index, patch) => {
@@ -48,9 +73,9 @@ function RuleEditor({ draft, setDraft, choices, plans }) {
     if (row.result_rate_type === "override_tier_pct" || row.result_rate_type === "percentage") {
       return "Override tier rate (%) *";
     }
-    if (row.result_rate_type === "add_bonus") return "Bonus amount (₹) *";
+    if (row.result_rate_type === "add_bonus") return `Bonus amount (${currency}) *`;
     if (row.result_rate_type === "flat_amount" || row.result_rate_type === "override") {
-      return "Amount (₹) *";
+      return `Amount (${currency}) *`;
     }
     if (row.result_rate_type === "multiplier") return "Multiplier *";
     return "Value *";
@@ -275,13 +300,8 @@ function RuleEditor({ draft, setDraft, choices, plans }) {
                   value={resultRateType(row)}
                   onChange={(e) =>
                     updateResult(index, {
+                      ...resultDefaultsForType(e.target.value, index + 1),
                       result_rate_type: e.target.value,
-                      value_unit_type:
-                        e.target.value === "override_tier_pct" ? "percent" : "currency",
-                      earning_group:
-                        e.target.value === "add_bonus" ? "bonus" : "base",
-                      result_classification:
-                        e.target.value === "add_bonus" ? "bonus" : "commission",
                     })
                   }
                 >

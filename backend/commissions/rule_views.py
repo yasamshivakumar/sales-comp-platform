@@ -79,11 +79,11 @@ def commission_rule_choices(request):
             ],
             "rate_types": [
                 {"value": "override_tier_pct", "label": "Override tier %"},
-                {"value": "add_bonus", "label": "Add bonus (₹)"},
+                {"value": "add_bonus", "label": "Add bonus"},
                 {"value": "percentage", "label": "Override tier % (legacy)"},
-                {"value": "flat_amount", "label": "Flat amount (₹)"},
+                {"value": "flat_amount", "label": "Flat amount"},
                 {"value": "multiplier", "label": "Multiplier"},
-                {"value": "override", "label": "Override amount (₹)"},
+                {"value": "override", "label": "Override amount"},
             ],
             "value_units": [
                 {"value": v, "label": l}
