@@ -1252,6 +1252,44 @@ class OrderStatusCommissionTests(TestCase):
         self.assertTrue(body["has_commission"])
         self.assertEqual(float(body["commission_amount"]), 1000.0)
 
+    def test_recalculate_api_treats_string_false_as_false(self):
+        admin_user = User.objects.create_user(
+            username="recalc-admin@test.com",
+            email="recalc-admin@test.com",
+            password="test",
+        )
+        UserProfile.objects.create(
+            organization=self.org,
+            employee_id="ADM002",
+            email="recalc-admin@test.com",
+            name="Recalc Admin",
+            role="Admin",
+        )
+        token = Token.objects.create(user=admin_user)
+        client = Client()
+        order = self._order("O-RECALC-LOCK", status="Success")
+        commission = calculate_commission_for_order(order)
+        approve_commissions(
+            Commission.objects.filter(pk=commission.pk),
+            approved_by_user=admin_user,
+        )
+
+        response = client.post(
+            "/api/commissions/recalculate/",
+            {
+                "start_date": str(self.start),
+                "end_date": str(self.start),
+                "force": "false",
+            },
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Token {token.key}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["skipped_approved"], 1)
+        commission.refresh_from_db()
+        self.assertEqual(commission.status, Commission.STATUS_APPROVED)
+
 
 class TenantIsolationAPITests(TestCase):
     def setUp(self):

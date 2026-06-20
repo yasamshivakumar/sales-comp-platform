@@ -1995,7 +1995,12 @@ def recalculate_commissions_view(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    force = bool(request.data.get("force", False))
+    raw_force = request.data.get("force", False)
+    force = (
+        raw_force
+        if isinstance(raw_force, bool)
+        else str(raw_force).strip().lower() in {"1", "true", "yes", "y", "on"}
+    )
     employee_q = (request.data.get("q") or "").strip()
     stats = recalculate_orders_in_range(
         start_date,

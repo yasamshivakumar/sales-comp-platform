@@ -180,8 +180,14 @@ function Commissions() {
     const scopeText = employeeFilter
       ? `employees matching "${employeeFilter}"`
       : "all employees";
+    const proceed = window.confirm(
+      `Recalculate orders for ${scopeText} between ${startDate} and ${endDate}?`
+    );
+    if (!proceed) {
+      return;
+    }
     const force = window.confirm(
-      `Recalculate orders for ${scopeText} between ${startDate} and ${endDate}?\n\nOK = replace approved commissions too.\nCancel = skip orders that are already approved.`
+      "Also replace locked commissions that are manager-approved, finance-approved, or paid?\n\nOK = replace locked commissions too.\nCancel = skip locked commissions."
     );
     setActionLoading(true);
     setActionMessage("");
