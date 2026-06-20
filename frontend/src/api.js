@@ -18,6 +18,15 @@ const apiBaseURL =
 
 const isDebugEnabled = process.env.REACT_APP_DEBUG === "true";
 const SESSION_EXPIRES_AT_KEY = "token_expires_at";
+const AUTH_STORAGE_KEYS = [
+  "token",
+  SESSION_EXPIRES_AT_KEY,
+  "username",
+  "email",
+  "role",
+  "user_id",
+  "name",
+];
 let logoutTimer = null;
 
 if (isDevelopment && isDebugEnabled) {
@@ -35,17 +44,18 @@ const api = axios.create({
 });
 
 export function clearAuthStorage() {
-  localStorage.removeItem("token");
-  localStorage.removeItem(SESSION_EXPIRES_AT_KEY);
-  localStorage.removeItem("username");
-  localStorage.removeItem("email");
-  localStorage.removeItem("role");
-  localStorage.removeItem("user_id");
-  localStorage.removeItem("name");
+  AUTH_STORAGE_KEYS.forEach((key) => {
+    sessionStorage.removeItem(key);
+    localStorage.removeItem(key);
+  });
+}
+
+function clearLegacyLocalAuthStorage() {
+  AUTH_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
 }
 
 function sessionExpiresAtMs() {
-  const value = localStorage.getItem(SESSION_EXPIRES_AT_KEY);
+  const value = sessionStorage.getItem(SESSION_EXPIRES_AT_KEY);
   if (!value) return null;
   const timestamp = Date.parse(value);
   return Number.isNaN(timestamp) ? null : timestamp;
@@ -74,17 +84,26 @@ export function scheduleAutoLogout() {
 }
 
 export function saveAuthSession(data) {
-  localStorage.setItem("token", data.token);
-  localStorage.setItem("email", data.email || "");
-  localStorage.setItem("user_id", data.user_id || "");
-  localStorage.setItem("role", data.role || "");
-  localStorage.setItem("name", data.name || "");
+  clearLegacyLocalAuthStorage();
+  sessionStorage.setItem("token", data.token);
+  sessionStorage.setItem("email", data.email || "");
+  sessionStorage.setItem("user_id", data.user_id || "");
+  sessionStorage.setItem("role", data.role || "");
+  sessionStorage.setItem("name", data.name || "");
   if (data.token_expires_at) {
-    localStorage.setItem(SESSION_EXPIRES_AT_KEY, data.token_expires_at);
+    sessionStorage.setItem(SESSION_EXPIRES_AT_KEY, data.token_expires_at);
   } else {
-    localStorage.removeItem(SESSION_EXPIRES_AT_KEY);
+    sessionStorage.removeItem(SESSION_EXPIRES_AT_KEY);
   }
   scheduleAutoLogout();
+}
+
+export function getAuthToken() {
+  return sessionStorage.getItem("token");
+}
+
+export function getAuthSessionValue(key) {
+  return sessionStorage.getItem(key);
 }
 
 api.interceptors.request.use((config) => {
@@ -93,7 +112,7 @@ api.interceptors.request.use((config) => {
     window.dispatchEvent(new CustomEvent("session-expired"));
     return Promise.reject(new Error("Session expired. Please sign in again."));
   }
-  const token = localStorage.getItem("token");
+  const token = getAuthToken();
   if (token) {
     config.headers.Authorization = `Token ${token}`;
   }
@@ -124,6 +143,7 @@ api.interceptors.response.use(
   }
 );
 
+clearLegacyLocalAuthStorage();
 scheduleAutoLogout();
 
 export function getApiErrorMessage(err, fallback = "Request failed") {

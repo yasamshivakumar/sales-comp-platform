@@ -1,5 +1,5 @@
 import { useState } from "react";
-import api from "../api";
+import api, { clearAuthStorage } from "../api";
 import { useToast } from "./Toast";
 
 function ChangePassword({ onClose }) {
@@ -41,7 +41,7 @@ function ChangePassword({ onClose }) {
 
       success("Password changed successfully! Please login again.");
       setTimeout(() => {
-        localStorage.clear();
+        clearAuthStorage();
         window.location.href = "/login";
       }, 1500);
     } catch (err) {

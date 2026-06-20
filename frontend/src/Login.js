@@ -36,7 +36,7 @@ function Login() {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token");
     if (token) {
-      localStorage.setItem("token", token);
+      saveAuthSession({ token });
       success({
         title: "SSO sign-in complete",
         message: "Redirecting to your workspace…",

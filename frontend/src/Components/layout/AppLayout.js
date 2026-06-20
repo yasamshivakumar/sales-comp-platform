@@ -30,7 +30,7 @@ import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
 import InsightsOutlinedIcon from "@mui/icons-material/InsightsOutlined";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import api from "../../api";
+import api, { clearAuthStorage, getAuthSessionValue } from "../../api";
 import { useTheme as useAppTheme } from "../../ThemeContext";
 import { enterprise } from "../../theme/muiTheme";
 import ChangePassword from "../ChangePassword";
@@ -320,7 +320,7 @@ function AppLayout({ children }) {
   }, [searchParams, navigate]);
 
   const menuItems = getMenuItems(profile);
-  const displayName = profile?.name || localStorage.getItem("name") || "User";
+  const displayName = profile?.name || getAuthSessionValue("name") || "User";
   const initials = displayName
     .split(/\s+/)
     .filter(Boolean)
@@ -339,7 +339,7 @@ function AppLayout({ children }) {
   }, [location.pathname, menuItems]);
 
   const logout = () => {
-    localStorage.clear();
+    clearAuthStorage();
     window.location.href = "/login";
   };
 

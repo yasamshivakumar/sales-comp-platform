@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import api from "../api";
+import api, { clearAuthStorage } from "../api";
 import { useToast } from "../Components/Toast";
 import PageHeader from "../Components/PageHeader";
 
@@ -212,7 +212,7 @@ function UserSetup() {
     } catch (err) {
       if (err.response?.status === 401) {
         error("Session expired. Please log in again.");
-        localStorage.removeItem("token");
+        clearAuthStorage();
         window.location.href = "/login";
         return;
       }

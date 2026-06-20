@@ -14,9 +14,10 @@ import MyStatement from "./Dashboard/MyStatement";
 import AuditLogs from "./Enterprise/AuditLogs";
 import Territories from "./Enterprise/Territories";
 import Payouts from "./Enterprise/Payouts";
+import { getAuthToken } from "./api";
 
 function PrivateRoute({ children }) {
-  const token = localStorage.getItem("token");
+  const token = getAuthToken();
   return token ? children : <Navigate to="/login" />;
 }
 
