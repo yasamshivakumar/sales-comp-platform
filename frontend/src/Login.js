@@ -101,21 +101,29 @@ function Login() {
       >
         <BoltIcon />
       </Box>
-      <Typography variant="h3" fontWeight={800} sx={{ mb: 1.5, lineHeight: 1.2 }}>
+      <Typography
+        variant="h3"
+        fontWeight={800}
+        sx={{ mb: 1.5, lineHeight: 1.2, color: "#fff" }}
+      >
         Enterprise sales compensation
       </Typography>
-      <Typography sx={{ opacity: 0.78, lineHeight: 1.7, mb: 4 }}>
+      <Typography sx={{ color: "rgba(255,255,255,0.78)", lineHeight: 1.7, mb: 4 }}>
         Plan incentives, calculate commissions, and pay reps with confidence — built for
         finance and sales ops teams.
       </Typography>
       <Stack spacing={2}>
         <Stack direction="row" spacing={1.5} alignItems="center">
-          <TrendingUpIcon sx={{ opacity: 0.85 }} />
-          <Typography variant="body2">Real-time commission analytics</Typography>
+          <TrendingUpIcon sx={{ color: "rgba(255,255,255,0.85)" }} />
+          <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.86)" }}>
+            Real-time commission analytics
+          </Typography>
         </Stack>
         <Stack direction="row" spacing={1.5} alignItems="center">
-          <SecurityIcon sx={{ opacity: 0.85 }} />
-          <Typography variant="body2">Role-based access & audit trails</Typography>
+          <SecurityIcon sx={{ color: "rgba(255,255,255,0.85)" }} />
+          <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.86)" }}>
+            Role-based access & audit trails
+          </Typography>
         </Stack>
       </Stack>
     </>

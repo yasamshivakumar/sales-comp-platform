@@ -94,10 +94,14 @@ function Signup() {
       >
         <BoltIcon />
       </Box>
-      <Typography variant="h3" fontWeight={800} sx={{ mb: 1.5, lineHeight: 1.2 }}>
+      <Typography
+        variant="h3"
+        fontWeight={800}
+        sx={{ mb: 1.5, lineHeight: 1.2, color: "#fff" }}
+      >
         Join Incentra
       </Typography>
-      <Typography sx={{ opacity: 0.78, lineHeight: 1.7 }}>
+      <Typography sx={{ color: "rgba(255,255,255,0.78)", lineHeight: 1.7 }}>
         Create your account to manage compensation plans, commissions, and payouts.
       </Typography>
     </>
