@@ -1539,6 +1539,33 @@ body.sidebar-collapsed {
 }
 
 @media (max-width: 768px) {
+  html,
+  body,
+  #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .panel,
+  .card,
+  .page-content,
+  .container,
+  .container-fluid {
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .page-header {
+    align-items: flex-start;
+  }
+
+  .page-header__title {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
   .app-main {
     margin-left: 0;
     width: 100%;

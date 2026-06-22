@@ -409,7 +409,17 @@ function AppLayout({ children }) {
   );
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
+    <Box
+      sx={{
+        display: "flex",
+        minHeight: "100vh",
+        width: "100%",
+        maxWidth: "100vw",
+        minWidth: 0,
+        overflowX: "hidden",
+        bgcolor: "background.default",
+      }}
+    >
       <AppBar
         position="fixed"
         elevation={0}
@@ -461,7 +471,10 @@ function AppLayout({ children }) {
         component="main"
         sx={{
           flexGrow: 1,
-          width: { md: `calc(100% - ${DRAWER_WIDTH}px)` },
+          width: { xs: "100%", md: `calc(100% - ${DRAWER_WIDTH}px)` },
+          maxWidth: "100%",
+          minWidth: 0,
+          overflowX: "hidden",
           pt: { xs: 8, md: 0 },
           minHeight: "100vh",
           display: "flex",
@@ -483,6 +496,9 @@ function AppLayout({ children }) {
             maxWidth: 1600,
             mx: "auto",
             width: "100%",
+            minWidth: 0,
+            overflowX: "hidden",
+            boxSizing: "border-box",
           }}
         >
           {children}
