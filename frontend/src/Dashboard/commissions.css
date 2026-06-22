@@ -343,3 +343,13 @@
 [data-theme="dark"] .commissions-table__order-id {
   color: #7cb8f0;
 }
+
+[data-theme="dark"] .commissions-page .btn-secondary:hover:not(:disabled),
+[data-theme="dark"] .commissions-page .btn-secondary:focus-visible:not(:disabled),
+[data-theme="dark"] .commissions-page .btn-secondary:active:not(:disabled) {
+  background: rgba(148, 163, 184, 0.16) !important;
+  border-color: rgba(148, 163, 184, 0.36) !important;
+  color: var(--text-primary) !important;
+  box-shadow: none;
+  transform: none;
+}
