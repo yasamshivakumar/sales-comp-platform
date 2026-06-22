@@ -216,7 +216,7 @@ function Login() {
         )}
 
         <Typography align="center" sx={{ mt: 3 }} color="text.secondary" variant="body2">
-          Employees sign in after an admin adds them in User Setup.
+          New employees must accept their email invite and set a password before signing in.
         </Typography>
       </Card>
     </AuthPageLayout>

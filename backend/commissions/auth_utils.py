@@ -35,7 +35,7 @@ def apply_onboarding_password(django_user, *, user_created=False, force=False):
     return False
 
 
-def provision_login_user(profile, *, reset_password=False):
+def provision_login_user(profile, *, reset_password=False, pending_invite=False):
     """
     Create or update the Django auth user for a UserProfile with login enabled.
 
@@ -87,9 +87,16 @@ def provision_login_user(profile, *, reset_password=False):
     django_user.email = email
     django_user.first_name = profile.first_name or ""
     django_user.last_name = profile.last_name or ""
-    django_user.is_active = True
+    if pending_invite:
+        django_user.is_active = False if user_created else django_user.is_active
+        if user_created or not django_user.has_usable_password():
+            django_user.set_unusable_password()
+    else:
+        django_user.is_active = True
 
-    if reset_password:
+    if pending_invite:
+        pass
+    elif reset_password:
         pwd = get_onboarding_password()
         if pwd:
             django_user.set_password(pwd)

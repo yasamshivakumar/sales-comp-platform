@@ -36,7 +36,6 @@ from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
 from .serializers import UserProfileSerializer, HierarchyRelationshipSerializer
-from django.conf import settings
 from .services import (
     calculate_commission_for_order,
     approve_commissions,
@@ -58,58 +57,8 @@ from .imports import process_orders_csv, should_use_async_import
 from .list_scope import order_search_q
 from .tenants import (
     filter_queryset_by_organization,
-    get_default_organization,
     get_profile_for_user,
 )
-
-
-def _organization_for_signup(data):
-    name = (
-        str(data.get("organization_name") or data.get("company_name") or "").strip()
-        if data
-        else ""
-    )
-    if not name:
-        return get_default_organization()
-
-    base_slug = slugify(str(data.get("organization_slug") or name))[:60] or "company"
-    slug = base_slug
-    suffix = 2
-    while Organization.objects.filter(slug=slug).exclude(name__iexact=name).exists():
-        slug = f"{base_slug[:55]}-{suffix}"
-        suffix += 1
-    org, _ = Organization.objects.get_or_create(slug=slug, defaults={"name": name})
-    return org
-
-
-def _ensure_self_signup_admin_profile(user, organization=None):
-    """
-    Self-signup is the tenant bootstrap path: the account owner becomes admin,
-    then uses User Setup to add reps/employees.
-    """
-    if not user or not getattr(user, "email", ""):
-        return None
-
-    email = user.email.strip().lower()
-    name = user.get_full_name() or user.username or email
-    employee_id = user.username or email.split("@")[0]
-    organization = organization or get_default_organization()
-    profile, _ = UserProfile.objects.update_or_create(
-        organization=organization,
-        email=email,
-        defaults={
-            "enable_login": True,
-            "username": user.username or email,
-            "name": name,
-            "first_name": user.first_name or user.username or "",
-            "last_name": user.last_name or "",
-            "employee_id": employee_id,
-            "role": "Admin",
-            "business_group": "Company HQ",
-            "personal_currency": "INR",
-        },
-    )
-    return profile
 
 
 def _orders_queryset_for_request(request):
@@ -162,14 +111,19 @@ from django.db import transaction
 from django.db.models import Prefetch
 from django.http import HttpResponse
 from django.utils.dateparse import parse_date
-from django.utils.text import slugify
 
 logger = logging.getLogger("commissions")
 
 
 from .user_scope import profile_commission_q
-from .auth_utils import provision_login_user
 from .authentication import token_expires_at
+from .invites import (
+    accept_invite,
+    create_user_invite,
+    get_valid_invite,
+    invite_context,
+    user_has_pending_invite,
+)
 
 
 class EmployeeViewSet(viewsets.ModelViewSet):
@@ -289,76 +243,68 @@ class CommissionViewSet(viewsets.ModelViewSet):
 @permission_classes([AllowAny])
 @throttle_classes([ScopedRateThrottle])
 def signup(request):
-    username = request.data.get('username')
-    email = request.data.get('email')
-    password = request.data.get('password')
-
-    # Validate required fields
-    if not username or not email or not password:
-        return Response(
-            {'error': 'Username, email, and password are required'},
-            status=400
-        )
-
-    # Check if username already exists
-    if User.objects.filter(username=username).exists():
-        return Response(
-            {'error': 'Username already exists'},
-            status=400
-        )
-
-    organization = _organization_for_signup(request.data)
-
-    admin_exists = UserProfile.objects.filter(
-        role__iexact="Admin",
-        organization=organization,
-    ).exists()
-    if admin_exists:
-        return Response(
-            {
-                'error': (
-                    'Public signup is disabled. Ask an admin to add you in User Setup, '
-                    'then sign in with your employee credentials.'
-                )
-            },
-            status=status.HTTP_403_FORBIDDEN,
-        )
-    if email and UserProfile.objects.filter(email__iexact=email).exclude(
-        organization=organization,
-    ).exists():
-        return Response(
-            {
-                'error': (
-                    'Email is already used by another organization. '
-                    'Use a unique admin email.'
-                )
-            },
-            status=400,
-        )
-
-    # Create user
-    user = User.objects.create_user(
-        username=username,
-        email=email,
-        password=password
+    return Response(
+        {
+            "error": (
+                "Public signup is disabled. Company admins are created by "
+                "the Incentra backend administrator; employees must use their invite link."
+            )
+        },
+        status=status.HTTP_403_FORBIDDEN,
     )
-    profile = _ensure_self_signup_admin_profile(user, organization=organization)
-
-    # Create authentication token
-    token, _ = Token.objects.get_or_create(user=user)
-
-    # Return success response
-    return Response({
-        'message': 'User created successfully',
-        'token': token.key,
-        'role': profile.role if profile else 'Admin',
-        'name': profile.name if profile else user.username,
-        'organization_slug': organization.slug,
-        'organization_name': organization.name,
-    })
 
 
 signup.throttle_scope = "login"
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@throttle_classes([ScopedRateThrottle])
+def invite_detail(request, token):
+    invite = get_valid_invite(token)
+    if not invite:
+        return Response(
+            {"error": "Invite is invalid, expired, or already used."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return Response(invite_context(invite))
+
+
+invite_detail.throttle_scope = "login"
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([ScopedRateThrottle])
+def invite_accept(request, token):
+    password = request.data.get("password") or ""
+    confirm_password = request.data.get("confirm_password") or password
+    if len(password) < 8:
+        return Response(
+            {"error": "Password must be at least 8 characters."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if password != confirm_password:
+        return Response(
+            {"error": "Password and confirmation do not match."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user = accept_invite(token, password)
+    if not user:
+        return Response(
+            {"error": "Invite is invalid, expired, or already used."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    record_audit(
+        request,
+        "invite_accepted",
+        {"email": user.email, "user_id": user.id},
+    )
+    return Response({"message": "Password set successfully. You can now sign in."})
+
+
+invite_accept.throttle_scope = "login"
 
 
 class CompensationPlanListCreateView(generics.ListCreateAPIView):
@@ -585,10 +531,14 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
                 profile.save(update_fields=["territory"])
 
             # ---------------------------------------------------
-            # Create Django Auth User
+            # Create pending login invite
             # ---------------------------------------------------
+            invite_sent = False
             if enable_login:
-                provision_login_user(profile)
+                _, _, invite_sent = create_user_invite(
+                    profile,
+                    invited_by=request.user,
+                )
 
             # ---------------------------------------------------
             # Hierarchy Relationship
@@ -625,9 +575,13 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
                     )
 
             serializer = self.get_serializer(profile)
+            payload = dict(serializer.data)
+            if enable_login:
+                payload["invite_sent"] = invite_sent
+                payload["invite_status"] = "sent" if invite_sent else "created"
 
             return Response(
-                serializer.data,
+                payload,
                 status=status.HTTP_201_CREATED,
             )
 
@@ -732,10 +686,9 @@ class UserProfileUploadView(APIView):
             "failed": failed,
             "errors": errors[:20],
         }
-        if getattr(settings, "DEFAULT_ONBOARDING_PASSWORD", ""):
+        if success:
             payload["note"] = (
-                "New login users received the password from DEFAULT_ONBOARDING_PASSWORD. "
-                "Change it after first login."
+                "Login-enabled imported users receive invite emails to set their password."
             )
         record_audit(
             request,
@@ -996,9 +949,6 @@ def email_login(request):
         user = User.objects.filter(email__iexact=profile.email).first()
     if not user and profile:
         user = User.objects.filter(username__iexact=profile.username).first()
-    if not user and profile:
-        user = provision_login_user(profile)
-
     if not user:
         logger.warning(f"Login attempt with non-existent email: {email}")
         record_audit(request, "login_failed", {"email": email})
@@ -1007,15 +957,17 @@ def email_login(request):
             status=status.HTTP_401_UNAUTHORIZED
         )
 
+    if not user.is_active and user_has_pending_invite(user):
+        return Response(
+            {'error': 'Please accept your invite and set a password first.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
     # Check password (username is the canonical auth field in Django)
     if not user.check_password(password):
         auth_user = authenticate(request, username=user.username, password=password)
         if not auth_user:
             auth_user = authenticate(request, username=user.email, password=password)
-        if not auth_user and profile:
-            repaired = provision_login_user(profile)
-            if repaired and repaired.check_password(password):
-                auth_user = repaired
         if not auth_user:
             logger.warning(f"Failed login attempt for email: {email}")
             record_audit(request, "login_failed", {"email": email})
@@ -1027,6 +979,11 @@ def email_login(request):
     
     # Check if user is active
     if not user.is_active:
+        if user_has_pending_invite(user):
+            return Response(
+                {'error': 'Please accept your invite and set a password first.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         return Response(
             {'error': 'User account is inactive'},
             status=status.HTTP_403_FORBIDDEN
@@ -1044,7 +1001,6 @@ def email_login(request):
                 email__iexact=user.email,
                 organization=getattr(request, "organization", None),
             ).first()
-            or _ensure_self_signup_admin_profile(user)
         )
         
         logger.info(f"Successful login for email: {email}")
@@ -1191,24 +1147,10 @@ def get_user_profile(request):
         })
         
     except UserProfile.DoesNotExist:
-        user_profile = _ensure_self_signup_admin_profile(user)
-        org = user_profile.organization if user_profile else None
-        return Response({
-            'user_id': user.id,
-            'email': user.email,
-            'role': user_profile.role if user_profile else 'Admin',
-            'name': user_profile.name if user_profile else user.get_full_name() or user.username,
-            'is_admin': True,
-            'is_finance': False,
-            'is_manager': False,
-            'employee_id': user_profile.employee_id if user_profile else user.username,
-            'territory_id': None,
-            'territory_name': None,
-            'business_group': user_profile.business_group if user_profile else 'Company HQ',
-            'personal_currency': user_profile.personal_currency if user_profile else 'INR',
-            'organization_slug': org.slug if org else None,
-            'organization_name': org.name if org else None,
-        })
+        return Response(
+            {'error': 'No user profile is configured for this account.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     except Exception as e:
         logger.error(f"Error fetching user profile: {str(e)}")
         return Response(

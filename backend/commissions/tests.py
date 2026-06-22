@@ -1,5 +1,6 @@
 from decimal import Decimal
 from datetime import date
+import re
 from unittest.mock import patch
 
 from django.test import TestCase, Client, override_settings
@@ -19,6 +20,7 @@ from .models import (
     Commission,
     Employee,
     Sale,
+    UserInvite,
 )
 from .services import (
     resolve_compensation_plan,
@@ -964,6 +966,128 @@ class EmployeeStatementTests(TestCase):
         self.assertEqual(line["currency"], "USD")
         self.assertEqual(line["status"], Commission.STATUS_APPROVED)
         self.assertIsNotNone(line["id"])
+
+
+@override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    FRONTEND_URL="https://app.incentra.com",
+)
+class InviteRegistrationTests(TestCase):
+    def setUp(self):
+        self.org = get_default_organization()
+        self.admin = User.objects.create_user(
+            username="invite-admin@test.com",
+            email="invite-admin@test.com",
+            password="testpass",
+        )
+        UserProfile.objects.create(
+            organization=self.org,
+            email=self.admin.email,
+            name="Invite Admin",
+            role="Admin",
+            employee_id="ADM-INV",
+            enable_login=True,
+        )
+        token = Token.objects.create(user=self.admin)
+        self.auth = {"HTTP_AUTHORIZATION": f"Token {token.key}"}
+        self.client = Client()
+
+    def _invite_token_from_email(self):
+        from django.core import mail
+
+        self.assertGreaterEqual(len(mail.outbox), 1)
+        match = re.search(r"/invite/([A-Za-z0-9_\-]+)", mail.outbox[-1].body)
+        self.assertIsNotNone(match)
+        return match.group(1)
+
+    def test_public_signup_is_disabled(self):
+        response = self.client.post(
+            "/api/auth/signup/",
+            {
+                "organization_name": "Blocked Co",
+                "username": "blocked",
+                "email": "blocked@test.com",
+                "password": "Password123",
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("Public signup is disabled", response.json()["error"])
+
+    def test_admin_create_employee_sends_invite_and_pending_user_cannot_login(self):
+        response = self.client.post(
+            "/api/user-setup/",
+            {
+                "email": "new-invite@test.com",
+                "name": "New Invite",
+                "role": "Sales Rep",
+                "employee_id": "INV001",
+                "enable_login": True,
+            },
+            content_type="application/json",
+            **self.auth,
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["invite_status"], "sent")
+        invite = UserInvite.objects.get(email="new-invite@test.com")
+        self.assertIsNone(invite.accepted_at)
+        user = User.objects.get(email="new-invite@test.com")
+        self.assertFalse(user.is_active)
+        self.assertFalse(user.has_usable_password())
+
+        login = self.client.post(
+            "/api/auth/email-login/",
+            {"email": "new-invite@test.com", "password": "Anything123"},
+            content_type="application/json",
+        )
+        self.assertEqual(login.status_code, 403)
+        self.assertIn("accept your invite", login.json()["error"])
+
+    def test_invite_accept_activates_account_and_blocks_reuse(self):
+        self.client.post(
+            "/api/user-setup/",
+            {
+                "email": "accept-invite@test.com",
+                "name": "Accept Invite",
+                "role": "Sales Rep",
+                "employee_id": "INV002",
+                "enable_login": True,
+            },
+            content_type="application/json",
+            **self.auth,
+        )
+        token = self._invite_token_from_email()
+
+        detail = self.client.get(f"/api/auth/invite/{token}/")
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json()["email"], "accept-invite@test.com")
+
+        accepted = self.client.post(
+            f"/api/auth/invite/{token}/accept/",
+            {"password": "StrongPass123", "confirm_password": "StrongPass123"},
+            content_type="application/json",
+        )
+        self.assertEqual(accepted.status_code, 200)
+        user = User.objects.get(email="accept-invite@test.com")
+        self.assertTrue(user.is_active)
+        self.assertTrue(user.check_password("StrongPass123"))
+
+        reused = self.client.post(
+            f"/api/auth/invite/{token}/accept/",
+            {"password": "OtherPass123", "confirm_password": "OtherPass123"},
+            content_type="application/json",
+        )
+        self.assertEqual(reused.status_code, 400)
+
+        login = self.client.post(
+            "/api/auth/email-login/",
+            {"email": "accept-invite@test.com", "password": "StrongPass123"},
+            content_type="application/json",
+        )
+        self.assertEqual(login.status_code, 200)
+        self.assertIn("token", login.json())
 
 
 class EmployeeDisputeTests(TestCase):

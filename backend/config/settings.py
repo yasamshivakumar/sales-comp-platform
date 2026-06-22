@@ -335,6 +335,7 @@ EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@incentra.local")
 NOTIFY_EMAILS = _env_list("NOTIFY_EMAILS", "")
+INVITE_TOKEN_TTL_HOURS = int(os.getenv("INVITE_TOKEN_TTL_HOURS", "72"))
 
 # --- Commission AI assistant (OpenAI-compatible API) ---
 COMMISSION_AI_API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("COMMISSION_AI_API_KEY", "")

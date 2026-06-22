@@ -3,9 +3,6 @@
 import logging
 from datetime import datetime
 
-from django.conf import settings
-from django.contrib.auth.models import User
-
 from ..business_groups import currency_for_business_group
 from ..currencies import normalize_currency
 from ..models import HierarchyRelationship, Territory, UserProfile
@@ -13,7 +10,6 @@ from ..models import HierarchyRelationship, Territory, UserProfile
 logger = logging.getLogger("commissions")
 
 
-from ..auth_utils import provision_login_user
 def _parse_hire_date(value):
     if value in ("", None):
         return None
@@ -139,7 +135,9 @@ def process_users_rows(organization, rows, *, allow_updates=True):
                 employee_id_to_profile[profile.employee_id] = profile
 
             if enable_login:
-                provision_login_user(profile)
+                from ..invites import create_user_invite
+
+                create_user_invite(profile)
 
             parent_value = str(row.get("parent_participant", "")).strip()
             child_value = str(row.get("child_participant", "")).strip()

@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Login from "./Login";
-import Signup from "./Signup";
+import InviteAccept from "./InviteAccept";
 import Dashboard from "./Dashboard/Dashboard";
 
 import AppLayout from "./Components/layout/AppLayout";
@@ -29,8 +29,9 @@ function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/signup" element={<Signup />} />
+        <Route path="/signup" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/invite/:token" element={<InviteAccept />} />
 
         <Route
           path="/"

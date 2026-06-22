@@ -157,7 +157,7 @@ function UserSetup() {
       } else {
         payload.territory = parseInt(payload.territory, 10);
       }
-      await api.post("user-setup/", payload);
+      const res = await api.post("user-setup/", payload);
 
       if (form.parent_participant && form.child_participant && form.split_percentage) {
         await api.post("hierarchy-relationships/", {
@@ -167,7 +167,13 @@ function UserSetup() {
         });
       }
 
-      success("Participant created successfully");
+      if (res.data?.invite_status === "sent") {
+        success("Participant created and invite email sent");
+      } else if (res.data?.invite_status === "created") {
+        warning("Participant created. Invite email could not be sent; check email settings.");
+      } else {
+        success("Participant created successfully");
+      }
       setForm(INITIAL_FORM);
       fetchUsers();
     } catch (err) {

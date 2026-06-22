@@ -688,6 +688,46 @@ class UserProfile(models.Model):
     def __str__(self):
         return f"{self.first_name} {self.last_name}".strip() or self.email
 
+
+class UserInvite(models.Model):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="user_invites",
+    )
+    user_profile = models.ForeignKey(
+        UserProfile,
+        on_delete=models.CASCADE,
+        related_name="login_invites",
+    )
+    invited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sent_user_invites",
+    )
+    email = models.EmailField(db_index=True)
+    token_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    expires_at = models.DateTimeField(db_index=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["organization", "email", "accepted_at"],
+                name="invite_org_email_accept_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Invite for {self.email}"
+
+
 class HierarchyRelationship(models.Model):
     parent_participant = models.ForeignKey(
         'UserProfile',
