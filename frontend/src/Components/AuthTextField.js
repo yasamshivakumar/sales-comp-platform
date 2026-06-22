@@ -1,7 +1,7 @@
 import { Box, TextField, Typography } from "@mui/material";
 
 /** Static label above field — avoids overlap with global input CSS */
-function AuthTextField({ label, id, sx, InputProps, slotProps, ...props }) {
+function AuthTextField({ label, id, sx, InputProps, slotProps, className, ...props }) {
   const fieldId = id || label?.toLowerCase().replace(/\s+/g, "-");
   return (
     <Box sx={{ width: "100%", ...sx }}>
@@ -21,6 +21,7 @@ function AuthTextField({ label, id, sx, InputProps, slotProps, ...props }) {
         fullWidth
         variant="outlined"
         size="small"
+        className={`auth-text-field${className ? ` ${className}` : ""}`}
         InputProps={InputProps}
         slotProps={{
           ...slotProps,

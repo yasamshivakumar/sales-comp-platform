@@ -210,6 +210,44 @@ table tbody tr:hover {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.auth-text-field .MuiOutlinedInput-root {
+  background: #fff !important;
+}
+
+[data-theme="dark"] .auth-text-field .MuiOutlinedInput-root {
+  background: rgba(15, 23, 42, 0.78) !important;
+}
+
+[data-theme="dark"] .auth-text-field .MuiOutlinedInput-root.Mui-focused {
+  background: rgba(15, 23, 42, 0.92) !important;
+}
+
+.auth-text-field .MuiOutlinedInput-input {
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+
+[data-theme="dark"] .auth-text-field .MuiOutlinedInput-input {
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+}
+
+.auth-text-field input:-webkit-autofill,
+.auth-text-field input:-webkit-autofill:hover,
+.auth-text-field input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 100px #fff inset !important;
+  -webkit-text-fill-color: #0f172a !important;
+  caret-color: #0f172a !important;
+}
+
+[data-theme="dark"] .auth-text-field input:-webkit-autofill,
+[data-theme="dark"] .auth-text-field input:-webkit-autofill:hover,
+[data-theme="dark"] .auth-text-field input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 100px #0f172a inset !important;
+  -webkit-text-fill-color: #f8fafc !important;
+  caret-color: #f8fafc !important;
+}
+
 .MuiOutlinedInput-root fieldset {
   border-color: #c9c7c5 !important;
 }
