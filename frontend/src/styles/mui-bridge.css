@@ -81,6 +81,14 @@
   background: #f3f4f6 !important;
 }
 
+[data-theme="dark"] .btn-secondary:hover:not(:disabled),
+[data-theme="dark"] .btn-secondary:focus-visible:not(:disabled),
+[data-theme="dark"] .btn-secondary:active:not(:disabled) {
+  background: rgba(148, 163, 184, 0.16) !important;
+  border-color: rgba(148, 163, 184, 0.36) !important;
+  color: #f3f4f6 !important;
+}
+
 input:not(.search-bar__input):not([type="checkbox"]):not([type="radio"]),
 textarea,
 select {
