@@ -103,6 +103,12 @@ class Territory(models.Model):
 
 
 class Commission(models.Model):
+    SCOPE_ORDER = "order"
+    SCOPE_EMPLOYEE_MONTH = "employee_month"
+    SCOPE_CHOICES = [
+        (SCOPE_ORDER, "Order"),
+        (SCOPE_EMPLOYEE_MONTH, "Employee month"),
+    ]
     STATUS_CALCULATED = "calculated"
     STATUS_MANAGER_APPROVED = "manager_approved"
     STATUS_APPROVED = "approved"
@@ -204,6 +210,22 @@ class Commission(models.Model):
     hold_until = models.DateField(null=True, blank=True)
     reason_code = models.CharField(max_length=100, blank=True, default="")
     rule_result_name = models.CharField(max_length=200, blank=True, default="")
+    calculation_scope = models.CharField(
+        max_length=32,
+        choices=SCOPE_CHOICES,
+        default=SCOPE_ORDER,
+        db_index=True,
+    )
+    period_start = models.DateField(null=True, blank=True, db_index=True)
+    period_end = models.DateField(null=True, blank=True, db_index=True)
+    source_order_count = models.PositiveIntegerField(default=1)
+    source_sales_total = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    currency = models.CharField(max_length=10, blank=True, default="")
 
     class Meta:
         indexes = [
@@ -212,6 +234,15 @@ class Commission(models.Model):
                 name="commission_org_status_calc_idx",
             ),
             models.Index(fields=["status", "calculated_at"]),
+            models.Index(
+                fields=[
+                    "organization",
+                    "calculation_scope",
+                    "period_start",
+                    "employee",
+                ],
+                name="comm_org_scope_period_idx",
+            ),
         ]
 
     def __str__(self):

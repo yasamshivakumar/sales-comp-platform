@@ -3,6 +3,7 @@ from django.utils import timezone
 from decimal import Decimal
 import logging
 
+from .currencies import normalize_currency
 from .models import (
     Order,
     CompensationPlan,
@@ -97,6 +98,73 @@ def _effective_date_filter(order):
     if not order_date:
         return models.Q()
     return monthly_plan_filter(order_date)
+
+
+def _month_bounds_for_order(order):
+    from .plan_periods import month_bounds
+
+    order_date = getattr(order, "order_date", None)
+    if not order_date:
+        return None, None
+    return month_bounds(order_date.year, order_date.month)
+
+
+def _aggregate_currency_for_order(order):
+    return normalize_currency(getattr(order, "currency", None))
+
+
+def _eligible_orders_for_employee_month(order):
+    if not order or not getattr(order, "employee_id", None) or not getattr(order, "order_date", None):
+        return Order.objects.none()
+    period_start, period_end = _month_bounds_for_order(order)
+    qs = Order.objects.filter(
+        employee_id=order.employee_id,
+        order_date__gte=period_start,
+        order_date__lte=period_end,
+        order_status__iexact="Success",
+        currency__iexact=_aggregate_currency_for_order(order),
+    )
+    org_id = getattr(order, "organization_id", None)
+    if org_id:
+        qs = qs.filter(organization_id=org_id)
+    else:
+        qs = qs.filter(organization__isnull=True)
+    return qs.order_by("order_date", "id")
+
+
+def _aggregate_commission_queryset_for_order(order):
+    period_start, _period_end = _month_bounds_for_order(order)
+    if not period_start or not getattr(order, "employee_id", None):
+        return Commission.objects.none()
+    qs = Commission.objects.filter(
+        calculation_scope=Commission.SCOPE_EMPLOYEE_MONTH,
+        period_start=period_start,
+        currency__iexact=_aggregate_currency_for_order(order),
+    ).filter(
+        models.Q(employee__email__iexact=f"{order.employee_id}@company.com")
+        | models.Q(sale__order__employee_id=order.employee_id)
+    )
+    org_id = getattr(order, "organization_id", None)
+    if org_id:
+        qs = qs.filter(organization_id=org_id)
+    else:
+        qs = qs.filter(organization__isnull=True)
+    profile = _get_user_profile_for_order(order)
+    if profile and profile.email:
+        qs = qs | Commission.objects.filter(
+            calculation_scope=Commission.SCOPE_EMPLOYEE_MONTH,
+            period_start=period_start,
+            currency__iexact=_aggregate_currency_for_order(order),
+            employee__email__iexact=profile.email,
+            organization_id=org_id,
+        )
+    return qs.distinct()
+
+
+def _aggregate_has_locked_commissions(order):
+    return _aggregate_commission_queryset_for_order(order).filter(
+        status__in=Commission.LOCKED_STATUSES
+    ).exists()
 
 
 from .workflow import order_has_locked_commissions
@@ -414,25 +482,33 @@ def _apply_hierarchy_split(order, commission_amount):
 
 def clear_commissions_for_order(order, force=False):
     """
-    Remove prior sale/commission rows for this order (idempotent re-runs).
+    Remove prior sale/commission rows for this order's employee-month group.
 
     Skips deletion when approved commissions exist unless force=True (admin recalc).
     """
     if not order or not order.pk:
         return 0
-    if not force and _order_has_approved_commissions(order):
+    if not force and _aggregate_has_locked_commissions(order):
         logger.warning(
-            "Skipping commission recalc for order %s: approved commissions exist",
+            "Skipping commission recalc for order %s: locked monthly commission exists",
             order.order_id,
         )
         return 0
-    deleted, _ = Sale.objects.filter(order=order).delete()
-    return deleted
+    eligible_orders = _eligible_orders_for_employee_month(order)
+    order_sales = Sale.objects.filter(
+        models.Q(order__in=eligible_orders) | models.Q(order=order)
+    )
+    summary_sale_ids = _aggregate_commission_queryset_for_order(order).values_list(
+        "sale_id", flat=True
+    )
+    deleted_order_sales, _ = order_sales.delete()
+    deleted_summary_sales, _ = Sale.objects.filter(id__in=summary_sale_ids).delete()
+    return deleted_order_sales + deleted_summary_sales
 
 
 def calculate_commission_for_order(order, replace_existing=True, force=False):
     """
-    Calculate commission for one order and persist Commission record(s).
+    Calculate one monthly aggregate commission for this order's employee/month.
 
     Plan lookup priority:
       1. Active plan matching position_name (order, then user profile)
@@ -441,82 +517,98 @@ def calculate_commission_for_order(order, replace_existing=True, force=False):
     Hierarchy:
       split_percentage = % of commission kept by the child; parent gets the rest.
 
-    replace_existing: If True, delete existing commissions for this order first.
+    replace_existing: If True, delete existing commissions for this employee/month first.
     force: Allow replacing approved commissions (admin bulk recalc).
     """
     if replace_existing:
-        if not force and _order_has_approved_commissions(order):
+        if not force and _aggregate_has_locked_commissions(order):
             logger.warning(
-                "Commission calc skipped for order %s (approved, use force recalc)",
+                "Commission calc skipped for order %s (locked monthly aggregate, use force recalc)",
                 order.order_id,
             )
             return None
         clear_commissions_for_order(order, force=force)
 
-    if not order_is_commission_eligible(order):
+    eligible_orders = _eligible_orders_for_employee_month(order)
+    if not eligible_orders.exists():
         logger.info(
-            "Commission calc skipped for order %s: status=%s (requires Success)",
+            "Commission calc skipped for order %s: no successful orders in employee month",
             order.order_id,
-            getattr(order, "order_status", None),
         )
         return None
 
-    plan, lookup_source = resolve_compensation_plan(order)
+    representative_order = eligible_orders.first()
+    period_start, period_end = _month_bounds_for_order(representative_order)
+    total_sales = sum(
+        (row.sales_amount or Decimal("0.00")) for row in eligible_orders
+    )
+    source_order_count = eligible_orders.count()
+
+    plan, lookup_source = resolve_compensation_plan(representative_order)
 
     if not plan:
-        user_profile = _get_user_profile_for_order(order)
+        user_profile = _get_user_profile_for_order(representative_order)
         logger.warning(
             "No compensation plan for order %s "
             "(position_name=%s, employee_id=%s, profile_role=%s, sales_amount=%s, "
             "order_date=%s, organization_id=%s). %s",
-            order.order_id,
-            order.position_name,
-            order.employee_id,
+            representative_order.order_id,
+            representative_order.position_name,
+            representative_order.employee_id,
             getattr(user_profile, "role", None),
-            order.sales_amount,
-            order.order_date,
-            getattr(order, "organization_id", None),
-            explain_plan_resolution_failure(order),
+            total_sales,
+            representative_order.order_date,
+            getattr(representative_order, "organization_id", None),
+            explain_plan_resolution_failure(representative_order),
         )
         return None
 
     logger.info(
-        "Plan matched for order %s: plan_id=%s lookup=%s type=%s",
-        order.order_id,
+        "Plan matched for employee-month %s/%s: plan_id=%s lookup=%s type=%s",
+        representative_order.employee_id,
+        period_start,
         plan.id,
         lookup_source,
         plan.commission_table_type,
     )
 
-    commission_amount = _calculate_amount_for_plan(plan, order.sales_amount, order=order)
+    original_sales_amount = representative_order.sales_amount
+    representative_order.sales_amount = total_sales
+    commission_amount = _calculate_amount_for_plan(
+        plan,
+        total_sales,
+        order=representative_order,
+    )
     if commission_amount <= 0:
+        representative_order.sales_amount = original_sales_amount
         return None
 
     from .commission_rules import apply_commission_rules
 
-    user_profile = _get_user_profile_for_order(order)
+    user_profile = _get_user_profile_for_order(representative_order)
     commission_amount, credit_amount, matched_rule, rule_meta = apply_commission_rules(
-        plan, order, user_profile, commission_amount
+        plan, representative_order, user_profile, commission_amount
     )
+    representative_order.sales_amount = original_sales_amount
     if commission_amount <= 0:
         return None
 
-    employee = _get_or_create_employee_for_order(order, user_profile)
+    employee = _get_or_create_employee_for_order(representative_order, user_profile)
 
     sale = Sale.objects.create(
-        organization=getattr(order, "organization", None),
-        order=order,
+        organization=getattr(representative_order, "organization", None),
+        order=None,
         employee=employee,
         employee_salary=Decimal("0.00"),
-        amount=order.sales_amount,
+        amount=total_sales,
     )
 
     employee_amount, parent_amount, parent_employee = _apply_hierarchy_split(
-        order, commission_amount
+        representative_order, commission_amount
     )
 
     commission = Commission.objects.create(
-        organization=getattr(order, "organization", None),
+        organization=getattr(representative_order, "organization", None),
         employee=employee,
         sale=sale,
         commission_amount=employee_amount,
@@ -529,16 +621,28 @@ def calculate_commission_for_order(order, replace_existing=True, force=False):
         reason_code=rule_meta.get("reason_code", ""),
         rule_result_name=rule_meta.get("rule_result_name", ""),
         status=Commission.STATUS_CALCULATED,
+        calculation_scope=Commission.SCOPE_EMPLOYEE_MONTH,
+        period_start=period_start,
+        period_end=period_end,
+        source_order_count=source_order_count,
+        source_sales_total=total_sales,
+        currency=_aggregate_currency_for_order(representative_order),
     )
 
     if parent_employee and parent_amount > 0:
         Commission.objects.create(
-            organization=getattr(order, "organization", None),
+            organization=getattr(representative_order, "organization", None),
             employee=parent_employee,
             sale=sale,
             commission_amount=parent_amount,
             compensation_plan=plan,
             status=Commission.STATUS_CALCULATED,
+            calculation_scope=Commission.SCOPE_EMPLOYEE_MONTH,
+            period_start=period_start,
+            period_end=period_end,
+            source_order_count=source_order_count,
+            source_sales_total=total_sales,
+            currency=_aggregate_currency_for_order(representative_order),
         )
 
     return commission
@@ -576,8 +680,19 @@ def recalculate_orders_in_range(
         "scoped": bool(employee_q),
         "order_count": orders.count(),
     }
+    seen_groups = set()
     for order in orders:
-        if not force and _order_has_approved_commissions(order):
+        period_start, _period_end = _month_bounds_for_order(order)
+        group_key = (
+            getattr(order, "organization_id", None),
+            order.employee_id,
+            period_start,
+            _aggregate_currency_for_order(order),
+        )
+        if group_key in seen_groups:
+            continue
+        seen_groups.add(group_key)
+        if not force and _aggregate_has_locked_commissions(order):
             stats["skipped_approved"] += 1
             continue
         try:

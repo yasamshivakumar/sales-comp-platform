@@ -82,10 +82,14 @@ class CommissionSerializer(serializers.ModelSerializer):
 
     def get_order_id(self, obj):
         order = getattr(obj.sale, 'order', None) if obj.sale_id else None
+        if not order and getattr(obj, "calculation_scope", "") == Commission.SCOPE_EMPLOYEE_MONTH:
+            return "Monthly summary"
         return order.order_id if order else None
 
     def get_order_date(self, obj):
         order = getattr(obj.sale, 'order', None) if obj.sale_id else None
+        if not order and getattr(obj, "period_start", None):
+            return obj.period_start
         return order.order_date if order else None
 
     def get_employee_id(self, obj):
@@ -105,7 +109,9 @@ class CommissionSerializer(serializers.ModelSerializer):
         from .currencies import normalize_currency
 
         order = getattr(obj.sale, "order", None) if obj.sale_id else None
-        return normalize_currency(getattr(order, "currency", None))
+        return normalize_currency(
+            getattr(obj, "currency", None) or getattr(order, "currency", None)
+        )
 
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
@@ -417,10 +423,36 @@ class OrderSerializer(serializers.ModelSerializer):
                 return commission
         from .models import Commission
 
-        return (
+        order_commission = (
             Commission.objects.filter(
                 sale__order=obj,
                 organization=getattr(obj, "organization", None),
+            ).order_by("id").first()
+        )
+        if order_commission:
+            return order_commission
+
+        if not getattr(obj, "employee_id", None) or not getattr(obj, "order_date", None):
+            return None
+        from .currencies import normalize_currency
+        from .models import UserProfile
+        from .plan_periods import month_bounds
+
+        period_start, _period_end = month_bounds(obj.order_date.year, obj.order_date.month)
+        profile = UserProfile.objects.filter(
+            employee_id=obj.employee_id,
+            organization=getattr(obj, "organization", None),
+        ).first()
+        emails = [f"{obj.employee_id}@company.com"]
+        if profile and profile.email:
+            emails.append(profile.email)
+        return (
+            Commission.objects.filter(
+                calculation_scope=Commission.SCOPE_EMPLOYEE_MONTH,
+                organization=getattr(obj, "organization", None),
+                period_start=period_start,
+                currency__iexact=normalize_currency(getattr(obj, "currency", None)),
+                employee__email__in=emails,
             ).order_by("id").first()
         )
 

@@ -4,7 +4,7 @@ import csv
 import io
 from decimal import Decimal
 
-from django.db.models import Count, Q, Sum
+from django.db.models import Case, CharField, Count, Q, Sum, When
 from django.utils.dateparse import parse_date
 from rest_framework import status, viewsets
 from rest_framework.decorators import api_view, permission_classes
@@ -51,6 +51,29 @@ from .workflow import (
 )
 
 
+def commission_date_q(start_date=None, end_date=None):
+    if start_date and end_date:
+        return Q(sale__order__order_date__range=[start_date, end_date]) | Q(
+            period_start__lte=end_date,
+            period_end__gte=start_date,
+        )
+    if start_date:
+        return Q(sale__order__order_date__gte=start_date) | Q(period_end__gte=start_date)
+    if end_date:
+        return Q(sale__order__order_date__lte=end_date) | Q(period_start__lte=end_date)
+    return Q()
+
+
+def with_commission_currency(queryset):
+    return queryset.annotate(
+        report_currency=Case(
+            When(currency="", then="sale__order__currency"),
+            default="currency",
+            output_field=CharField(),
+        )
+    )
+
+
 def _commission_base_queryset(request):
     queryset = Commission.objects.select_related(
         "employee",
@@ -86,9 +109,7 @@ def _apply_commission_filters(queryset, request):
     start_date = parse_date(request.query_params.get("start_date") or "")
     end_date = parse_date(request.query_params.get("end_date") or "")
     if start_date and end_date:
-        queryset = queryset.filter(
-            sale__order__order_date__range=[start_date, end_date]
-        )
+        queryset = queryset.filter(commission_date_q(start_date, end_date))
     status_param = request.query_params.get("status")
     valid_statuses = {c[0] for c in Commission.STATUS_CHOICES}
     if status_param in valid_statuses:
@@ -123,9 +144,7 @@ def _parse_approval_body(request):
     if ids:
         queryset = queryset.filter(id__in=ids)
     elif start_date and end_date:
-        queryset = queryset.filter(
-            sale__order__order_date__range=[start_date, end_date]
-        )
+        queryset = queryset.filter(commission_date_q(start_date, end_date))
     else:
         return None, None, None, Response(
             {"error": "Provide commission ids and/or start_date + end_date"},
@@ -143,9 +162,17 @@ def _commission_rate_pct(amount, sales_amount):
 def _statement_line_from_commission(comm, profile):
     order = comm.sale.order if comm.sale_id and comm.sale.order_id else None
     amount = comm.commission_amount or Decimal("0.00")
-    sales = order.sales_amount if order else None
+    is_monthly_summary = (
+        getattr(comm, "calculation_scope", "") == Commission.SCOPE_EMPLOYEE_MONTH
+    )
+    sales = (
+        comm.source_sales_total
+        if is_monthly_summary and comm.source_sales_total is not None
+        else (order.sales_amount if order else None)
+    )
     currency = normalize_currency(
-        getattr(order, "currency", None)
+        getattr(comm, "currency", None)
+        or getattr(order, "currency", None)
         or (profile.personal_currency if profile else None)
     )
     profile_employee_id = profile.employee_id if profile else None
@@ -160,9 +187,25 @@ def _statement_line_from_commission(comm, profile):
     )
     return {
         "id": comm.id,
-        "order_id": order.order_id if order else None,
-        "order_date": str(order.order_date) if order else None,
-        "product": (order.product_name or order.service_name) if order else None,
+        "order_id": (
+            order.order_id
+            if order
+            else ("Monthly summary" if is_monthly_summary else None)
+        ),
+        "order_date": (
+            str(order.order_date)
+            if order
+            else (str(comm.period_start) if comm.period_start else None)
+        ),
+        "product": (
+            (order.product_name or order.service_name)
+            if order
+            else (
+                f"{comm.source_order_count} order monthly total"
+                if is_monthly_summary
+                else None
+            )
+        ),
         "sales_amount": str(sales) if sales is not None else None,
         "commission_amount": str(amount),
         "currency": currency,
@@ -185,6 +228,10 @@ def _statement_line_from_commission(comm, profile):
             "Manager override / hierarchy split" if is_manager_credit else None
         ),
         "has_open_dispute": commission_has_open_dispute(comm),
+        "calculation_scope": comm.calculation_scope,
+        "period_start": str(comm.period_start) if comm.period_start else None,
+        "period_end": str(comm.period_end) if comm.period_end else None,
+        "source_order_count": comm.source_order_count,
     }
 
 
@@ -271,6 +318,11 @@ def employee_statement(request):
             orders.append(line)
 
     commissioned_order_ids = {line["order_id"] for line in orders if line.get("order_id")}
+    commissioned_months = {
+        (line.get("period_start"), line.get("currency"))
+        for line in orders
+        if line.get("calculation_scope") == Commission.SCOPE_EMPLOYEE_MONTH
+    }
     if profile_employee_id:
         order_qs = Order.objects.filter(employee_id=profile_employee_id)
         if start_date and end_date:
@@ -280,6 +332,10 @@ def employee_statement(request):
             order_qs = order_qs.filter(organization=org)
         for order in order_qs.order_by("-order_date", "order_id"):
             if order.order_id in commissioned_order_ids:
+                continue
+            month_start = order.order_date.replace(day=1).isoformat()
+            order_currency = normalize_currency(getattr(order, "currency", None))
+            if (month_start, order_currency) in commissioned_months:
                 continue
             orders.append(
                 {
@@ -422,9 +478,13 @@ def employee_statement_export(request):
     ])
     profile = get_request_user_profile(request)
     profile_employee_id = profile.employee_id if profile else None
-    for comm in queryset.order_by("sale__order__order_date", "id"):
+    for comm in queryset.order_by("period_start", "sale__order__order_date", "id"):
         order = comm.sale.order if comm.sale_id and comm.sale.order_id else None
-        sales = order.sales_amount if order else None
+        sales = (
+            comm.source_sales_total
+            if comm.calculation_scope == Commission.SCOPE_EMPLOYEE_MONTH
+            else (order.sales_amount if order else None)
+        )
         line_type = (
             "credit"
             if order
@@ -437,9 +497,9 @@ def employee_statement_export(request):
         )
         writer.writerow([
             comm.id,
-            order.order_id if order else "",
-            order.order_date if order else "",
-            order.service_name if order else "",
+            order.order_id if order else "Monthly summary",
+            order.order_date if order else (comm.period_start or ""),
+            order.service_name if order else "Monthly total",
             sales if sales is not None else "",
             _commission_rate_pct(comm.commission_amount, sales) or "",
             comm.commission_amount,
@@ -511,9 +571,10 @@ def leaderboard(request):
     queryset = _commission_base_queryset(request)
     org = getattr(request, "organization", None)
     if org:
-        queryset = queryset.filter(sale__order__organization=org)
+        queryset = queryset.filter(organization=org)
 
     queryset, start_date, end_date = _apply_commission_filters(queryset, request)
+    queryset = with_commission_currency(queryset)
 
     if not user_can_view_finance_data(request) and not user_is_manager(request):
         queryset = _commissions_for_user(request)
@@ -529,7 +590,7 @@ def leaderboard(request):
             "employee_id",
             "employee__name",
             "employee__email",
-            "sale__order__currency",
+            "report_currency",
         )
         .annotate(
             total_commission=Sum("commission_amount"),
@@ -555,7 +616,7 @@ def leaderboard(request):
             "territory": profile.territory.name if profile and profile.territory_id else None,
             "total_commission": str(row["total_commission"] or 0),
             "deal_count": row["deal_count"],
-            "currency": normalize_currency(row.get("sale__order__currency")),
+            "currency": normalize_currency(row.get("report_currency")),
         })
 
     return Response({
@@ -825,8 +886,9 @@ def _profile_display_name(profile):
 def _commission_breakdown(queryset, field_path, empty_label="Unassigned"):
     from .currencies import normalize_currency
 
+    queryset = with_commission_currency(queryset)
     rows = (
-        queryset.values(field_path, "sale__order__currency")
+        queryset.values(field_path, "report_currency")
         .annotate(
             total=Sum("commission_amount"),
             count=Count("id"),
@@ -836,7 +898,7 @@ def _commission_breakdown(queryset, field_path, empty_label="Unassigned"):
     results = []
     for row in rows:
         label = row[field_path] or empty_label
-        currency = normalize_currency(row["sale__order__currency"])
+        currency = normalize_currency(row["report_currency"])
         results.append(
             {
                 "label": label,
@@ -857,13 +919,14 @@ def advanced_analytics_report(request):
     queryset = _commission_base_queryset(request)
     org = getattr(request, "organization", None)
     if org:
-        queryset = queryset.filter(sale__order__organization=org)
+        queryset = queryset.filter(organization=org)
 
     scoped_to_self = not user_can_view_finance_data(request) and not user_is_manager(request)
     if scoped_to_self:
         queryset = _commissions_for_user(request)
 
     queryset, start_date, end_date = _apply_commission_filters(queryset, request)
+    queryset = with_commission_currency(queryset)
 
     if not start_date or not end_date:
         end_date = date.today()
@@ -937,19 +1000,18 @@ def advanced_analytics_report(request):
     current_by_emp = queryset.values(
         "employee__email",
         "employee__name",
-        "sale__order__currency",
+        "report_currency",
     ).annotate(
         current=Sum("commission_amount")
     )
     prev_queryset = _commission_base_queryset(request)
     if scoped_to_self:
         prev_queryset = _commissions_for_user(request)
-    prev_queryset = prev_queryset.filter(
-        sale__order__order_date__range=[prev_start, prev_end]
-    )
+    prev_queryset = prev_queryset.filter(commission_date_q(prev_start, prev_end))
+    prev_queryset = with_commission_currency(prev_queryset)
     prev_by_email = {
-        (row["employee__email"], normalize_currency(row.get("sale__order__currency"))): float(row["previous"] or 0)
-        for row in prev_queryset.values("employee__email", "sale__order__currency").annotate(
+        (row["employee__email"], normalize_currency(row.get("report_currency"))): float(row["previous"] or 0)
+        for row in prev_queryset.values("employee__email", "report_currency").annotate(
             previous=Sum("commission_amount")
         )
     }
@@ -957,7 +1019,7 @@ def advanced_analytics_report(request):
     top_growth_reps = []
     for row in current_by_emp:
         email = row["employee__email"]
-        currency = normalize_currency(row.get("sale__order__currency"))
+        currency = normalize_currency(row.get("report_currency"))
         current = float(row["current"] or 0)
         previous = prev_by_email.get((email, currency), 0)
         if previous > 0:

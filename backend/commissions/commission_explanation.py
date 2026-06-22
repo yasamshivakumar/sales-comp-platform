@@ -209,6 +209,8 @@ def _rule_steps(plan, order, user_profile, base_amount, currency=None):
 def _hierarchy_step(order, gross_amount, net_amount, currency=None):
     if gross_amount == net_amount:
         return None
+    if not order:
+        return None
     profile = _get_user_profile_for_order(order)
     if not profile:
         return None
@@ -247,25 +249,57 @@ def build_commission_explanation(commission: Commission) -> dict:
         .first()
     )
     if not comm or not comm.sale_id:
-        return {"error": "Commission has no linked order."}
+        return {"error": "Commission has no linked sale."}
 
-    order = comm.sale.order
+    order = comm.sale.order if comm.sale and comm.sale.order_id else None
     plan = comm.compensation_plan
-    user_profile = _get_user_profile_for_order(order)
-    sales_amount = _decimal(order.sales_amount)
-    currency = normalize_currency(getattr(order, "currency", None))
+    user_profile = _get_user_profile_for_order(order) if order else None
+    representative_order = order
+    if not representative_order and comm.calculation_scope == Commission.SCOPE_EMPLOYEE_MONTH:
+        profile_qs = UserProfile.objects.filter(email__iexact=comm.employee.email)
+        if comm.organization_id:
+            profile_qs = profile_qs.filter(organization_id=comm.organization_id)
+        user_profile = profile_qs.first()
+        if user_profile and user_profile.employee_id and comm.period_start and comm.period_end:
+            representative_order = (
+                Order.objects.filter(
+                    employee_id=user_profile.employee_id,
+                    order_date__range=[comm.period_start, comm.period_end],
+                    currency__iexact=normalize_currency(comm.currency),
+                )
+                .filter(organization_id=comm.organization_id)
+                .order_by("order_date", "id")
+                .first()
+            )
+    sales_amount = _decimal(
+        comm.source_sales_total
+        if comm.calculation_scope == Commission.SCOPE_EMPLOYEE_MONTH
+        else (order.sales_amount if order else comm.sale.amount)
+    )
+    currency = normalize_currency(
+        comm.currency or getattr(order, "currency", None)
+    )
 
     lines = [
         {
             "key": "order_value",
-            "label": "Order value",
+            "label": (
+                "Monthly sales total"
+                if comm.calculation_scope == Commission.SCOPE_EMPLOYEE_MONTH
+                else "Order value"
+            ),
             "display": _inr(sales_amount, currency),
-            "detail": f"Order {order.order_id} on {order.order_date}.",
+            "detail": (
+                f"{comm.source_order_count} successful order(s) from "
+                f"{comm.period_start} to {comm.period_end}."
+                if comm.calculation_scope == Commission.SCOPE_EMPLOYEE_MONTH
+                else f"Order {order.order_id} on {order.order_date}."
+            ),
             "checked": True,
         }
     ]
 
-    if getattr(order, "currency", None):
+    if currency:
         lines.append(
             {
                 "key": "currency",
@@ -275,7 +309,7 @@ def build_commission_explanation(commission: Commission) -> dict:
             }
         )
 
-    if order.product_name:
+    if order and order.product_name:
         lines.append(
             {
                 "key": "product",
@@ -285,7 +319,7 @@ def build_commission_explanation(commission: Commission) -> dict:
             }
         )
 
-    if order.service_name:
+    if order and order.service_name:
         lines.append(
             {
                 "key": "service",
@@ -295,7 +329,7 @@ def build_commission_explanation(commission: Commission) -> dict:
             }
         )
 
-    if getattr(order, "distribution", None):
+    if order and getattr(order, "distribution", None):
         lines.append(
             {
                 "key": "distribution",
@@ -305,7 +339,7 @@ def build_commission_explanation(commission: Commission) -> dict:
             }
         )
 
-    if order.territory_id and order.territory:
+    if order and order.territory_id and order.territory:
         lines.append(
             {
                 "key": "territory",
@@ -318,7 +352,11 @@ def build_commission_explanation(commission: Commission) -> dict:
     base_amount = Decimal("0")
     tier_meta = {}
     if plan:
-        tier, base_amount, tier_meta = _tier_breakdown(plan, sales_amount, order)
+        tier, base_amount, tier_meta = _tier_breakdown(
+            plan,
+            sales_amount,
+            representative_order,
+        )
         if tier_meta:
             to_amt = tier_meta.get("to_amount")
             if plan.commission_table_type == "LOOKUP":
@@ -372,8 +410,14 @@ def build_commission_explanation(commission: Commission) -> dict:
             base_amount = _calculate_amount_for_plan(plan, sales_amount, order=order)
 
     rule_steps = []
-    if plan:
-        _, rule_steps = _rule_steps(plan, order, user_profile, base_amount, currency)
+    if plan and representative_order:
+        _, rule_steps = _rule_steps(
+            plan,
+            representative_order,
+            user_profile,
+            base_amount,
+            currency,
+        )
         lines.extend(rule_steps)
 
     gross = base_amount
@@ -381,7 +425,7 @@ def build_commission_explanation(commission: Commission) -> dict:
         gross, _, _, _ = apply_commission_rules(plan, order, user_profile, base_amount)
 
     net = _decimal(comm.commission_amount)
-    hierarchy = _hierarchy_step(order, gross, net, currency)
+    hierarchy = _hierarchy_step(representative_order, gross, net, currency)
     if hierarchy:
         lines.append(hierarchy)
 
@@ -395,8 +439,13 @@ def build_commission_explanation(commission: Commission) -> dict:
         }
     )
 
+    row_label = (
+        f"order {order.order_id}"
+        if order
+        else f"monthly summary for {comm.period_start}"
+    )
     summary_parts = [
-        f"You earned {_inr(net, currency)} on order {order.order_id}.",
+        f"You earned {_inr(net, currency)} on {row_label}.",
     ]
     if tier_meta:
         summary_parts.append(
@@ -415,8 +464,12 @@ def build_commission_explanation(commission: Commission) -> dict:
         "commission_id": comm.id,
         "commission_earned": str(net),
         "currency": currency,
-        "order_id": order.order_id,
-        "order_date": str(order.order_date) if order.order_date else None,
+        "order_id": order.order_id if order else "Monthly summary",
+        "order_date": (
+            str(order.order_date)
+            if order and order.order_date
+            else (str(comm.period_start) if comm.period_start else None)
+        ),
         "employee_name": comm.employee.name,
         "lines": lines,
         "summary": " ".join(summary_parts),
@@ -427,8 +480,9 @@ def _period_sales_and_commission(profile, start_date, end_date):
     qs = Commission.objects.filter(
         employee__email=profile.email,
         organization=getattr(profile, "organization", None),
-        sale__order__order_date__gte=start_date,
-        sale__order__order_date__lte=end_date,
+    ).filter(
+        Q(sale__order__order_date__gte=start_date, sale__order__order_date__lte=end_date)
+        | Q(period_start__lte=end_date, period_end__gte=start_date)
     )
     total_commission = sum(_decimal(c.commission_amount) for c in qs)
     order_qs = Order.objects.filter(

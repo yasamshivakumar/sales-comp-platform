@@ -85,7 +85,9 @@ def mark_payout_run_paid(payout_run, payment_reference="", paid_by_user=None):
     now = timezone.now()
     commissions = Commission.objects.filter(
         status=Commission.STATUS_APPROVED,
-        sale__order__order_date__range=[payout_run.start_date, payout_run.end_date],
+    ).filter(
+        Q(sale__order__order_date__range=[payout_run.start_date, payout_run.end_date])
+        | Q(period_start__lte=payout_run.end_date, period_end__gte=payout_run.start_date)
     ).exclude(id__in=_open_dispute_commission_ids())
 
     org = payout_run.organization_id

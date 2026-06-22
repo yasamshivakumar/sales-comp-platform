@@ -91,7 +91,8 @@ def resolve_dashboard_business_group(request, user_profile, can_view_all_groups)
 
     if not can_view_all_groups:
         profile_group = normalize_business_group(
-            user_profile.business_group if user_profile else ""
+            user_profile.business_group if user_profile else "",
+            default="",
         )
         if profile_group not in available:
             available = sorted(set(available + [profile_group]), key=str.lower)
@@ -119,9 +120,12 @@ def commission_business_group_q(business_group, organization=None):
     if organization is not None:
         profiles = profiles.filter(organization=organization)
     employee_ids = profiles.exclude(employee_id="").values_list("employee_id", flat=True)
+    emails = profiles.exclude(email="").values_list("email", flat=True)
 
-    return Q(sale__order__business_group__iexact=group) | Q(
-        sale__order__employee_id__in=employee_ids
+    return (
+        Q(sale__order__business_group__iexact=group)
+        | Q(sale__order__employee_id__in=employee_ids)
+        | Q(employee__email__in=emails)
     )
 
 

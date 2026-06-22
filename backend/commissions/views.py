@@ -109,10 +109,35 @@ def _orders_queryset_for_request(request):
 from django.core.files.base import ContentFile
 from django.db import transaction
 from django.db.models import Prefetch
+from django.db.models import Case, CharField, Q, When
 from django.http import HttpResponse
 from django.utils.dateparse import parse_date
 
 logger = logging.getLogger("commissions")
+
+
+def commission_date_q(start_date=None, end_date=None):
+    query = Q()
+    if start_date and end_date:
+        query = Q(sale__order__order_date__range=[start_date, end_date]) | Q(
+            period_start__lte=end_date,
+            period_end__gte=start_date,
+        )
+    elif start_date:
+        query = Q(sale__order__order_date__gte=start_date) | Q(period_end__gte=start_date)
+    elif end_date:
+        query = Q(sale__order__order_date__lte=end_date) | Q(period_start__lte=end_date)
+    return query
+
+
+def with_commission_currency(queryset):
+    return queryset.annotate(
+        report_currency=Case(
+            When(currency="", then="sale__order__currency"),
+            default="currency",
+            output_field=CharField(),
+        )
+    )
 
 
 from .user_scope import profile_commission_q
@@ -1259,14 +1284,9 @@ def commission_summary_report(request):
     if org:
         commissions = commissions.filter(organization=org)
 
-    if start_date and end_date:
-        commissions = commissions.filter(
-            sale__order__order_date__range=[start_date, end_date]
-        )
-    elif start_date:
-        commissions = commissions.filter(sale__order__order_date__gte=start_date)
-    elif end_date:
-        commissions = commissions.filter(sale__order__order_date__lte=end_date)
+    date_query = commission_date_q(start_date, end_date)
+    if date_query:
+        commissions = commissions.filter(date_query)
     
     # Filter by role
     if not is_admin and not user_is_finance(request):
@@ -1284,6 +1304,7 @@ def commission_summary_report(request):
     
     from .currencies import active_currency_totals, normalize_currency, primary_currency_from_totals
 
+    commissions = with_commission_currency(commissions)
     total_commission = commissions.aggregate(Sum('commission_amount'))['commission_amount__sum'] or 0
     total_count = commissions.count()
     avg_commission = commissions.aggregate(Avg('commission_amount'))['commission_amount__avg'] or 0
@@ -1301,10 +1322,10 @@ def commission_summary_report(request):
     totals_by_currency = active_currency_totals(
         [
             {
-                "currency": normalize_currency(row["sale__order__currency"]),
+                    "currency": normalize_currency(row["report_currency"]),
                 "total": float(row["total"] or 0),
             }
-            for row in commissions.values("sale__order__currency").annotate(
+                for row in commissions.values("report_currency").annotate(
                 total=Sum("commission_amount")
             )
         ]
@@ -1315,10 +1336,10 @@ def commission_summary_report(request):
     )
 
     def _commission_currency_for_row(row):
-        return normalize_currency(row.get("sale__order__currency"), primary_currency)
+        return normalize_currency(row.get("report_currency"), primary_currency)
 
     def _commission_group_fields(*fields):
-        return commissions.values(*fields, "sale__order__currency").annotate(
+        return commissions.values(*fields, "report_currency").annotate(
             total=Sum("commission_amount"),
             count=Count("id"),
         )
@@ -1542,8 +1563,9 @@ def employee_earnings_report(request):
 
     from .currencies import normalize_currency
 
+    commissions = with_commission_currency(commissions)
     earnings_data = commissions.values(
-        'employee__name', 'employee__email', 'employee_id', 'sale__order__currency'
+        'employee__name', 'employee__email', 'employee_id', 'report_currency'
     ).annotate(
         total_earnings=Sum('commission_amount'),
         commission_count=Count('id'),
@@ -1562,7 +1584,7 @@ def employee_earnings_report(request):
             {
                 **row,
                 "business_group": profile.business_group if profile else "",
-                "currency": normalize_currency(row.get("sale__order__currency")),
+                "currency": normalize_currency(row.get("report_currency")),
             }
         )
 
@@ -1636,10 +1658,8 @@ def period_analytics_report(request):
         effective_group,
         organization=org,
     )
-    commissions = commissions.filter(
-        sale__order__order_date__gte=start_date,
-        sale__order__order_date__lte=end_date,
-    )
+    commissions = commissions.filter(commission_date_q(start_date, end_date))
+    commissions = with_commission_currency(commissions)
 
     def quarter_start(value):
         quarter_month = ((value.month - 1) // 3) * 3 + 1
@@ -1676,17 +1696,14 @@ def period_analytics_report(request):
 
     period_data = []
     for bucket_start, bucket_end, label in iter_buckets():
-        bucket_qs = commissions.filter(
-            sale__order__order_date__gte=bucket_start,
-            sale__order__order_date__lte=bucket_end,
-        )
+        bucket_qs = commissions.filter(commission_date_q(bucket_start, bucket_end))
         totals_by_currency = active_currency_totals(
             [
                 {
-                    "currency": normalize_currency(row["sale__order__currency"]),
+                    "currency": normalize_currency(row["report_currency"]),
                     "total": float(row["total"] or 0),
                 }
-                for row in bucket_qs.values("sale__order__currency").annotate(
+                for row in bucket_qs.values("report_currency").annotate(
                     total=Sum("commission_amount")
                 )
             ]
@@ -1710,10 +1727,10 @@ def period_analytics_report(request):
     overall_totals = active_currency_totals(
         [
             {
-                "currency": normalize_currency(row["sale__order__currency"]),
+                "currency": normalize_currency(row["report_currency"]),
                 "total": float(row["total"] or 0),
             }
-            for row in commissions.values("sale__order__currency").annotate(
+            for row in commissions.values("report_currency").annotate(
                 total=Sum("commission_amount")
             )
         ]
@@ -1782,9 +1799,7 @@ def approve_commissions_view(request):
     if org:
         queryset = queryset.filter(organization=org)
     if start_date and end_date:
-        queryset = queryset.filter(
-            sale__order__order_date__range=[start_date, end_date]
-        )
+        queryset = queryset.filter(commission_date_q(start_date, end_date))
     if not ids and not (start_date and end_date):
         return Response(
             {"error": "Provide commission ids and/or start_date + end_date"},
@@ -1819,9 +1834,7 @@ def commission_payroll_export(request):
 
     queryset = _commission_queryset_for_export(request)
     if start_date and end_date:
-        queryset = queryset.filter(
-            sale__order__order_date__range=[start_date, end_date]
-        )
+        queryset = queryset.filter(commission_date_q(start_date, end_date))
     if status_param == "approved":
         queryset = queryset.filter(status=Commission.STATUS_APPROVED)
     elif status_param == "manager_approved":
@@ -1853,7 +1866,7 @@ def commission_payroll_export(request):
         "approved_at",
     ])
 
-    for comm in queryset.order_by("sale__order__order_date", "employee__name"):
+    for comm in queryset.order_by("period_start", "sale__order__order_date", "employee__name"):
         order = comm.sale.order if comm.sale_id and comm.sale.order_id else None
         profile = UserProfile.objects.filter(
             email__iexact=comm.employee.email,
@@ -1864,9 +1877,17 @@ def commission_payroll_export(request):
             profile.employee_id if profile else "",
             comm.employee.name,
             comm.employee.email,
-            order.order_id if order else "",
-            order.order_date.isoformat() if order and order.order_date else "",
-            order.sales_amount if order else "",
+            order.order_id if order else "Monthly summary",
+            (
+                order.order_date.isoformat()
+                if order and order.order_date
+                else (comm.period_start.isoformat() if comm.period_start else "")
+            ),
+            (
+                order.sales_amount
+                if order
+                else (comm.source_sales_total or comm.sale.amount)
+            ),
             comm.commission_amount,
             comm.status,
             comm.compensation_plan.plan_name if comm.compensation_plan_id else "",

@@ -279,11 +279,29 @@ class CommissionLogicTests(TestCase):
             position_name="Standard Sales Rep",
         )
         calculate_commission_for_order(order)
-        self.assertEqual(Commission.objects.filter(sale__order=order).count(), 1)
+        self.assertEqual(
+            Commission.objects.filter(
+                calculation_scope=Commission.SCOPE_EMPLOYEE_MONTH,
+                period_start=self.start,
+                employee__email="emp001@test.com",
+            ).count(),
+            1,
+        )
 
         calculate_commission_for_order(order)
-        self.assertEqual(Commission.objects.filter(sale__order=order).count(), 1)
-        comm = Commission.objects.get(sale__order=order)
+        self.assertEqual(
+            Commission.objects.filter(
+                calculation_scope=Commission.SCOPE_EMPLOYEE_MONTH,
+                period_start=self.start,
+                employee__email="emp001@test.com",
+            ).count(),
+            1,
+        )
+        comm = Commission.objects.get(
+            calculation_scope=Commission.SCOPE_EMPLOYEE_MONTH,
+            period_start=self.start,
+            employee__email="emp001@test.com",
+        )
         self.assertEqual(comm.commission_amount, Decimal("500.00"))
 
     def test_plan_effective_dates_filter_by_order_date(self):
@@ -376,18 +394,173 @@ class CommissionLogicTests(TestCase):
         )
         order = self._order("O-LOCK", "EMP002", "10000", position_name="Other")
         calculate_commission_for_order(order)
-        comm = Commission.objects.get(sale__order=order)
+        comm = Commission.objects.get(
+            calculation_scope=Commission.SCOPE_EMPLOYEE_MONTH,
+            employee__email="emp002@test.com",
+        )
         approve_commissions(Commission.objects.filter(pk=comm.pk), approved_by_user=None)
 
         calculate_commission_for_order(order)
-        self.assertEqual(Commission.objects.filter(sale__order=order).count(), 1)
+        self.assertEqual(
+            Commission.objects.filter(
+                calculation_scope=Commission.SCOPE_EMPLOYEE_MONTH,
+                employee__email="emp002@test.com",
+            ).count(),
+            1,
+        )
         comm.refresh_from_db()
         self.assertEqual(comm.status, Commission.STATUS_APPROVED)
 
         calculate_commission_for_order(order, force=True)
-        self.assertEqual(Commission.objects.filter(sale__order=order).count(), 1)
-        new_comm = Commission.objects.get(sale__order=order)
+        self.assertEqual(
+            Commission.objects.filter(
+                calculation_scope=Commission.SCOPE_EMPLOYEE_MONTH,
+                employee__email="emp002@test.com",
+            ).count(),
+            1,
+        )
+        new_comm = Commission.objects.get(
+            calculation_scope=Commission.SCOPE_EMPLOYEE_MONTH,
+            employee__email="emp002@test.com",
+        )
         self.assertEqual(new_comm.status, Commission.STATUS_CALCULATED)
+
+
+class MonthlyAggregateCommissionTests(TestCase):
+    def setUp(self):
+        self.org = get_default_organization()
+        UserProfile.objects.create(
+            organization=self.org,
+            employee_id="AGG001",
+            email="agg001@test.com",
+            name="Aggregate Rep",
+            role="Sales Rep",
+        )
+        UserProfile.objects.create(
+            organization=self.org,
+            employee_id="AGG002",
+            email="agg002@test.com",
+            name="Other Rep",
+            role="Sales Rep",
+        )
+        self.plan = CompensationPlan.objects.create(
+            organization=self.org,
+            plan_name="Aggregate Monthly Plan",
+            effective_start_date=date(2025, 1, 1),
+            effective_end_date=date(2025, 1, 31),
+            status="Active",
+            role="Sales Rep",
+            commission_table_type="RATE",
+        )
+        SCRateTable.objects.create(
+            compensation_plan=self.plan,
+            from_amount=Decimal("0"),
+            to_amount=Decimal("99999.99"),
+            commission_rate=Decimal("5"),
+            bonus_amount=Decimal("0"),
+            is_active=True,
+            sequence=1,
+        )
+        SCRateTable.objects.create(
+            compensation_plan=self.plan,
+            from_amount=Decimal("100000"),
+            to_amount=None,
+            commission_rate=Decimal("10"),
+            bonus_amount=Decimal("0"),
+            is_active=True,
+            sequence=2,
+        )
+
+    def _order(self, order_id, employee_id, amount, order_date=None, currency="USD"):
+        return Order.objects.create(
+            organization=self.org,
+            order_id=order_id,
+            order_date=order_date or date(2025, 1, 10),
+            employee_id=employee_id,
+            sales_amount=Decimal(amount),
+            order_status="Success",
+            currency=currency,
+        )
+
+    def test_orders_for_same_employee_month_are_summed_before_tier_selection(self):
+        first = self._order("AGG-1", "AGG001", "60000")
+        self._order("AGG-2", "AGG001", "60000")
+
+        commission = calculate_commission_for_order(first)
+
+        self.assertIsNotNone(commission)
+        self.assertEqual(Commission.objects.count(), 1)
+        self.assertEqual(commission.calculation_scope, Commission.SCOPE_EMPLOYEE_MONTH)
+        self.assertEqual(commission.source_sales_total, Decimal("120000.00"))
+        self.assertEqual(commission.source_order_count, 2)
+        self.assertEqual(commission.commission_amount, Decimal("12000.00"))
+        self.assertIsNone(commission.sale.order_id)
+
+    def test_different_employees_months_and_currencies_are_separate(self):
+        self._order("AGG-JAN-USD", "AGG001", "60000", currency="USD")
+        self._order("AGG-JAN-USD-2", "AGG001", "60000", currency="USD")
+        self._order("AGG-JAN-EUR", "AGG001", "60000", currency="EUR")
+        self._order("AGG-OTHER", "AGG002", "60000", currency="USD")
+        self._order("AGG-FEB", "AGG001", "60000", order_date=date(2025, 2, 10), currency="USD")
+        feb_plan = CompensationPlan.objects.create(
+            organization=self.org,
+            plan_name="Aggregate Monthly Plan Feb",
+            effective_start_date=date(2025, 2, 1),
+            effective_end_date=date(2025, 2, 28),
+            status="Active",
+            role="Sales Rep",
+            commission_table_type="RATE",
+        )
+        SCRateTable.objects.create(
+            compensation_plan=feb_plan,
+            from_amount=Decimal("0"),
+            to_amount=None,
+            commission_rate=Decimal("5"),
+            bonus_amount=Decimal("0"),
+            is_active=True,
+            sequence=1,
+        )
+
+        for order in Order.objects.order_by("order_id"):
+            calculate_commission_for_order(order)
+
+        summaries = Commission.objects.filter(
+            calculation_scope=Commission.SCOPE_EMPLOYEE_MONTH
+        )
+        self.assertEqual(summaries.count(), 4)
+        jan = summaries.get(
+            employee__email="agg001@test.com",
+            period_start=date(2025, 1, 1),
+            currency="USD",
+        )
+        self.assertEqual(jan.source_sales_total, Decimal("120000.00"))
+        self.assertEqual(jan.commission_amount, Decimal("12000.00"))
+        self.assertTrue(
+            summaries.filter(employee__email="agg001@test.com", currency="EUR").exists()
+        )
+        self.assertTrue(
+            summaries.filter(
+                employee__email="agg001@test.com",
+                period_start=date(2025, 2, 1),
+            ).exists()
+        )
+        self.assertTrue(summaries.filter(employee__email="agg002@test.com").exists())
+
+    def test_locked_aggregate_is_protected_without_force(self):
+        order = self._order("AGG-LOCK", "AGG001", "60000")
+        commission = calculate_commission_for_order(order)
+        approve_commissions(Commission.objects.filter(pk=commission.pk), approved_by_user=None)
+
+        self._order("AGG-LOCK-2", "AGG001", "60000")
+        self.assertIsNone(calculate_commission_for_order(order, force=False))
+        commission.refresh_from_db()
+        self.assertEqual(commission.status, Commission.STATUS_APPROVED)
+        self.assertEqual(commission.source_sales_total, Decimal("60000.00"))
+
+        recalculated = calculate_commission_for_order(order, force=True)
+        self.assertIsNotNone(recalculated)
+        self.assertEqual(recalculated.status, Commission.STATUS_CALCULATED)
+        self.assertEqual(recalculated.source_sales_total, Decimal("120000.00"))
 
 
 class PilotOperationsTests(TestCase):
@@ -960,8 +1133,8 @@ class EmployeeStatementTests(TestCase):
         self.assertEqual(payload["summary"]["total_commission_earned"], "15000.00")
         self.assertEqual(len(payload["orders"]), 1)
         line = payload["orders"][0]
-        self.assertEqual(line["order_id"], "ORDERID92")
-        self.assertEqual(line["product"], "Enterprise Subscription")
+        self.assertEqual(line["order_id"], "Monthly summary")
+        self.assertEqual(line["product"], "1 order monthly total")
         self.assertEqual(line["commission_amount"], "15000.00")
         self.assertEqual(line["currency"], "USD")
         self.assertEqual(line["status"], Commission.STATUS_APPROVED)
@@ -1144,7 +1317,10 @@ class EmployeeDisputeTests(TestCase):
             order_status="Success",
         )
         calculate_commission_for_order(self.order)
-        self.comm = Commission.objects.filter(sale__order=self.order).first()
+        self.comm = Commission.objects.filter(
+            calculation_scope=Commission.SCOPE_EMPLOYEE_MONTH,
+            employee__email="rep@test.com",
+        ).first()
         rep_token = Token.objects.create(user=self.rep_user)
         admin_token = Token.objects.create(user=self.admin_user)
         self.rep_auth = {"HTTP_AUTHORIZATION": f"Token {rep_token.key}"}
