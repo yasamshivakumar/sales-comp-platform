@@ -1,4 +1,7 @@
 from datetime import datetime
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from rest_framework import status
 import csv
 import io
@@ -51,7 +54,7 @@ from .permissions import (
     get_request_user_profile,
 )
 from .audit import record_audit
-from .emails import notify_admins
+from .emails import notify_admins, notify_user
 from .models import AuditLog, ImportJob
 from .imports import process_orders_csv, should_use_async_import
 from .list_scope import order_search_q
@@ -114,6 +117,46 @@ from django.http import HttpResponse
 from django.utils.dateparse import parse_date
 
 logger = logging.getLogger("commissions")
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def book_demo_request(request):
+    """Public marketing form endpoint that emails demo requests to the sales inbox."""
+    data = request.data or {}
+    name = str(data.get("name") or "").strip()
+    email = str(data.get("email") or "").strip().lower()
+    company = str(data.get("company") or "").strip()
+    phone = str(data.get("phone") or "").strip()
+    message = str(data.get("message") or "").strip()
+
+    if not name:
+        return Response({"error": "Name is required."}, status=status.HTTP_400_BAD_REQUEST)
+    if not email:
+        return Response({"error": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        validate_email(email)
+    except ValidationError:
+        return Response({"error": "Enter a valid email address."}, status=status.HTTP_400_BAD_REQUEST)
+
+    recipient = getattr(settings, "DEMO_REQUEST_EMAIL", "shivakumar@incentra.co.in")
+    subject = f"[Incentra] Demo request from {name}"
+    body = (
+        "New demo request from the Incentra marketing website.\n\n"
+        f"Name: {name}\n"
+        f"Email: {email}\n"
+        f"Company: {company or 'Not provided'}\n"
+        f"Phone: {phone or 'Not provided'}\n\n"
+        f"Message:\n{message or 'Not provided'}\n"
+    )
+    sent = notify_user(recipient, subject, body)
+    if not sent:
+        return Response(
+            {"error": "Could not send demo request. Please contact us directly."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    return Response({"message": "Demo request sent successfully."})
 
 
 def commission_date_q(start_date=None, end_date=None):

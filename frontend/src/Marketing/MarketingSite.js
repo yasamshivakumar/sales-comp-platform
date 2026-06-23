@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import api from "../api";
 import "./marketing.css";
 
 const FEATURES = [
@@ -51,6 +53,43 @@ const SOLUTIONS = [
 ];
 
 function MarketingSite() {
+  const [demoForm, setDemoForm] = useState({
+    name: "",
+    email: "",
+    company: "",
+    phone: "",
+    message: "",
+  });
+  const [demoStatus, setDemoStatus] = useState({ type: "", message: "" });
+  const [demoSubmitting, setDemoSubmitting] = useState(false);
+
+  const updateDemoForm = (field) => (event) => {
+    setDemoForm((current) => ({ ...current, [field]: event.target.value }));
+  };
+
+  const submitDemoRequest = async (event) => {
+    event.preventDefault();
+    setDemoStatus({ type: "", message: "" });
+    setDemoSubmitting(true);
+    try {
+      await api.post("marketing/book-demo/", demoForm);
+      setDemoStatus({
+        type: "success",
+        message: "Demo request sent. We will contact you shortly.",
+      });
+      setDemoForm({ name: "", email: "", company: "", phone: "", message: "" });
+    } catch (err) {
+      setDemoStatus({
+        type: "error",
+        message:
+          err.response?.data?.error ||
+          "Could not send demo request. Please email shivakumar@incentra.co.in.",
+      });
+    } finally {
+      setDemoSubmitting(false);
+    }
+  };
+
   return (
     <main className="marketing-site">
       <header className="marketing-nav">
@@ -236,9 +275,64 @@ function MarketingSite() {
             approvals, and employee statements work together.
           </p>
         </div>
-        <a href="mailto:shivakumar@incentra.co.in?subject=Book%20Incentra%20Demo" className="marketing-button marketing-button--primary">
-          Book demo by email
-        </a>
+        <form className="marketing-demo-form" onSubmit={submitDemoRequest}>
+          <label>
+            <span>Name *</span>
+            <input
+              value={demoForm.name}
+              onChange={updateDemoForm("name")}
+              placeholder="Your name"
+              required
+            />
+          </label>
+          <label>
+            <span>Email *</span>
+            <input
+              type="email"
+              value={demoForm.email}
+              onChange={updateDemoForm("email")}
+              placeholder="you@company.com"
+              required
+            />
+          </label>
+          <label>
+            <span>Company</span>
+            <input
+              value={demoForm.company}
+              onChange={updateDemoForm("company")}
+              placeholder="Company name"
+            />
+          </label>
+          <label>
+            <span>Phone</span>
+            <input
+              value={demoForm.phone}
+              onChange={updateDemoForm("phone")}
+              placeholder="Phone number"
+            />
+          </label>
+          <label className="marketing-demo-form__full">
+            <span>Message</span>
+            <textarea
+              value={demoForm.message}
+              onChange={updateDemoForm("message")}
+              placeholder="Tell us about your commission process"
+              rows={4}
+            />
+          </label>
+          <button
+            type="submit"
+            className="marketing-button marketing-button--primary marketing-demo-form__submit"
+            disabled={demoSubmitting}
+          >
+            {demoSubmitting ? "Sending..." : "Send demo request"}
+          </button>
+          {demoStatus.message && (
+            <p className={`marketing-demo-form__status marketing-demo-form__status--${demoStatus.type}`}>
+              {demoStatus.message}
+            </p>
+          )}
+        </form>
       </section>
 
       <footer className="marketing-footer">
