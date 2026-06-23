@@ -14,7 +14,6 @@ import {
   IconButton,
   List,
   Stack,
-  TextField,
   Toolbar,
   Typography,
   useMediaQuery,
@@ -40,6 +39,7 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import api, { clearAuthStorage, getAuthSessionValue } from "../../api";
 import { useTheme as useAppTheme } from "../../ThemeContext";
 import { enterprise } from "../../theme/muiTheme";
+import AuthTextField from "../AuthTextField";
 import ChangePassword from "../ChangePassword";
 import { useToast } from "../Toast";
 import "../enterprise.css";
@@ -630,13 +630,13 @@ function AppLayout({ children }) {
         <DialogTitle>Edit profile details</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
-            <TextField
+            <AuthTextField
               label="Company"
               value={profile?.organization_name || profile?.organization_slug || ""}
               disabled
               helperText="Company is managed by your workspace admin."
             />
-            <TextField
+            <AuthTextField
               label="Display name"
               value={profileForm.name}
               onChange={(e) =>
@@ -644,22 +644,22 @@ function AppLayout({ children }) {
               }
               autoFocus
             />
-            <TextField
+            <AuthTextField
               label="First name"
               value={profileForm.first_name}
               onChange={(e) =>
                 setProfileForm((current) => ({ ...current, first_name: e.target.value }))
               }
             />
-            <TextField
+            <AuthTextField
               label="Last name"
               value={profileForm.last_name}
               onChange={(e) =>
                 setProfileForm((current) => ({ ...current, last_name: e.target.value }))
               }
             />
-            <TextField label="Email" value={profile?.email || ""} disabled />
-            <TextField label="Role" value={profile?.role || ""} disabled />
+            <AuthTextField label="Email" value={profile?.email || ""} disabled />
+            <AuthTextField label="Role" value={profile?.role || ""} disabled />
           </Stack>
         </DialogContent>
         <DialogActions>
