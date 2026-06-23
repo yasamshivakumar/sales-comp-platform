@@ -1127,7 +1127,7 @@ def change_password(request):
 # =====================================================
 # Get User Profile (for role-based access control)
 # =====================================================
-@api_view(['GET'])
+@api_view(['GET', 'PATCH'])
 @permission_classes([IsAuthenticated])
 def get_user_profile(request):
     """
@@ -1151,12 +1151,46 @@ def get_user_profile(request):
             raise UserProfile.DoesNotExist
         is_admin = user_profile.role.lower() in ['admin', 'administrator']
         
+        if request.method == "PATCH":
+            data = request.data or {}
+            allowed_fields = ("name", "first_name", "last_name")
+            updates = {}
+            for field in allowed_fields:
+                if field in data:
+                    updates[field] = str(data.get(field) or "").strip()
+
+            if not updates:
+                return Response(
+                    {"error": "Provide at least one editable profile field."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            for field, value in updates.items():
+                setattr(user_profile, field, value)
+
+            # Keep the auth user display fields aligned with the profile card.
+            if "first_name" in updates:
+                user.first_name = updates["first_name"]
+            if "last_name" in updates:
+                user.last_name = updates["last_name"]
+            if "first_name" in updates or "last_name" in updates:
+                user.save(update_fields=["first_name", "last_name"])
+
+            user_profile.save(update_fields=list(updates.keys()))
+            record_audit(
+                request,
+                "user_profile_updated",
+                {"fields": sorted(updates.keys())},
+            )
+
         org = user_profile.organization
         return Response({
             'user_id': user.id,
             'email': user.email,
             'role': user_profile.role,
             'name': user_profile.name,
+            'first_name': user_profile.first_name,
+            'last_name': user_profile.last_name,
             'is_admin': is_admin,
             'is_finance': user_is_finance(request),
             'is_manager': user_is_manager(request),

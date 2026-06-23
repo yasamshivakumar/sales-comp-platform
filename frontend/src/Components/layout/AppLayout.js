@@ -4,10 +4,17 @@ import {
   AppBar,
   Avatar,
   Box,
+  Button,
   Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Drawer,
   IconButton,
   List,
+  Stack,
+  TextField,
   Toolbar,
   Typography,
   useMediaQuery,
@@ -34,6 +41,7 @@ import api, { clearAuthStorage, getAuthSessionValue } from "../../api";
 import { useTheme as useAppTheme } from "../../ThemeContext";
 import { enterprise } from "../../theme/muiTheme";
 import ChangePassword from "../ChangePassword";
+import { useToast } from "../Toast";
 import "../enterprise.css";
 
 const DRAWER_WIDTH = 108;
@@ -222,7 +230,7 @@ function NavList({ items, location, onNavigate }) {
   );
 }
 
-function AppTopBar({ pageTitle, displayName, initials, profile }) {
+function AppTopBar({ pageTitle, displayName, initials, profile, onEditProfile }) {
   const roleLabel = profile?.role || "Workspace user";
   const organizationLabel = profile?.organization_name || profile?.organization_slug || "";
 
@@ -247,6 +255,10 @@ function AppTopBar({ pageTitle, displayName, initials, profile }) {
         INCENTRA / {pageTitle?.toUpperCase()}
       </Typography>
       <Box
+        component="button"
+        type="button"
+        onClick={onEditProfile}
+        aria-label="Edit profile details"
         sx={{
           display: "flex",
           alignItems: "center",
@@ -259,6 +271,18 @@ function AppTopBar({ pageTitle, displayName, initials, profile }) {
           borderColor: "divider",
           bgcolor: "background.default",
           boxShadow: "0 8px 24px rgba(15, 23, 42, 0.06)",
+          cursor: "pointer",
+          font: "inherit",
+          textAlign: "inherit",
+          "&:hover": {
+            borderColor: "primary.main",
+            transform: "none",
+          },
+          "&:focus-visible": {
+            outline: "2px solid",
+            outlineColor: "primary.main",
+            outlineOffset: 2,
+          },
         }}
       >
         <Box sx={{ minWidth: 0, textAlign: "right" }}>
@@ -305,13 +329,30 @@ function AppLayout({ children }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const { isDarkMode, toggleTheme } = useAppTheme();
+  const { success, error } = useToast();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [profile, setProfile] = useState(null);
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    name: "",
+    first_name: "",
+    last_name: "",
+  });
 
   useEffect(() => {
     api.get("user-profile/").then((res) => setProfile(res.data)).catch(() => setProfile(null));
   }, []);
+
+  useEffect(() => {
+    if (!profile) return;
+    setProfileForm({
+      name: profile.name || "",
+      first_name: profile.first_name || "",
+      last_name: profile.last_name || "",
+    });
+  }, [profile]);
 
   useEffect(() => {
     if (searchParams.get("integrations") === "1") {
@@ -341,6 +382,51 @@ function AppLayout({ children }) {
   const logout = () => {
     clearAuthStorage();
     window.location.href = "/login";
+  };
+
+  const openProfileDialog = () => {
+    if (profile) {
+      setProfileForm({
+        name: profile.name || "",
+        first_name: profile.first_name || "",
+        last_name: profile.last_name || "",
+      });
+    }
+    setProfileDialogOpen(true);
+  };
+
+  const saveProfile = async () => {
+    const payload = {
+      name: profileForm.name.trim(),
+      first_name: profileForm.first_name.trim(),
+      last_name: profileForm.last_name.trim(),
+    };
+    if (!payload.name) {
+      error({
+        title: "Name required",
+        message: "Enter the display name you want shown in the profile icon.",
+      });
+      return;
+    }
+
+    setProfileSaving(true);
+    try {
+      const response = await api.patch("user-profile/", payload);
+      setProfile(response.data);
+      sessionStorage.setItem("name", response.data.name || "");
+      setProfileDialogOpen(false);
+      success({
+        title: "Profile updated",
+        message: "Your profile details were saved.",
+      });
+    } catch (err) {
+      error({
+        title: "Profile update failed",
+        message: err.response?.data?.error || "Could not save your profile details.",
+      });
+    } finally {
+      setProfileSaving(false);
+    }
   };
 
   const drawerContent = (
@@ -437,6 +523,34 @@ function AppLayout({ children }) {
           <Typography variant="h6" sx={{ ml: 1, fontWeight: 800, flexGrow: 1 }}>
             Incentra
           </Typography>
+          <IconButton
+            onClick={openProfileDialog}
+            aria-label="Edit profile details"
+            sx={{
+              color: "#fff",
+              border: "1px solid rgba(255,255,255,0.22)",
+              borderRadius: 999,
+              gap: 1,
+              px: 1,
+              py: 0.5,
+              maxWidth: "52vw",
+              "&:hover": {
+                bgcolor: "rgba(255,255,255,0.08)",
+              },
+            }}
+          >
+            <Box sx={{ minWidth: 0, textAlign: "right", display: { xs: "none", sm: "block" } }}>
+              <Typography variant="caption" noWrap sx={{ display: "block", lineHeight: 1.1, fontWeight: 800 }}>
+                {displayName}
+              </Typography>
+              <Typography variant="caption" noWrap sx={{ display: "block", lineHeight: 1.1, opacity: 0.72 }}>
+                {profile?.organization_name || profile?.organization_slug || profile?.role || "Profile"}
+              </Typography>
+            </Box>
+            <Avatar sx={{ width: 28, height: 28, fontSize: 10, bgcolor: enterprise.accent }}>
+              {initials}
+            </Avatar>
+          </IconButton>
         </Toolbar>
       </AppBar>
 
@@ -486,6 +600,7 @@ function AppLayout({ children }) {
           displayName={displayName}
           initials={initials}
           profile={profile}
+          onEditProfile={openProfileDialog}
         />
         <Box
           className="container-fluid"
@@ -506,6 +621,56 @@ function AppLayout({ children }) {
       </Box>
 
       {showChangePassword && <ChangePassword onClose={() => setShowChangePassword(false)} />}
+      <Dialog
+        open={profileDialogOpen}
+        onClose={() => !profileSaving && setProfileDialogOpen(false)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Edit profile details</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <TextField
+              label="Company"
+              value={profile?.organization_name || profile?.organization_slug || ""}
+              disabled
+              helperText="Company is managed by your workspace admin."
+            />
+            <TextField
+              label="Display name"
+              value={profileForm.name}
+              onChange={(e) =>
+                setProfileForm((current) => ({ ...current, name: e.target.value }))
+              }
+              autoFocus
+            />
+            <TextField
+              label="First name"
+              value={profileForm.first_name}
+              onChange={(e) =>
+                setProfileForm((current) => ({ ...current, first_name: e.target.value }))
+              }
+            />
+            <TextField
+              label="Last name"
+              value={profileForm.last_name}
+              onChange={(e) =>
+                setProfileForm((current) => ({ ...current, last_name: e.target.value }))
+              }
+            />
+            <TextField label="Email" value={profile?.email || ""} disabled />
+            <TextField label="Role" value={profile?.role || ""} disabled />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setProfileDialogOpen(false)} disabled={profileSaving}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={saveProfile} disabled={profileSaving}>
+            {profileSaving ? "Saving..." : "Save"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
