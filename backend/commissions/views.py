@@ -144,6 +144,7 @@ from .user_scope import profile_commission_q
 from .authentication import token_expires_at
 from .invites import (
     accept_invite,
+    build_invite_url,
     create_user_invite,
     get_valid_invite,
     invite_context,
@@ -559,11 +560,14 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
             # Create pending login invite
             # ---------------------------------------------------
             invite_sent = False
+            invite_link = ""
             if enable_login:
-                _, _, invite_sent = create_user_invite(
+                _, invite_token, invite_sent = create_user_invite(
                     profile,
                     invited_by=request.user,
                 )
+                if invite_token and not invite_sent:
+                    invite_link = build_invite_url(invite_token)
 
             # ---------------------------------------------------
             # Hierarchy Relationship
@@ -604,6 +608,8 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
             if enable_login:
                 payload["invite_sent"] = invite_sent
                 payload["invite_status"] = "sent" if invite_sent else "created"
+                if invite_link:
+                    payload["invite_link"] = invite_link
 
             return Response(
                 payload,

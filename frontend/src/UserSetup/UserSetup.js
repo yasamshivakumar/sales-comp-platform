@@ -170,7 +170,15 @@ function UserSetup() {
       if (res.data?.invite_status === "sent") {
         success("Participant created and invite email sent");
       } else if (res.data?.invite_status === "created") {
-        warning("Participant created. Invite email could not be sent; check email settings.");
+        const inviteLink = res.data?.invite_link;
+        if (inviteLink) {
+          navigator.clipboard?.writeText(inviteLink).catch(() => {});
+          warning(
+            `Participant created, but invite email could not be sent. Invite link copied: ${inviteLink}`
+          );
+        } else {
+          warning("Participant created. Invite email could not be sent; check email settings.");
+        }
       } else {
         success("Participant created successfully");
       }
