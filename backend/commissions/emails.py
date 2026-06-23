@@ -14,13 +14,16 @@ def notify_admins(subject, message):
 
     from_email = settings.DEFAULT_FROM_EMAIL
     try:
-        send_mail(
+        sent_count = send_mail(
             subject,
             message,
             from_email,
             recipients,
             fail_silently=False,
         )
+        if sent_count <= 0:
+            logger.warning("Email backend accepted 0 admin notification messages: %s", subject)
+            return False
         return True
     except Exception:
         logger.exception("Failed to send notification: %s", subject)
@@ -33,7 +36,16 @@ def notify_user(email, subject, message):
         return False
     from_email = settings.DEFAULT_FROM_EMAIL
     try:
-        send_mail(subject, message, from_email, [email], fail_silently=True)
+        sent_count = send_mail(
+            subject,
+            message,
+            from_email,
+            [email],
+            fail_silently=False,
+        )
+        if sent_count <= 0:
+            logger.warning("Email backend accepted 0 user notification messages to %s", email)
+            return False
         return True
     except Exception:
         logger.exception("Failed to send user notification to %s", email)
