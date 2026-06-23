@@ -152,7 +152,11 @@ def book_demo_request(request):
     sent = notify_user(recipient, subject, body)
     if not sent:
         return Response(
-            {"error": "Could not send demo request. Please contact us directly."},
+            {
+                "error": "Email service is temporarily unavailable. Please contact us directly.",
+                "contact_email": recipient,
+                "contact_phone": "8499087617",
+            },
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 

@@ -79,11 +79,15 @@ function MarketingSite() {
       });
       setDemoForm({ name: "", email: "", company: "", phone: "", message: "" });
     } catch (err) {
+      const fallbackEmail = err.response?.data?.contact_email || "shivakumar@incentra.co.in";
+      const fallbackPhone = err.response?.data?.contact_phone || "8499087617";
       setDemoStatus({
         type: "error",
         message:
           err.response?.data?.error ||
-          "Could not send demo request. Please email shivakumar@incentra.co.in.",
+          `Could not send demo request. Please email ${fallbackEmail} or call ${fallbackPhone}.`,
+        email: fallbackEmail,
+        phone: fallbackPhone,
       });
     } finally {
       setDemoSubmitting(false);
@@ -328,9 +332,15 @@ function MarketingSite() {
             {demoSubmitting ? "Sending..." : "Send demo request"}
           </button>
           {demoStatus.message && (
-            <p className={`marketing-demo-form__status marketing-demo-form__status--${demoStatus.type}`}>
-              {demoStatus.message}
-            </p>
+            <div className={`marketing-demo-form__status marketing-demo-form__status--${demoStatus.type}`}>
+              <p>{demoStatus.message}</p>
+              {demoStatus.type === "error" && (
+                <div className="marketing-demo-form__fallback">
+                  <a href={`mailto:${demoStatus.email}`}>{demoStatus.email}</a>
+                  <a href={`tel:+91${demoStatus.phone}`}>{demoStatus.phone}</a>
+                </div>
+              )}
+            </div>
           )}
         </form>
       </section>
