@@ -42,7 +42,7 @@ function Login() {
         message: "Redirecting to your workspace…",
       });
       window.history.replaceState({}, "", "/login");
-      setTimeout(() => navigate("/"), 800);
+      setTimeout(() => navigate("/dashboard"), 800);
     }
   }, [navigate, success]);
 
@@ -73,7 +73,7 @@ function Login() {
         title: "Welcome back",
         message: `Signed in as ${res.data.name || res.data.email}. Opening dashboard…`,
       });
-      setTimeout(() => navigate("/"), 1000);
+      setTimeout(() => navigate("/dashboard"), 1000);
     } catch (err) {
       error({
         title: "Sign in failed",

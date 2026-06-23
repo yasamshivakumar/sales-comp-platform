@@ -175,7 +175,7 @@ const repMenu = [
 
 /** Enterprise ICM order: insight → transactions → payroll → payout → plan design → org data → compliance */
 const adminMenu = [
-  { name: "Dashboard", path: "/", icon: SpaceDashboardOutlinedIcon },
+  { name: "Dashboard", path: "/dashboard", icon: SpaceDashboardOutlinedIcon },
   { name: "Orders", path: "/orders", icon: ShoppingBagOutlinedIcon },
   { name: "Commissions", path: "/commissions", icon: PaymentsOutlinedIcon },
   { name: "Payouts", path: "/payouts", icon: SavingsOutlinedIcon },
@@ -187,20 +187,20 @@ const adminMenu = [
 ];
 
 const financeMenu = [
-  { name: "Dashboard", path: "/", icon: SpaceDashboardOutlinedIcon },
+  { name: "Dashboard", path: "/dashboard", icon: SpaceDashboardOutlinedIcon },
   { name: "Commissions", path: "/commissions", icon: PaymentsOutlinedIcon },
   { name: "Payouts", path: "/payouts", icon: SavingsOutlinedIcon },
   { name: "Audit Log", path: "/audit-logs", icon: FactCheckOutlinedIcon },
 ];
 
 const managerMenu = [
-  { name: "Dashboard", path: "/", icon: SpaceDashboardOutlinedIcon },
+  { name: "Dashboard", path: "/dashboard", icon: SpaceDashboardOutlinedIcon },
   { name: "Commissions", path: "/commissions", icon: PaymentsOutlinedIcon },
   { name: "Audit Log", path: "/audit-logs", icon: FactCheckOutlinedIcon },
 ];
 
 function getMenuItems(profile) {
-  if (!profile) return [{ name: "Dashboard", path: "/", icon: SpaceDashboardOutlinedIcon }];
+  if (!profile) return [{ name: "Dashboard", path: "/dashboard", icon: SpaceDashboardOutlinedIcon }];
   if (profile.is_admin) return adminMenu;
   if (profile.is_finance) return financeMenu;
   if (profile.is_manager) return managerMenu;

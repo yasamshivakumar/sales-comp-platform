@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Login from "./Login";
 import InviteAccept from "./InviteAccept";
+import MarketingSite from "./Marketing/MarketingSite";
 import Dashboard from "./Dashboard/Dashboard";
 
 import AppLayout from "./Components/layout/AppLayout";
@@ -30,11 +31,12 @@ function AppRoutes() {
     <BrowserRouter>
       <Routes>
         <Route path="/signup" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<MarketingSite />} />
         <Route path="/login" element={<Login />} />
         <Route path="/invite/:token" element={<InviteAccept />} />
 
         <Route
-          path="/"
+          path="/dashboard"
           element={
             <PrivateRoute>
               <Layout>
