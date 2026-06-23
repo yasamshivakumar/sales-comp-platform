@@ -456,10 +456,10 @@
 .marketing-demo-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 18px 16px;
   padding: 18px;
   border-radius: 24px;
-  background: rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.72);
   border: 1px solid rgba(1, 118, 211, 0.12);
   box-shadow: 0 12px 28px rgba(3, 45, 96, 0.08);
   backdrop-filter: blur(12px);
@@ -478,26 +478,29 @@
 .marketing-demo-form input,
 .marketing-demo-form textarea {
   width: 100%;
-  min-height: 40px;
-  margin: 0;
-  padding: 9px 11px;
-  border: 1px solid rgba(148, 163, 184, 0.48);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.86);
-  color: #0f172a;
+  min-height: 36px;
+  margin: 0 !important;
+  padding: 7px 0 8px !important;
+  border: 0 !important;
+  border-bottom: 1px solid rgba(100, 116, 139, 0.36) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #0f172a !important;
   font: inherit;
   font-size: 14px;
   font-weight: 500;
   letter-spacing: normal;
   text-transform: none;
   resize: vertical;
+  box-shadow: none !important;
 }
 
 .marketing-demo-form input:focus,
 .marketing-demo-form textarea:focus {
   outline: none;
-  border-color: #0176d3;
-  box-shadow: 0 0 0 3px rgba(1, 118, 211, 0.12);
+  border-bottom-color: #0176d3 !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .marketing-demo-form__full,
