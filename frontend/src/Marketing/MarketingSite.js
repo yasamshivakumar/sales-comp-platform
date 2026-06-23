@@ -35,6 +35,21 @@ const STEPS = [
   "Approve, export, and pay",
 ];
 
+const SOLUTIONS = [
+  {
+    title: "For sales operations",
+    body: "Configure plans, rules, business groups, and territories without managing spreadsheets.",
+  },
+  {
+    title: "For finance teams",
+    body: "Approve commissions, export payroll-ready data, and track payout status from one workflow.",
+  },
+  {
+    title: "For sales reps",
+    body: "Give every rep a transparent incentive statement with calculation details and dispute support.",
+  },
+];
+
 function MarketingSite() {
   return (
     <main className="marketing-site">
@@ -44,16 +59,21 @@ function MarketingSite() {
           <span>Incentra</span>
         </Link>
         <nav className="marketing-nav__links" aria-label="Marketing navigation">
+          <a href="#home">Home</a>
           <a href="#features">Features</a>
-          <a href="#workflow">Workflow</a>
-          <a href="#security">Security</a>
+          <a href="#solutions">Solutions</a>
+          <a href="#about">About Us</a>
+          <a href="#contact">Contact Us</a>
+          <a href="#book-demo" className="marketing-nav__demo">
+            Book Demo
+          </a>
           <Link to="/login" className="marketing-nav__login">
             Login
           </Link>
         </nav>
       </header>
 
-      <section className="marketing-hero">
+      <section className="marketing-hero" id="home">
         <div className="marketing-hero__copy">
           <span className="marketing-kicker">Enterprise incentive compensation</span>
           <h1>Calculate commissions with confidence, not spreadsheets.</h1>
@@ -64,11 +84,11 @@ function MarketingSite() {
           </p>
           <div className="marketing-hero__actions">
             <a href="#contact" className="marketing-button marketing-button--primary">
-              Book a demo
+              Contact us
             </a>
-            <Link to="/login" className="marketing-button marketing-button--secondary">
-              Customer login
-            </Link>
+            <a href="#book-demo" className="marketing-button marketing-button--secondary">
+              Book demo
+            </a>
           </div>
           <div className="marketing-proof">
             <span>Multi-currency</span>
@@ -143,6 +163,25 @@ function MarketingSite() {
         </ol>
       </section>
 
+      <section className="marketing-section" id="solutions">
+        <div className="marketing-section__head">
+          <span className="marketing-kicker">Solutions</span>
+          <h2>Built for every team involved in incentive payouts</h2>
+          <p>
+            Incentra connects sales operations, finance, and employees in one governed
+            commission workspace.
+          </p>
+        </div>
+        <div className="marketing-solution-grid">
+          {SOLUTIONS.map((solution) => (
+            <article className="marketing-solution-card" key={solution.title}>
+              <h3>{solution.title}</h3>
+              <p>{solution.body}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section className="marketing-security" id="security">
         <div>
           <span className="marketing-kicker">Trust</span>
@@ -155,23 +194,56 @@ function MarketingSite() {
         </div>
       </section>
 
-      <section className="marketing-cta" id="contact">
+      <section className="marketing-about" id="about">
         <div>
-          <span className="marketing-kicker">Ready to modernize commissions?</span>
-          <h2>Launch a cleaner sales compensation process with Incentra.</h2>
+          <span className="marketing-kicker">About Us</span>
+          <h2>Incentra helps businesses make commissions transparent and reliable.</h2>
+        </div>
+        <p>
+          We are building Incentra as an enterprise-ready sales compensation platform
+          for companies that want accurate commission calculations, clean approval
+          workflows, and better visibility for every employee.
+        </p>
+      </section>
+
+      <section className="marketing-contact" id="contact">
+        <div>
+          <span className="marketing-kicker">Contact Us</span>
+          <h2>Talk to Incentra</h2>
           <p>
-            Use this page as your public website now, then connect a demo/contact form
-            when your sales process is ready.
+            Reach out for product questions, onboarding help, or a walkthrough of how
+            Incentra can support your sales compensation process.
           </p>
         </div>
-        <Link to="/login" className="marketing-button marketing-button--primary">
-          Go to app
-        </Link>
+        <div className="marketing-contact-card">
+          <a href="mailto:shivakumar@incentra.co.in">
+            <span>Email</span>
+            <strong>shivakumar@incentra.co.in</strong>
+          </a>
+          <a href="tel:+918499087617">
+            <span>Contact number</span>
+            <strong>8499087617</strong>
+          </a>
+        </div>
+      </section>
+
+      <section className="marketing-cta" id="book-demo">
+        <div>
+          <span className="marketing-kicker">Book Demo</span>
+          <h2>Launch a cleaner sales compensation process with Incentra.</h2>
+          <p>
+            Book a demo with the Incentra team and see how plans, rules, commissions,
+            approvals, and employee statements work together.
+          </p>
+        </div>
+        <a href="mailto:shivakumar@incentra.co.in?subject=Book%20Incentra%20Demo" className="marketing-button marketing-button--primary">
+          Book demo by email
+        </a>
       </section>
 
       <footer className="marketing-footer">
         <span>© {new Date().getFullYear()} Incentra</span>
-        <span>Sales compensation, commissions, and payouts</span>
+        <span>shivakumar@incentra.co.in · 8499087617</span>
       </footer>
     </main>
   );

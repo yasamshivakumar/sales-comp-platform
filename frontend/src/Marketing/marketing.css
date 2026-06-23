@@ -74,10 +74,20 @@
   box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
 }
 
+.marketing-nav__demo {
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: #0176d3;
+  color: #fff !important;
+  box-shadow: 0 10px 24px rgba(1, 118, 211, 0.22);
+}
+
 .marketing-hero,
 .marketing-section,
 .marketing-workflow,
 .marketing-security,
+.marketing-about,
+.marketing-contact,
 .marketing-cta,
 .marketing-footer {
   max-width: 1180px;
@@ -109,6 +119,8 @@
 .marketing-section h2,
 .marketing-workflow h2,
 .marketing-security h2,
+.marketing-about h2,
+.marketing-contact h2,
 .marketing-cta h2 {
   margin: 0;
   color: #0f172a;
@@ -124,6 +136,8 @@
 .marketing-hero p,
 .marketing-section__head p,
 .marketing-workflow p,
+.marketing-about p,
+.marketing-contact p,
 .marketing-cta p {
   max-width: 650px;
   margin: 20px 0 0;
@@ -264,6 +278,8 @@
 .marketing-section h2,
 .marketing-workflow h2,
 .marketing-security h2,
+.marketing-about h2,
+.marketing-contact h2,
 .marketing-cta h2 {
   font-size: clamp(32px, 4vw, 48px);
 }
@@ -275,7 +291,15 @@
   margin-top: 34px;
 }
 
-.marketing-feature-card {
+.marketing-solution-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 34px;
+}
+
+.marketing-feature-card,
+.marketing-solution-card {
   padding: 22px;
   border: 1px solid #e2e8f0;
   border-radius: 22px;
@@ -283,13 +307,15 @@
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
 }
 
-.marketing-feature-card h3 {
+.marketing-feature-card h3,
+.marketing-solution-card h3 {
   margin: 0;
   color: #0f172a;
   font-size: 18px;
 }
 
 .marketing-feature-card p,
+.marketing-solution-card p,
 .marketing-security__grid p {
   margin: 12px 0 0;
   color: #64748b;
@@ -369,6 +395,57 @@
   color: rgba(255, 255, 255, 0.82);
 }
 
+.marketing-about,
+.marketing-contact {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(300px, 1.05fr);
+  gap: 28px;
+  align-items: start;
+  padding-top: 66px;
+  padding-bottom: 66px;
+}
+
+.marketing-about {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.marketing-contact-card {
+  display: grid;
+  gap: 12px;
+}
+
+.marketing-contact-card a {
+  display: block;
+  padding: 20px;
+  border-radius: 20px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  text-decoration: none;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+}
+
+.marketing-contact-card a:hover {
+  border-color: rgba(1, 118, 211, 0.36);
+  color: #0f172a;
+}
+
+.marketing-contact-card span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.marketing-contact-card strong {
+  display: block;
+  margin-top: 8px;
+  font-size: clamp(18px, 3vw, 24px);
+  overflow-wrap: anywhere;
+}
+
 .marketing-cta {
   margin-top: 70px;
   margin-bottom: 24px;
@@ -401,11 +478,14 @@
   .marketing-hero,
   .marketing-workflow,
   .marketing-security,
+  .marketing-about,
+  .marketing-contact,
   .marketing-cta {
     grid-template-columns: 1fr;
   }
 
-  .marketing-feature-grid {
+  .marketing-feature-grid,
+  .marketing-solution-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -416,6 +496,8 @@
   .marketing-section,
   .marketing-workflow,
   .marketing-security,
+  .marketing-about,
+  .marketing-contact,
   .marketing-cta,
   .marketing-footer {
     padding-left: 16px;
@@ -433,6 +515,7 @@
   }
 
   .marketing-feature-grid,
+  .marketing-solution-grid,
   .marketing-metric-grid {
     grid-template-columns: 1fr;
   }
