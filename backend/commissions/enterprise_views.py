@@ -915,6 +915,13 @@ def _commission_breakdown(queryset, field_path, empty_label="Unassigned"):
 def advanced_analytics_report(request):
     """Territory, product, position splits, quota attainment, and growth leaders."""
     from datetime import date, timedelta
+    from .business_groups import (
+        apply_business_group_to_commissions,
+        apply_business_group_to_orders,
+        currency_for_business_group,
+        normalize_business_group,
+        resolve_dashboard_business_group,
+    )
 
     queryset = _commission_base_queryset(request)
     org = getattr(request, "organization", None)
@@ -927,6 +934,18 @@ def advanced_analytics_report(request):
 
     queryset, start_date, end_date = _apply_commission_filters(queryset, request)
     queryset = with_commission_currency(queryset)
+    request_profile = get_request_user_profile(request)
+    can_view_all_groups = user_is_admin(request) or user_is_finance(request)
+    effective_group, _, _ = resolve_dashboard_business_group(
+        request,
+        request_profile,
+        can_view_all_groups,
+    )
+    selected_group_currency = (
+        currency_for_business_group(effective_group, None)
+        if effective_group
+        else ""
+    )
 
     if not start_date or not end_date:
         end_date = date.today()
@@ -945,8 +964,13 @@ def advanced_analytics_report(request):
     orders_qs = Order.objects.filter(order_date__range=[start_date, end_date])
     if org:
         orders_qs = orders_qs.filter(organization=org)
+    orders_qs = apply_business_group_to_orders(
+        orders_qs,
+        effective_group,
+        organization=org,
+    )
     if scoped_to_self:
-        profile = get_request_user_profile(request)
+        profile = request_profile
         if profile and profile.employee_id:
             orders_qs = orders_qs.filter(employee_id=profile.employee_id)
         else:
@@ -961,6 +985,10 @@ def advanced_analytics_report(request):
         employee_id__isnull=True
     )
     profiles = filter_queryset_by_organization(profiles, org)
+    if effective_group:
+        profiles = profiles.filter(
+            business_group__iexact=normalize_business_group(effective_group)
+        )
     profile_map = {profile.employee_id: profile for profile in profiles}
 
     quota_vs_achievement = []
@@ -970,8 +998,13 @@ def advanced_analytics_report(request):
         if not emp_id:
             continue
         profile = profile_map.get(emp_id)
+        if effective_group and not profile:
+            continue
         achievement = float(row["achievement"] or 0)
         quota = float(profile.personal_target if profile else 0)
+        row_currency = selected_group_currency or normalize_currency(
+            row.get("currency") or (profile.personal_currency if profile else None)
+        )
         attainment_pct = round((achievement / quota) * 100, 1) if quota > 0 else None
         if attainment_pct is not None:
             attainment_values.append(attainment_pct)
@@ -983,10 +1016,9 @@ def advanced_analytics_report(request):
                 "achievement": achievement,
                 "attainment_pct": attainment_pct,
                 "order_count": row["order_count"],
-                "currency": normalize_currency(row.get("currency")),
-                "personal_currency": normalize_currency(
-                    row.get("currency") or (profile.personal_currency if profile else None)
-                ),
+                "currency": row_currency,
+                "personal_currency": row_currency,
+                "business_group": profile.business_group if profile else "",
             }
         )
     quota_vs_achievement.sort(key=lambda item: item["achievement"], reverse=True)
@@ -1008,6 +1040,11 @@ def advanced_analytics_report(request):
     if scoped_to_self:
         prev_queryset = _commissions_for_user(request)
     prev_queryset = prev_queryset.filter(commission_date_q(prev_start, prev_end))
+    prev_queryset = apply_business_group_to_commissions(
+        prev_queryset,
+        effective_group,
+        organization=org,
+    )
     prev_queryset = with_commission_currency(prev_queryset)
     prev_by_email = {
         (row["employee__email"], normalize_currency(row.get("report_currency"))): float(row["previous"] or 0)

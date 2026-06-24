@@ -10,6 +10,7 @@ import {
 import {
   BUSINESS_GROUP_OPTIONS,
   businessGroupLabel,
+  currencyForBusinessGroup,
 } from "../utils/businessGroups";
 import "./reportsAnalytics.css";
 
@@ -108,15 +109,17 @@ function KpiCard({ label, value, variant = "navy", hint, icon }) {
   );
 }
 
-function KpiStrip({ summary, sales, advanced, compact = false }) {
+function KpiStrip({ summary, sales, advanced, compact = false, fallbackCurrency = "INR" }) {
   const commissionCurrencies = activeCurrencyTotals(summary?.totals_by_currency);
   const salesCurrencies = activeCurrencyTotals(sales?.totals_by_currency);
   const commissionLabelCurrency =
     commissionCurrencies.length === 1 ? commissionCurrencies[0].currency : "";
   const salesLabelCurrency =
     salesCurrencies.length === 1 ? salesCurrencies[0].currency : "";
-  const commissionCurrency = commissionLabelCurrency || primaryCurrencyFromPayload(summary);
-  const salesCurrency = salesLabelCurrency || primaryCurrencyFromPayload(sales);
+  const commissionCurrency =
+    commissionLabelCurrency || primaryCurrencyFromPayload(summary, fallbackCurrency);
+  const salesCurrency =
+    salesLabelCurrency || primaryCurrencyFromPayload(sales, fallbackCurrency);
   const commissionTotal = formatDashboardAmount(
     summary?.totals_by_currency,
     summary?.total_commission,
@@ -135,14 +138,14 @@ function KpiStrip({ summary, sales, advanced, compact = false }) {
       <KpiCard
         variant="navy"
         icon="💰"
-        label={`Total commission${commissionLabelCurrency ? ` (${commissionLabelCurrency})` : ""}`}
+        label={`Total commission (${commissionCurrency})`}
         value={commissionTotal}
         hint={`${summary?.total_count ?? 0} payout records`}
       />
       <KpiCard
         variant="blue"
         icon="📈"
-        label={`Total sales${salesLabelCurrency ? ` (${salesLabelCurrency})` : ""}`}
+        label={`Total sales (${salesCurrency})`}
         value={salesTotal}
         hint="Order revenue in selected period"
       />
@@ -183,7 +186,7 @@ function attainmentLevel(pct) {
   return "low";
 }
 
-function QuotaAchievementChart({ rows, limit = 8 }) {
+function QuotaAchievementChart({ rows, limit = 8, fallbackCurrency = "INR" }) {
   if (!rows?.length) {
     return <p className="ra-empty">No quota data — set personal targets in User Setup.</p>;
   }
@@ -196,6 +199,7 @@ function QuotaAchievementChart({ rows, limit = 8 }) {
         const pct = row.attainment_pct;
         const ringPct = pct != null ? Math.min(pct, 100) : 0;
         const level = attainmentLevel(pct);
+        const rowCurrency = row.currency || row.personal_currency || fallbackCurrency;
 
         return (
           <article
@@ -221,13 +225,13 @@ function QuotaAchievementChart({ rows, limit = 8 }) {
               <div className="ra-quota-stat">
                 <span className="ra-quota-stat__label">Quota</span>
                 <span className="ra-quota-stat__value">
-                  {formatMoney(quota, row.currency || row.personal_currency, { compact: true })}
+                  {formatMoney(quota, rowCurrency, { compact: true })}
                 </span>
               </div>
               <div className="ra-quota-stat ra-quota-stat--achieved">
                 <span className="ra-quota-stat__label">Achieved</span>
                 <span className="ra-quota-stat__value">
-                  {formatMoney(achievement, row.currency || row.personal_currency, { compact: true })}
+                  {formatMoney(achievement, rowCurrency, { compact: true })}
                 </span>
               </div>
             </div>
@@ -358,6 +362,10 @@ function ReportsAnalytics({ compact = false }) {
       : "";
   const trendScope =
     businessGroup === "all" ? "All business groups" : businessGroupLabel(businessGroup);
+  const selectedBusinessCurrency =
+    businessGroup === "all" ? "" : currencyForBusinessGroup(businessGroup, "");
+  const dashboardFallbackCurrency =
+    selectedBusinessCurrency || primaryCurrencyFromPayload(summary);
   const periodLabels = {
     monthly: "Monthly",
     quarterly: "Quarterly",
@@ -499,7 +507,13 @@ function ReportsAnalytics({ compact = false }) {
         </div>
       ) : (
         <div className="ra-body">
-          <KpiStrip summary={summary} sales={sales} advanced={advanced} compact={compact} />
+          <KpiStrip
+            summary={summary}
+            sales={sales}
+            advanced={advanced}
+            compact={compact}
+            fallbackCurrency={dashboardFallbackCurrency}
+          />
 
           {!compact && <SectionLabel>Trends & distribution</SectionLabel>}
 
@@ -741,7 +755,13 @@ function ReportsAnalytics({ compact = false }) {
                   </p>
                 </div>
               </div>
-              <QuotaAchievementChart rows={advanced?.quota_vs_achievement} limit={quotaLimit} />
+              <QuotaAchievementChart
+                rows={advanced?.quota_vs_achievement}
+                limit={quotaLimit}
+                fallbackCurrency={
+                  selectedBusinessCurrency || primaryCurrencyFromPayload(sales)
+                }
+              />
             </div>
           </div>
 
