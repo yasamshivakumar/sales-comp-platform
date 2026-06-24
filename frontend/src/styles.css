@@ -2030,6 +2030,13 @@ body.sidebar-collapsed {
   font-weight: 500;
 }
 
+.checkbox-field__hint {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .hierarchy-hint {
   grid-column: 1 / -1;
   font-size: 13px;

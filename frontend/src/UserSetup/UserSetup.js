@@ -13,7 +13,7 @@ import { CURRENCY_OPTIONS } from "../utils/currency";
 import { BUSINESS_GROUP_OPTIONS, currencyForBusinessGroup } from "../utils/businessGroups";
 
 const INITIAL_FORM = {
-  enable_login: false,
+  enable_login: true,
   name: "",
   email: "",
   role: "",
@@ -180,7 +180,7 @@ function UserSetup() {
           warning("Participant created. Invite email could not be sent; check email settings.");
         }
       } else {
-        success("Participant created successfully");
+        success("Participant created without login access. Enable login to send an invite.");
       }
       setForm(INITIAL_FORM);
       fetchUsers();

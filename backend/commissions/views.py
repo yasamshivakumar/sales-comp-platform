@@ -1019,6 +1019,38 @@ def email_login(request):
     profile = profiles[0] if profiles else None
     if profile and profile.organization_id:
         request.organization = profile.organization
+    if not profile:
+        disabled_profile_matches = UserProfile.objects.filter(
+            email__iexact=email,
+            enable_login=False,
+        )
+        disabled_employee_id_matches = UserProfile.objects.filter(
+            employee_id__iexact=email,
+            enable_login=False,
+        )
+        disabled_profiles = list(
+            (disabled_profile_matches | disabled_employee_id_matches).distinct()[:2]
+        )
+        if len(disabled_profiles) > 1:
+            return Response(
+                {
+                    "error": (
+                        "This login matches multiple companies. Use a unique email "
+                        "or ask your administrator to update your employee login."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if disabled_profiles:
+            return Response(
+                {
+                    "error": (
+                        "Login access is not enabled for this participant. "
+                        "Ask your admin to enable login and send an invite."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
     user = User.objects.filter(email__iexact=email).first()
     if not user:

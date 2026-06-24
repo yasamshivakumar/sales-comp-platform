@@ -11,7 +11,12 @@ function UserSection({ form, handleChange, renderField, renderSelect }) {
           checked={form.enable_login}
           onChange={handleChange}
         />
-        <label htmlFor="enable_login">Enable login access for this participant</label>
+        <div>
+          <label htmlFor="enable_login">Send invite and enable employee login</label>
+          <p className="checkbox-field__hint">
+            The employee must open the invite link and set a password before signing in.
+          </p>
+        </div>
       </div>
 
       {renderField("name", "Display name *")}
