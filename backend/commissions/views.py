@@ -149,8 +149,9 @@ def book_demo_request(request):
         f"Phone: {phone or 'Not provided'}\n\n"
         f"Message:\n{message or 'Not provided'}\n"
     )
-    sent = notify_user(recipient, subject, body)
-    if not sent:
+    sales_notification_sent = notify_user(recipient, subject, body, reply_to=[email])
+    if not sales_notification_sent:
+        logger.warning("Demo request notification email failed for recipient %s", recipient)
         return Response(
             {
                 "error": "Email service is temporarily unavailable. Please contact us directly.",
@@ -174,7 +175,12 @@ def book_demo_request(request):
     if not confirmation_sent:
         logger.warning("Demo request received, but confirmation email failed for %s", email)
 
-    return Response({"message": "Demo request sent successfully."})
+    return Response(
+        {
+            "message": "Demo request sent successfully.",
+            "confirmation_sent": confirmation_sent,
+        }
+    )
 
 
 def commission_date_q(start_date=None, end_date=None):

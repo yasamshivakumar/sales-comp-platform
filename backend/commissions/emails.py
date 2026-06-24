@@ -30,7 +30,7 @@ def notify_admins(subject, message):
         return False
 
 
-def notify_user(email, subject, message):
+def notify_user(email, subject, message, *, reply_to=None):
     """Send notification to a single user when email backend is configured."""
     if not email:
         return False
@@ -42,6 +42,7 @@ def notify_user(email, subject, message):
             from_email,
             [email],
             fail_silently=False,
+            reply_to=reply_to or None,
         )
         if sent_count <= 0:
             logger.warning("Email backend accepted 0 user notification messages to %s", email)
