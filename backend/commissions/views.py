@@ -149,9 +149,8 @@ def book_demo_request(request):
         f"Phone: {phone or 'Not provided'}\n\n"
         f"Message:\n{message or 'Not provided'}\n"
     )
-    sales_notification_sent = notify_user(recipient, subject, body)
-    if not sales_notification_sent:
-        logger.warning("Demo request notification email failed for recipient %s", recipient)
+    sent = notify_user(recipient, subject, body)
+    if not sent:
         return Response(
             {
                 "error": "Email service is temporarily unavailable. Please contact us directly.",
@@ -161,26 +160,7 @@ def book_demo_request(request):
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
-    confirmation_subject = "We received your Incentra demo enquiry"
-    confirmation_body = (
-        f"Hi {name},\n\n"
-        "Thank you for your interest in Incentra.\n\n"
-        "We received your demo enquiry successfully. One of our Incentra experts "
-        "will reach out to you shortly to understand your requirements and schedule "
-        "the next steps.\n\n"
-        "Regards,\n"
-        "Team Incentra"
-    )
-    confirmation_sent = notify_user(email, confirmation_subject, confirmation_body)
-    if not confirmation_sent:
-        logger.warning("Demo request received, but confirmation email failed for %s", email)
-
-    return Response(
-        {
-            "message": "Demo request sent successfully.",
-            "confirmation_sent": confirmation_sent,
-        }
-    )
+    return Response({"message": "Demo request sent successfully."})
 
 
 def commission_date_q(start_date=None, end_date=None):

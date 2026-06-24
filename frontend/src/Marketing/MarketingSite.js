@@ -71,12 +71,10 @@ function MarketingSite() {
     setDemoStatus({ type: "", message: "" });
     setDemoSubmitting(true);
     try {
-      const res = await api.post("marketing/book-demo/", demoForm);
+      await api.post("marketing/book-demo/", demoForm);
       setDemoStatus({
         type: "success",
-        message: res.data?.confirmation_sent
-          ? "Demo request sent. We received your enquiry and sent a confirmation email."
-          : "Demo request sent. We received your enquiry and will contact you shortly.",
+        message: "Demo request sent. We will contact you shortly.",
       });
       setDemoForm({ name: "", email: "", company: "", phone: "", message: "" });
     } catch (err) {
