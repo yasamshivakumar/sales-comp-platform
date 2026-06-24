@@ -608,8 +608,9 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
             # ---------------------------------------------------
             invite_sent = False
             invite_link = ""
+            invite_error = ""
             if enable_login:
-                _, invite_token, invite_sent = create_user_invite(
+                _, invite_token, invite_sent, invite_error = create_user_invite(
                     profile,
                     invited_by=request.user,
                 )
@@ -657,6 +658,8 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
                 payload["invite_status"] = "sent" if invite_sent else "created"
                 if invite_link:
                     payload["invite_link"] = invite_link
+                if invite_error:
+                    payload["invite_error"] = invite_error
 
             return Response(
                 payload,

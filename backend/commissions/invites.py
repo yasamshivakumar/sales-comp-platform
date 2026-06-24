@@ -9,7 +9,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 
 from .auth_utils import provision_login_user
-from .emails import notify_user
+from .emails import notify_user_with_error
 from .models import UserInvite
 
 
@@ -29,11 +29,11 @@ def build_invite_url(token):
 
 def create_user_invite(profile, *, invited_by=None, send_email=True):
     if not profile or not profile.enable_login:
-        return None, "", False
+        return None, "", False, "Login is not enabled for this profile."
 
     email = (profile.email or "").strip().lower()
     if not email:
-        return None, "", False
+        return None, "", False, "Profile email is missing."
 
     provision_login_user(profile, pending_invite=True)
     now = timezone.now()
@@ -54,13 +54,14 @@ def create_user_invite(profile, *, invited_by=None, send_email=True):
     )
 
     sent = False
+    email_error = ""
     if send_email:
-        sent = send_invite_email(invite, token)
+        sent, email_error = send_invite_email(invite, token)
         if sent:
             invite.sent_at = timezone.now()
             invite.save(update_fields=["sent_at", "updated_at"])
 
-    return invite, token, sent
+    return invite, token, sent, email_error
 
 
 def send_invite_email(invite, token):
@@ -76,7 +77,7 @@ def send_invite_email(invite, token):
         f"This invite expires on {invite.expires_at:%Y-%m-%d %H:%M UTC}.\n"
         "If you did not expect this invite, ignore this email."
     )
-    return notify_user(
+    return notify_user_with_error(
         invite.email,
         f"[Incentra] You're invited to {org_name}",
         message,

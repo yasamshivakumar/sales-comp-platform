@@ -171,13 +171,15 @@ function UserSetup() {
         success("Participant created and invite email sent");
       } else if (res.data?.invite_status === "created") {
         const inviteLink = res.data?.invite_link;
+        const inviteError = res.data?.invite_error;
+        const reason = inviteError ? ` Reason: ${inviteError}` : "";
         if (inviteLink) {
           navigator.clipboard?.writeText(inviteLink).catch(() => {});
           warning(
-            `Participant created, but invite email could not be sent. Invite link copied: ${inviteLink}`
+            `Participant created, but invite email could not be sent.${reason} Invite link copied: ${inviteLink}`
           );
         } else {
-          warning("Participant created. Invite email could not be sent; check email settings.");
+          warning(`Participant created. Invite email could not be sent.${reason} Check email settings.`);
         }
       } else {
         success("Participant created without login access. Enable login to send an invite.");

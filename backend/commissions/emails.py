@@ -41,9 +41,17 @@ def notify_admins(subject, message):
 
 def notify_user(email, subject, message):
     """Send notification to a single user when email backend is configured."""
+    sent, _error = notify_user_with_error(email, subject, message)
+    return sent
+
+
+def notify_user_with_error(email, subject, message):
+    """Send notification and return a short failure reason for admin diagnostics."""
     if not email:
-        return False
+        return False, "Recipient email is missing."
     from_email = default_from_email()
+    if not from_email:
+        return False, "Sender email is not configured."
     try:
         sent_count = send_mail(
             subject,
@@ -54,11 +62,11 @@ def notify_user(email, subject, message):
         )
         if sent_count <= 0:
             logger.warning("Email backend accepted 0 user notification messages to %s", email)
-            return False
-        return True
-    except Exception:
+            return False, "Email backend accepted 0 messages."
+        return True, ""
+    except Exception as exc:
         logger.exception("Failed to send user notification to %s", email)
-        return False
+        return False, f"{exc.__class__.__name__}: {str(exc)[:240]}"
 
 
 def notify_commission_manager_approved(count, start_date=None, end_date=None):

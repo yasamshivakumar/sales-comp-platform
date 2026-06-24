@@ -32,7 +32,7 @@ class Command(BaseCommand):
             profile.enable_login = True
             profile.save(update_fields=["enable_login"])
 
-        invite, token, sent = create_user_invite(profile)
+        invite, token, sent, email_error = create_user_invite(profile)
         if not invite:
             raise CommandError("Could not create invite.")
 
@@ -41,5 +41,7 @@ class Command(BaseCommand):
                 f"Invite {'sent' if sent else 'created'} for {profile.email}"
             )
         )
+        if email_error:
+            self.stdout.write(self.style.WARNING(f"Email error: {email_error}"))
         if options["print_link"]:
             self.stdout.write(build_invite_url(token))
