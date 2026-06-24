@@ -1,7 +1,7 @@
 import logging
 
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage, send_mail
 
 logger = logging.getLogger("commissions")
 
@@ -36,14 +36,23 @@ def notify_user(email, subject, message, *, reply_to=None):
         return False
     from_email = settings.DEFAULT_FROM_EMAIL
     try:
-        sent_count = send_mail(
-            subject,
-            message,
-            from_email,
-            [email],
-            fail_silently=False,
-            reply_to=reply_to or None,
-        )
+        if reply_to:
+            email_message = EmailMessage(
+                subject,
+                message,
+                from_email,
+                [email],
+                reply_to=reply_to,
+            )
+            sent_count = email_message.send(fail_silently=False)
+        else:
+            sent_count = send_mail(
+                subject,
+                message,
+                from_email,
+                [email],
+                fail_silently=False,
+            )
         if sent_count <= 0:
             logger.warning("Email backend accepted 0 user notification messages to %s", email)
             return False
