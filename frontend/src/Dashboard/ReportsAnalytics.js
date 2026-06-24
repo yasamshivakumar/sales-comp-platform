@@ -117,9 +117,9 @@ function KpiStrip({ summary, sales, advanced, compact = false, fallbackCurrency 
   const salesLabelCurrency =
     salesCurrencies.length === 1 ? salesCurrencies[0].currency : "";
   const commissionCurrency =
-    commissionLabelCurrency || primaryCurrencyFromPayload(summary, fallbackCurrency);
+    commissionLabelCurrency || fallbackCurrency || primaryCurrencyFromPayload(summary);
   const salesCurrency =
-    salesLabelCurrency || primaryCurrencyFromPayload(sales, fallbackCurrency);
+    salesLabelCurrency || fallbackCurrency || primaryCurrencyFromPayload(sales);
   const commissionTotal = formatDashboardAmount(
     summary?.totals_by_currency,
     summary?.total_commission,
