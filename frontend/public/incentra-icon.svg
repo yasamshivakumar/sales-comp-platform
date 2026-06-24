@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Incentra">
+  <defs>
+    <linearGradient id="incentraGradient" x1="18" y1="14" x2="110" y2="114" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1b96ff"/>
+      <stop offset="1" stop-color="#032d60"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#032d60" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <rect width="128" height="128" rx="30" fill="#f8fbff"/>
+  <rect x="14" y="14" width="100" height="100" rx="26" fill="url(#incentraGradient)" filter="url(#softShadow)"/>
+  <path d="M42 88h44" stroke="#ffffff" stroke-width="10" stroke-linecap="round"/>
+  <path d="M64 38v50" stroke="#ffffff" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="64" cy="32" r="7" fill="#ffffff"/>
+  <path d="M45 56h38" stroke="#bfe4ff" stroke-width="8" stroke-linecap="round" opacity="0.9"/>
+</svg>
