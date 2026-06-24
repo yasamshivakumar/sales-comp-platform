@@ -149,7 +149,7 @@ def book_demo_request(request):
         f"Phone: {phone or 'Not provided'}\n\n"
         f"Message:\n{message or 'Not provided'}\n"
     )
-    sales_notification_sent = notify_user(recipient, subject, body, reply_to=[email])
+    sales_notification_sent = notify_user(recipient, subject, body)
     if not sales_notification_sent:
         logger.warning("Demo request notification email failed for recipient %s", recipient)
         return Response(
