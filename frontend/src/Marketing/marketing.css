@@ -282,6 +282,7 @@
   flex-direction: column;
   justify-content: flex-end;
   padding: clamp(28px, 4vw, 46px);
+  padding-top: clamp(260px, 30vw, 340px);
   border: 1px solid rgba(3, 45, 96, 0.1);
   border-radius: 34px;
   background:
@@ -321,9 +322,15 @@
 
 .marketing-hero-panel__copy {
   position: relative;
-  z-index: 2;
+  z-index: 4;
   max-width: 600px;
-  transform: translateZ(62px);
+  padding: clamp(18px, 3vw, 24px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgba(3, 45, 96, 0.72), rgba(1, 118, 211, 0.28));
+  box-shadow: 0 22px 58px rgba(3, 45, 96, 0.24);
+  backdrop-filter: blur(14px);
+  transform: translateZ(34px);
 }
 
 .marketing-hero-panel__copy span {
@@ -353,7 +360,9 @@
 
 .marketing-hero-scene {
   position: absolute;
-  inset: 0;
+  inset: 0 0 30%;
+  z-index: 1;
+  pointer-events: none;
   transform-style: preserve-3d;
   animation: marketingSceneTilt 9s ease-in-out infinite alternate;
 }
@@ -361,7 +370,7 @@
 .marketing-orbit {
   position: absolute;
   left: 50%;
-  top: 42%;
+  top: 48%;
   border: 1px solid rgba(191, 219, 254, 0.28);
   border-radius: 999px;
   transform-style: preserve-3d;
@@ -386,7 +395,7 @@
 .marketing-cube {
   position: absolute;
   left: 50%;
-  top: 37%;
+  top: 42%;
   width: 112px;
   height: 112px;
   margin: -56px 0 0 -56px;
@@ -436,6 +445,7 @@
 
 .marketing-floating-card {
   position: absolute;
+  z-index: 2;
   display: grid;
   gap: 5px;
   min-width: 150px;
@@ -463,21 +473,21 @@
 }
 
 .marketing-floating-card--one {
-  top: 19%;
-  left: 9%;
+  top: 13%;
+  left: 8%;
   transform: rotateY(-18deg) rotateX(9deg) translateZ(90px);
 }
 
 .marketing-floating-card--two {
-  top: 42%;
-  right: 8%;
+  top: 25%;
+  right: 7%;
   animation-delay: -2s;
   transform: rotateY(18deg) rotateX(-8deg) translateZ(120px);
 }
 
 .marketing-floating-card--three {
   right: 18%;
-  bottom: 17%;
+  bottom: 30%;
   animation-delay: -3.8s;
   transform: rotateY(-14deg) rotateX(8deg) translateZ(80px);
 }
@@ -867,6 +877,15 @@
 
   .marketing-hero-panel {
     min-height: 460px;
+    padding-top: 300px;
+  }
+
+  .marketing-hero-scene {
+    inset: 0 0 36%;
+  }
+
+  .marketing-floating-card--three {
+    display: none;
   }
 }
 
@@ -899,24 +918,77 @@
 
   .marketing-hero-panel {
     min-height: 420px;
+    padding-top: 250px;
+  }
+
+  .marketing-hero-scene {
+    inset: 0 0 42%;
+    opacity: 0.82;
+  }
+
+  .marketing-orbit--outer {
+    width: 260px;
+    height: 260px;
+    margin: -130px 0 0 -130px;
+  }
+
+  .marketing-orbit--inner {
+    width: 180px;
+    height: 180px;
+    margin: -90px 0 0 -90px;
+  }
+
+  .marketing-cube {
+    width: 86px;
+    height: 86px;
+    margin: -43px 0 0 -43px;
+  }
+
+  .marketing-cube__face--front {
+    transform: translateZ(43px);
+  }
+
+  .marketing-cube__face--back {
+    transform: rotateY(180deg) translateZ(43px);
+  }
+
+  .marketing-cube__face--right {
+    transform: rotateY(90deg) translateZ(43px);
+  }
+
+  .marketing-cube__face--left {
+    transform: rotateY(-90deg) translateZ(43px);
+  }
+
+  .marketing-cube__face--top {
+    transform: rotateX(90deg) translateZ(43px);
+  }
+
+  .marketing-cube__face--bottom {
+    transform: rotateX(-90deg) translateZ(43px);
   }
 
   .marketing-floating-card {
-    min-width: 126px;
-    padding: 12px;
+    min-width: 112px;
+    padding: 10px 11px;
+  }
+
+  .marketing-floating-card strong {
+    font-size: 13px;
   }
 
   .marketing-floating-card--one {
-    left: 5%;
+    top: 10%;
+    left: 4%;
   }
 
   .marketing-floating-card--two {
+    top: 16%;
     right: 4%;
   }
 
   .marketing-floating-card--three {
-    right: 10%;
-    bottom: 15%;
+    display: none;
   }
 
   .marketing-demo-form {
