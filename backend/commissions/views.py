@@ -160,6 +160,20 @@ def book_demo_request(request):
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
+    confirmation_subject = "We received your Incentra demo enquiry"
+    confirmation_body = (
+        f"Hi {name},\n\n"
+        "Thank you for your interest in Incentra.\n\n"
+        "We received your demo enquiry successfully. One of our Incentra experts "
+        "will reach out to you shortly to understand your requirements and schedule "
+        "the next steps.\n\n"
+        "Regards,\n"
+        "Team Incentra"
+    )
+    confirmation_sent = notify_user(email, confirmation_subject, confirmation_body)
+    if not confirmation_sent:
+        logger.warning("Demo request received, but confirmation email failed for %s", email)
+
     return Response({"message": "Demo request sent successfully."})
 
 
