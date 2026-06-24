@@ -6,13 +6,22 @@ from django.core.mail import send_mail
 logger = logging.getLogger("commissions")
 
 
+def default_from_email():
+    """Return a sender address that SMTP providers are likely to accept."""
+    configured = str(getattr(settings, "DEFAULT_FROM_EMAIL", "") or "").strip()
+    host_user = str(getattr(settings, "EMAIL_HOST_USER", "") or "").strip()
+    if (not configured or configured.endswith(".local")) and "@" in host_user:
+        return host_user
+    return configured or host_user
+
+
 def notify_admins(subject, message):
     """Send ops notification when NOTIFY_EMAILS is configured."""
     recipients = getattr(settings, "NOTIFY_EMAILS", None) or []
     if not recipients:
         return False
 
-    from_email = settings.DEFAULT_FROM_EMAIL
+    from_email = default_from_email()
     try:
         sent_count = send_mail(
             subject,
@@ -34,7 +43,7 @@ def notify_user(email, subject, message):
     """Send notification to a single user when email backend is configured."""
     if not email:
         return False
-    from_email = settings.DEFAULT_FROM_EMAIL
+    from_email = default_from_email()
     try:
         sent_count = send_mail(
             subject,
