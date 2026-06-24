@@ -1,11 +1,15 @@
 .env
 .env.*
 !.env.example
+.venv
 myenv
 venv
-__pycache__
-*.pyc
 .git
 logs
 staticfiles
+media
+__pycache__
+*.pyc
+*.pyo
+*.log
 *.sqlite3
