@@ -5,26 +5,32 @@ import "./marketing.css";
 
 const FEATURES = [
   {
+    icon: "01",
     title: "Reliable incentive management",
     body: "Move away from manual tracking and give your teams a cleaner way to manage sales incentives.",
   },
   {
+    icon: "02",
     title: "Clear team visibility",
     body: "Help leaders, finance teams, and employees understand performance and earnings with confidence.",
   },
   {
+    icon: "03",
     title: "Designed for growing companies",
     body: "Support multiple teams and business units with a structured, secure compensation process.",
   },
   {
+    icon: "04",
     title: "Employee transparency",
     body: "Give employees a simple place to review incentive information and reduce back-and-forth questions.",
   },
   {
+    icon: "05",
     title: "Finance-ready process",
     body: "Keep incentive reviews, approvals, and payout preparation organized from one place.",
   },
   {
+    icon: "06",
     title: "Built with trust in mind",
     body: "Keep company data protected and make important compensation activity easier to review.",
   },
@@ -89,6 +95,11 @@ function MarketingSite() {
 
   return (
     <main className="marketing-site">
+      <div className="marketing-ambient" aria-hidden="true">
+        <span className="marketing-ambient__orb marketing-ambient__orb--one" />
+        <span className="marketing-ambient__orb marketing-ambient__orb--two" />
+        <span className="marketing-ambient__orb marketing-ambient__orb--three" />
+      </div>
       <header className="marketing-nav">
         <Link to="/" className="marketing-brand" aria-label="Incentra home">
           <span className="marketing-brand__mark">I</span>
@@ -133,12 +144,38 @@ function MarketingSite() {
         </div>
 
         <div className="marketing-hero-panel" aria-label="Incentra overview">
-          <span>Incentra</span>
-          <h2>Modern incentive operations for sales-led companies.</h2>
-          <p>
-            A focused platform for companies that want incentive compensation to be
-            easier to understand, manage, and scale.
-          </p>
+          <div className="marketing-hero-scene" aria-hidden="true">
+            <span className="marketing-orbit marketing-orbit--outer" />
+            <span className="marketing-orbit marketing-orbit--inner" />
+            <div className="marketing-cube">
+              <span className="marketing-cube__face marketing-cube__face--front">INC</span>
+              <span className="marketing-cube__face marketing-cube__face--back">ROI</span>
+              <span className="marketing-cube__face marketing-cube__face--right" />
+              <span className="marketing-cube__face marketing-cube__face--left" />
+              <span className="marketing-cube__face marketing-cube__face--top" />
+              <span className="marketing-cube__face marketing-cube__face--bottom" />
+            </div>
+            <div className="marketing-floating-card marketing-floating-card--one">
+              <span>Clarity</span>
+              <strong>100%</strong>
+            </div>
+            <div className="marketing-floating-card marketing-floating-card--two">
+              <span>Teams</span>
+              <strong>Sales + Finance</strong>
+            </div>
+            <div className="marketing-floating-card marketing-floating-card--three">
+              <span>Process</span>
+              <strong>Clean payouts</strong>
+            </div>
+          </div>
+          <div className="marketing-hero-panel__copy">
+            <span>Incentra</span>
+            <h2>Modern incentive operations for sales-led companies.</h2>
+            <p>
+              A focused platform for companies that want incentive compensation to be
+              easier to understand, manage, and scale.
+            </p>
+          </div>
         </div>
       </section>
 
@@ -152,8 +189,13 @@ function MarketingSite() {
           </p>
         </div>
         <div className="marketing-feature-grid">
-          {FEATURES.map((feature) => (
-            <article className="marketing-feature-card" key={feature.title}>
+          {FEATURES.map((feature, index) => (
+            <article
+              className="marketing-feature-card"
+              key={feature.title}
+              style={{ "--card-delay": `${index * 90}ms` }}
+            >
+              <span className="marketing-feature-card__icon">{feature.icon}</span>
               <h3>{feature.title}</h3>
               <p>{feature.body}</p>
             </article>
