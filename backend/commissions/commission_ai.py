@@ -290,29 +290,37 @@ def build_commission_context(commission, request, explanation) -> dict:
     profile = _commission_owner_profile(commission, order) or get_request_profile(request)
     viewer = get_request_profile(request)
     plan = commission.compensation_plan
-    currency = normalize_currency(getattr(order, "currency", None)) if order else normalize_currency(None)
+    currency = normalize_currency(
+        getattr(commission, "currency", None) or getattr(order, "currency", None)
+    )
 
     period = {}
     teammates = []
     next_period = None
-    if order and profile:
-        start, end = _order_period_bounds(order)
+    if profile and (order or getattr(commission, "period_start", None)):
+        if getattr(commission, "period_start", None) and getattr(commission, "period_end", None):
+            start, end = commission.period_start, commission.period_end
+        else:
+            start, end = _order_period_bounds(order)
         stats = _period_sales_and_commission(profile, start, end)
         period = {
             "label": start.strftime("%B %Y"),
             "start_date": str(start),
             "end_date": str(end),
-            "sales": _decimal_str(stats["total_sales"]),
+            "sales": _decimal_str(
+                getattr(commission, "source_sales_total", None) or stats["total_sales"]
+            ),
             "commission": _decimal_str(stats["total_commission"]),
-            "order_count": stats["order_count"],
+            "order_count": getattr(commission, "source_order_count", None) or stats["order_count"],
             "quota_target": _decimal_str(stats["quota_target"]),
             "quota_attainment_pct": stats["quota_attainment_pct"],
             "currency": currency,
         }
-        next_period = _next_month_label(order.order_date)
-        if order.organization_id:
+        next_period = _next_month_label(order.order_date) if order else None
+        org_id = getattr(order, "organization_id", None) or getattr(commission, "organization_id", None)
+        if org_id:
             teammates = _teammate_snapshots(
-                order.organization_id, start, end, exclude_email=profile.email, currency=currency
+                org_id, start, end, exclude_email=profile.email, currency=currency
             )
 
     effective_rate_pct = None
@@ -348,6 +356,11 @@ def build_commission_context(commission, request, explanation) -> dict:
             "status": commission.status or "calculated",
             "order_id": explanation.get("order_id"),
             "order_date": explanation.get("order_date"),
+            "calculation_scope": getattr(commission, "calculation_scope", ""),
+            "source_order_count": getattr(commission, "source_order_count", 0),
+            "source_sales_total": _decimal_str(getattr(commission, "source_sales_total", 0)),
+            "period_start": str(getattr(commission, "period_start", "") or ""),
+            "period_end": str(getattr(commission, "period_end", "") or ""),
             "plan_name": plan.plan_name if plan else None,
             "summary": explanation.get("summary"),
         },
@@ -432,8 +445,13 @@ def _call_chat_completion(question: str, context: dict, runtime: dict) -> str:
 
 def _offline_answer(explanation: dict) -> dict:
     status = ai_setup_status()
+    setup_message = status.get("message", "AI assistant is not configured.")
     return {
-        "answer": status.get("message", "AI assistant is not configured."),
+        "answer": (
+            "AI is not connected right now, so I cannot answer this as a live chat. "
+            "Please review the verified calculation breakdown above for the exact commission math. "
+            f"Setup note: {setup_message}"
+        ),
         "source": "offline",
         "ai": status,
     }
@@ -441,12 +459,10 @@ def _offline_answer(explanation: dict) -> dict:
 
 def ask_commission_ai(commission, question: str, request, explanation: dict) -> dict:
     """Answer a natural-language question using an LLM grounded on commission data."""
+    context = build_commission_context(commission, request, explanation)
     runtime = _resolve_ai_runtime()
     if not runtime or not getattr(settings, "COMMISSION_AI_ENABLED", True):
-        result = _offline_answer(explanation)
-        return result
-
-    context = build_commission_context(commission, request, explanation)
+        return _offline_answer(explanation)
 
     try:
         answer = _call_chat_completion(question, context, runtime)
@@ -457,7 +473,15 @@ def ask_commission_ai(commission, question: str, request, explanation: dict) -> 
             "ai": ai_setup_status(),
         }
     except CommissionAIError as exc:
-        return {"answer": str(exc), "source": "error", "ai": ai_setup_status()}
+        return {
+            "answer": (
+                "AI could not answer this question right now. "
+                "Please review the verified calculation breakdown above, or try again after the AI provider is available."
+            ),
+            "source": "fallback",
+            "error": str(exc),
+            "ai": ai_setup_status(),
+        }
     except Exception:
         logger.exception("Unexpected commission AI failure")
         return {

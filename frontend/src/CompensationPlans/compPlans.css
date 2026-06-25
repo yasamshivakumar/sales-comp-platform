@@ -61,3 +61,57 @@
 .comp-plans-manage {
   margin-top: 8px;
 }
+
+.ai-plan-builder {
+  margin-bottom: 24px;
+}
+
+.ai-plan-builder__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.ai-plan-builder__eyebrow {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary-color);
+}
+
+.ai-plan-builder__hint {
+  margin: 0 0 18px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.form-field--wide {
+  grid-column: 1 / -1;
+}
+
+.ai-plan-builder textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 110px;
+}
+
+.ai-plan-builder__result {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(1, 118, 211, 0.18);
+  border-radius: 12px;
+  background: rgba(1, 118, 211, 0.08);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.ai-plan-builder__result ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}

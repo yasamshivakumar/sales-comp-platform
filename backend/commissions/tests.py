@@ -18,9 +18,11 @@ from .models import (
     HierarchyRelationship,
     Order,
     Commission,
+    CommissionRule,
     Employee,
     Sale,
     UserInvite,
+    AuditLog,
 )
 from .services import (
     resolve_compensation_plan,
@@ -954,8 +956,8 @@ class CommissionExplanationTests(TestCase):
         request = type("Req", (), {"user": user})()
         data = answer_commission_question(commission, "How was this calculated?", request)
         self.assertEqual(data.get("source"), "offline")
-        self.assertIn("OPENAI_API_KEY", data["answer"])
-        self.assertIn("Ollama", data["answer"])
+        self.assertIn("AI is not connected", data["answer"])
+        self.assertIn("verified calculation breakdown", data["answer"])
 
 
 class UserSetupDuplicateTests(TestCase):
@@ -1763,3 +1765,256 @@ class TenantIsolationAPITests(TestCase):
 
         self.assertEqual(payload["total_count"], 1)
         self.assertEqual(float(payload["total_commission"]), 1000.0)
+
+
+@override_settings(
+    COMMISSION_AI_ENABLED=True,
+    AI_PLAN_BUILDER_ENABLED=True,
+    AI_DASHBOARD_INSIGHTS_ENABLED=True,
+)
+class ProductionAIFeatureTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(name="AI Co", slug="ai-co")
+        self.admin = User.objects.create_user(
+            username="ai-admin",
+            email="ai-admin@test.com",
+            password="Pass12345",
+        )
+        self.rep_user = User.objects.create_user(
+            username="ai-rep",
+            email="ai-rep@test.com",
+            password="Pass12345",
+        )
+        UserProfile.objects.create(
+            organization=self.org,
+            email=self.admin.email,
+            employee_id="AI-ADMIN",
+            name="AI Admin",
+            role="Admin",
+            enable_login=True,
+        )
+        UserProfile.objects.create(
+            organization=self.org,
+            email=self.rep_user.email,
+            employee_id="AI-REP",
+            name="AI Rep",
+            role="Sales Rep",
+            business_group="USA",
+            personal_currency="USD",
+            enable_login=True,
+        )
+        self.admin_auth = {
+            "HTTP_AUTHORIZATION": f"Token {Token.objects.create(user=self.admin).key}"
+        }
+        self.rep_auth = {
+            "HTTP_AUTHORIZATION": f"Token {Token.objects.create(user=self.rep_user).key}"
+        }
+        self.client = Client()
+
+    def test_ai_plan_builder_is_admin_only(self):
+        response = self.client.post(
+            "/api/ai/compensation-plan-builder/",
+            {
+                "prompt": "Build a monthly plan for Sales Reps",
+                "effective_start_date": "2026-06-01",
+            },
+            content_type="application/json",
+            **self.rep_auth,
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_ai_dashboard_insights_rejects_regular_rep(self):
+        response = self.client.get("/api/ai/dashboard-insights/", **self.rep_auth)
+        self.assertEqual(response.status_code, 403)
+
+    @patch("commissions.ai_features.call_json_ai")
+    def test_ai_plan_builder_validates_creates_and_audits(self, mocked_ai):
+        mocked_ai.return_value = (
+            {
+                "plan": {
+                    "plan_name": "AI USA Sales Plan",
+                    "status": "Active",
+                    "pay_period_type": "Monthly",
+                    "plan_basis": "Role",
+                    "effective_start_date": "2026-06-01",
+                    "effective_end_date": "2026-06-30",
+                    "commission_table_type": "RATE",
+                    "role": "Sales Rep",
+                    "business_group": "USA",
+                },
+                "sc_rate_tables": [
+                    {
+                        "tier_name": "Base",
+                        "from_amount": "0",
+                        "to_amount": None,
+                        "commission_rate": "5",
+                        "bonus_amount": "0",
+                        "sequence": 1,
+                        "is_active": True,
+                    }
+                ],
+                "commission_rules": [
+                    {
+                        "name": "Enterprise bonus",
+                        "rule_type": "commission_rate",
+                        "conditions": [
+                            {
+                                "field": "business_group",
+                                "operator": "eq",
+                                "value": "USA",
+                                "sequence": 1,
+                                "is_active": True,
+                            }
+                        ],
+                        "results": [
+                            {
+                                "result_name": "Bonus",
+                                "result_rate_type": "add_bonus",
+                                "rate_value": "500",
+                                "result_classification": "bonus",
+                                "earning_group": "bonus",
+                                "value_unit_type": "currency",
+                                "sequence": 1,
+                                "is_active": True,
+                            }
+                        ],
+                    }
+                ],
+                "rationale": ["Tiered plan requested."],
+                "warnings": [],
+            },
+            {"provider": "mock", "model": "mock-model"},
+        )
+        response = self.client.post(
+            "/api/ai/compensation-plan-builder/",
+            {
+                "prompt": "Build a monthly USA Sales Rep plan with a 5 percent base tier.",
+                "role": "Sales Rep",
+                "business_group": "USA",
+                "effective_start_date": "2026-06-01",
+                "effective_end_date": "2026-06-30",
+                "commission_table_type": "RATE",
+            },
+            content_type="application/json",
+            **self.admin_auth,
+        )
+        self.assertEqual(response.status_code, 201)
+        plan = CompensationPlan.objects.get(plan_name="AI USA Sales Plan")
+        self.assertEqual(plan.organization, self.org)
+        self.assertEqual(plan.sc_rate_tables.count(), 1)
+        self.assertEqual(CommissionRule.objects.filter(compensation_plan=plan).count(), 1)
+        self.assertTrue(
+            AuditLog.objects.filter(
+                organization=self.org,
+                action="ai_compensation_plan_created",
+                detail__plan_id=plan.id,
+            ).exists()
+        )
+
+    @override_settings(COMMISSION_AI_ENABLED=False)
+    def test_commission_explanation_reports_offline_when_ai_disabled(self):
+        employee = Employee.objects.create(
+            organization=self.org,
+            name="AI Rep",
+            email=self.rep_user.email,
+        )
+        order = Order.objects.create(
+            organization=self.org,
+            order_id="AI-ORDER-1",
+            order_date=date(2026, 6, 15),
+            employee_id="AI-REP",
+            sales_amount=Decimal("10000.00"),
+            currency="USD",
+            order_status="Success",
+        )
+        sale = Sale.objects.create(
+            organization=self.org,
+            order=order,
+            employee=employee,
+            employee_salary=Decimal("0.00"),
+            amount=order.sales_amount,
+        )
+        plan = CompensationPlan.objects.create(
+            organization=self.org,
+            plan_name="Aggregate Plan",
+            effective_start_date=date(2026, 6, 1),
+            effective_end_date=date(2026, 6, 30),
+            status="Active",
+            role="Sales Rep",
+            commission_table_type="RATE",
+        )
+        commission = Commission.objects.create(
+            organization=self.org,
+            employee=employee,
+            sale=sale,
+            compensation_plan=plan,
+            commission_amount=Decimal("500.00"),
+            currency="USD",
+            calculation_scope=Commission.SCOPE_EMPLOYEE_MONTH,
+            period_start=date(2026, 6, 1),
+            period_end=date(2026, 6, 30),
+            source_order_count=2,
+            source_sales_total=Decimal("10000.00"),
+        )
+        response = self.client.post(
+            f"/api/commissions/{commission.id}/explanation/ask/",
+            {"question": "How was this calculated?"},
+            content_type="application/json",
+            **self.rep_auth,
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["source"], "offline")
+        self.assertIn("AI is not connected", payload["answer"])
+        self.assertIn("verified calculation breakdown", payload["answer"])
+
+    @patch("commissions.ai_features.call_json_ai")
+    def test_ai_dashboard_insights_returns_structured_payload(self, mocked_ai):
+        employee = Employee.objects.create(
+            organization=self.org,
+            name="AI Rep",
+            email=self.rep_user.email,
+        )
+        order = Order.objects.create(
+            organization=self.org,
+            order_id="AI-DASH-1",
+            order_date=date(2026, 6, 12),
+            employee_id="AI-REP",
+            sales_amount=Decimal("20000.00"),
+            currency="USD",
+            order_status="Success",
+            business_group="USA",
+        )
+        sale = Sale.objects.create(
+            organization=self.org,
+            order=order,
+            employee=employee,
+            employee_salary=Decimal("0.00"),
+            amount=order.sales_amount,
+        )
+        Commission.objects.create(
+            organization=self.org,
+            employee=employee,
+            sale=sale,
+            commission_amount=Decimal("1000.00"),
+            currency="USD",
+        )
+        mocked_ai.return_value = (
+            {
+                "executive_summary": ["Commission is healthy."],
+                "risks": [],
+                "opportunities": ["Review quota coverage."],
+                "anomalies": [],
+                "recommended_actions": ["Check top performers."],
+                "questions_to_investigate": [],
+            },
+            {"provider": "mock", "model": "mock-model"},
+        )
+        response = self.client.get(
+            "/api/ai/dashboard-insights/?business_group=USA",
+            **self.admin_auth,
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["executive_summary"], ["Commission is healthy."])
+        self.assertEqual(payload["facts"]["business_group"], "USA")
