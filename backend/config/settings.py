@@ -106,7 +106,6 @@ REST_FRAMEWORK = {
         "anon": os.getenv("THROTTLE_ANON", "30/min"),
         "login": os.getenv("THROTTLE_LOGIN", "10/min"),
         "upload": os.getenv("THROTTLE_UPLOAD", "6/min"),
-        "ai": os.getenv("THROTTLE_AI", "20/hour"),
     },
 }
 
@@ -354,7 +353,3 @@ COMMISSION_AI_ENABLED = _env_bool(
     "COMMISSION_AI_ENABLED",
     "True",
 )
-AI_PLAN_BUILDER_ENABLED = _env_bool("AI_PLAN_BUILDER_ENABLED", "True")
-AI_DASHBOARD_INSIGHTS_ENABLED = _env_bool("AI_DASHBOARD_INSIGHTS_ENABLED", "True")
-COMMISSION_AI_MAX_PROMPT_CHARS = int(os.getenv("COMMISSION_AI_MAX_PROMPT_CHARS", "24000"))
-COMMISSION_AI_MAX_RESPONSE_CHARS = int(os.getenv("COMMISSION_AI_MAX_RESPONSE_CHARS", "48000"))

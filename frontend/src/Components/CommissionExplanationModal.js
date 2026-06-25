@@ -242,19 +242,19 @@ function CommissionExplanationModal({
                 <button
                   type="submit"
                   className="btn-secondary"
-                  disabled={asking || !question.trim()}
+                  disabled={asking || !aiConfigured}
                 >
-                  {asking ? "Thinking… (may take up to a minute)" : "Ask"}
+                  {asking ? "Thinking… (may take up to a minute)" : "Ask AI"}
                 </button>
               </form>
-              {answer && (
+              {answer && answerSource !== "offline" && (
                 <div className="ce-answer">
                   {answerSource === "ai" && (
                     <span className="ce-answer__badge">AI</span>
                   )}
-                  {(answerSource === "offline" || answerSource === "fallback") && (
+                  {answerSource === "offline" && (
                     <span className="ce-answer__badge ce-answer__badge--muted">
-                      Verified fallback
+                      Setup required
                     </span>
                   )}
                   <div className="ce-answer__text">{answer}</div>

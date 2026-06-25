@@ -183,51 +183,6 @@
   backdrop-filter: blur(6px);
 }
 
-.ra-panel--ai {
-  border-color: rgba(1, 118, 211, 0.2);
-  background:
-    radial-gradient(circle at 12% 12%, rgba(27, 150, 255, 0.12), transparent 32%),
-    var(--ra-panel);
-}
-
-.ra-ai-insights {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-}
-
-.ra-ai-insights__group {
-  padding: 12px;
-  border: 1px solid rgba(1, 118, 211, 0.12);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.64);
-}
-
-.ra-ai-insights__group h5 {
-  margin: 0 0 8px;
-  color: var(--ra-text);
-  font-size: 13px;
-}
-
-.ra-ai-insights__group ul {
-  margin: 0;
-  padding-left: 18px;
-  color: var(--ra-text-muted);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.ra-ai-insights__group p,
-.ra-ai-insights__error {
-  margin: 0;
-  color: var(--ra-text-muted);
-  font-size: 13px;
-}
-
-.ra-ai-insights__error {
-  color: #b42318;
-}
-
 .ra-btn--glass:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.2);
   border-color: rgba(255, 255, 255, 0.35);

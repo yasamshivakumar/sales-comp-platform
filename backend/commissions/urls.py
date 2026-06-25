@@ -5,7 +5,6 @@ from . import views
 from .health import health_check, readiness_check
 from . import enterprise_views
 from . import integration_views
-from . import ai_views
 from .rule_views import (
     CommissionRuleListCreateView,
     CommissionRuleDetailView,
@@ -96,17 +95,6 @@ urlpatterns = [
         name="integration-webhook-orders",
     ),
     path("audit-logs/", audit_log_list, name="audit-logs"),
-    path("ai/status/", ai_views.ai_status, name="ai-status"),
-    path(
-        "ai/compensation-plan-builder/",
-        ai_views.ai_compensation_plan_builder,
-        name="ai-compensation-plan-builder",
-    ),
-    path(
-        "ai/dashboard-insights/",
-        ai_views.ai_dashboard_insights,
-        name="ai-dashboard-insights",
-    ),
     path("statements/me/", enterprise_views.employee_statement, name="statement-me"),
     path(
         "statements/export/",

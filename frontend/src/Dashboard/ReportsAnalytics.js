@@ -169,52 +169,6 @@ function KpiStrip({ summary, sales, advanced, compact = false, fallbackCurrency 
   );
 }
 
-function AiInsightsPanel({ insights, loading, error, onRefresh }) {
-  const renderList = (title, rows) => (
-    <div className="ra-ai-insights__group">
-      <h5>{title}</h5>
-      {rows?.length ? (
-        <ul>
-          {rows.map((row, index) => (
-            <li key={index}>{row}</li>
-          ))}
-        </ul>
-      ) : (
-        <p>No AI notes yet.</p>
-      )}
-    </div>
-  );
-
-  return (
-    <div className="ra-panel ra-panel--ai ra-span-full">
-      <div className="ra-panel__head">
-        <div>
-          <h4 className="ra-panel__title">AI Dashboard Insights</h4>
-          <p className="ra-panel__subtitle">
-            Generated from aggregate dashboard data. Review before taking action.
-          </p>
-        </div>
-        <button type="button" className="ra-btn ra-btn--glass" onClick={onRefresh} disabled={loading}>
-          {loading ? "Thinking..." : "Refresh AI"}
-        </button>
-      </div>
-      {error && <p className="ra-ai-insights__error">{error}</p>}
-      {!insights && !error && !loading && (
-        <p className="ra-empty">Click Refresh AI to generate executive insights.</p>
-      )}
-      {loading && !insights && <p className="ra-empty">Generating AI insights...</p>}
-      {insights && (
-        <div className="ra-ai-insights">
-          {renderList("Executive summary", insights.executive_summary)}
-          {renderList("Risks", insights.risks)}
-          {renderList("Opportunities", insights.opportunities)}
-          {renderList("Recommended actions", insights.recommended_actions)}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function SectionLabel({ children }) {
   return (
     <div className="ra-section-label">
@@ -308,9 +262,6 @@ function ReportsAnalytics({ compact = false }) {
   const [leaderboard, setLeaderboard] = useState([]);
   const [leaderboardMeta, setLeaderboardMeta] = useState({ limited: false, count: null });
   const [advanced, setAdvanced] = useState(null);
-  const [aiInsights, setAiInsights] = useState(null);
-  const [aiInsightsLoading, setAiInsightsLoading] = useState(false);
-  const [aiInsightsError, setAiInsightsError] = useState("");
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedEmployeeSearch(employeeSearch), 300);
@@ -370,25 +321,6 @@ function ReportsAnalytics({ compact = false }) {
     }
   }, [startDate, endDate, period, businessGroup]);
 
-  const loadAiInsights = useCallback(async () => {
-    if (compact) return;
-    setAiInsightsLoading(true);
-    setAiInsightsError("");
-    const params = new URLSearchParams();
-    if (startDate) params.append("start_date", startDate);
-    if (endDate) params.append("end_date", endDate);
-    if (businessGroup !== "all") params.append("business_group", businessGroup);
-    const qs = params.toString() ? `?${params.toString()}` : "";
-    try {
-      const res = await api.get(`ai/dashboard-insights/${qs}`);
-      setAiInsights(res.data);
-    } catch (err) {
-      setAiInsightsError(getApiErrorMessage(err, "AI insights are not available"));
-    } finally {
-      setAiInsightsLoading(false);
-    }
-  }, [startDate, endDate, businessGroup, compact]);
-
   const loadEmployeeTables = useCallback(async () => {
     const employeeQs = employeeTableQuery();
     try {
@@ -415,7 +347,6 @@ function ReportsAnalytics({ compact = false }) {
   const handleRefresh = () => {
     loadDashboard();
     loadEmployeeTables();
-    loadAiInsights();
   };
 
   const chartHeight = compact ? 96 : 140;
@@ -583,15 +514,6 @@ function ReportsAnalytics({ compact = false }) {
             compact={compact}
             fallbackCurrency={dashboardFallbackCurrency}
           />
-
-          {!compact && (
-            <AiInsightsPanel
-              insights={aiInsights}
-              loading={aiInsightsLoading}
-              error={aiInsightsError}
-              onRefresh={loadAiInsights}
-            />
-          )}
 
           {!compact && <SectionLabel>Trends & distribution</SectionLabel>}
 
