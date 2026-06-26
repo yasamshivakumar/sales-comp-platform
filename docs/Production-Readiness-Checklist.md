@@ -25,8 +25,8 @@ Goal: production failures should be visible, recoverable, and easy to diagnose.
 - [x] Health check endpoint exists: `/api/health/`.
 - [x] Readiness endpoint exists: `/api/health/ready/`.
 - [x] Audit logs exist for sensitive actions.
-- [ ] Enable automated PostgreSQL backups in Render.
-- [ ] Document database restore steps.
+- [x] Enable automated PostgreSQL backups in Render.
+- [x] Document database restore steps.
 - [x] Add application error monitoring, for example Sentry.
 - [ ] Add uptime monitoring for frontend, backend health, and readiness.
 - [ ] Document deploy and rollback steps.
