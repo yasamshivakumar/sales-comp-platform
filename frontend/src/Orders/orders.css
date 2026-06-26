@@ -771,6 +771,20 @@
   --x-row-hover: rgba(0, 112, 210, 0.08);
 }
 
+[data-theme="dark"] .orders-employee-meta {
+  background: rgba(30, 41, 59, 0.92);
+  border-color: rgba(56, 189, 248, 0.28);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24);
+}
+
+[data-theme="dark"] .orders-employee-meta__label {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .orders-employee-meta__value {
+  color: #f8fafc;
+}
+
 [data-theme="dark"] .orders-page .page-header__title {
   background: linear-gradient(135deg, #f8fafc 0%, var(--x-teal) 100%);
   -webkit-background-clip: text;
