@@ -123,6 +123,10 @@ Then redeploy the Vercel project so the React build includes the Render API URL.
 
 **[docs/Incentra-User-Guide.md](docs/Incentra-User-Guide.md)** (also at `/Incentra-User-Guide-Full.md` in the frontend public folder)
 
+## Production readiness
+
+Use **[docs/Production-Readiness-Checklist.md](docs/Production-Readiness-Checklist.md)** to move Incentra from MVP to a commercial SaaS product step by step.
+
 ## Required fields
 
 **User setup:** `email`, `role`, `employee_id`, `name`
