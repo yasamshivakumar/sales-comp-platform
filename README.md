@@ -130,6 +130,7 @@ Use **[docs/Production-Readiness-Checklist.md](docs/Production-Readiness-Checkli
 Operational runbooks:
 
 - **[docs/Backup-And-Restore-Runbook.md](docs/Backup-And-Restore-Runbook.md)**
+- **[docs/Monitoring-Runbook.md](docs/Monitoring-Runbook.md)**
 
 ## Required fields
 

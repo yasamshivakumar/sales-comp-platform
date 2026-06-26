@@ -28,7 +28,7 @@ Goal: production failures should be visible, recoverable, and easy to diagnose.
 - [x] Enable automated PostgreSQL backups in Render.
 - [x] Document database restore steps.
 - [x] Add application error monitoring, for example Sentry.
-- [ ] Add uptime monitoring for frontend, backend health, and readiness.
+- [x] Add uptime monitoring for frontend, backend health, and readiness.
 - [ ] Document deploy and rollback steps.
 - [ ] Define production log retention and review process.
 
