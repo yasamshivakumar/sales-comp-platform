@@ -194,6 +194,7 @@ function AiPlanBuilder({ onPlanCreated, onCancel }) {
 function CompensationPlans() {
   const [plans, setPlans] = useState([]);
   const [selectedPlan, setSelectedPlan] = useState(null);
+  const [editingPlan, setEditingPlan] = useState(null);
   const [view, setView] = useState("list");
   const [loading, setLoading] = useState(false);
   const { success, error } = useToast();
@@ -231,6 +232,14 @@ function CompensationPlans() {
     success("Compensation plan created. Add commission rate tiers below if needed.");
   };
 
+  const handlePlanUpdated = (plan) => {
+    setPlans((prev) => prev.map((p) => (p.id === plan.id ? plan : p)));
+    setSelectedPlan(plan);
+    setEditingPlan(null);
+    setView("list");
+    success("Compensation plan updated.");
+  };
+
   const handleTierUpdated = () => {
     if (selectedPlan?.id) {
       refreshSelectedPlan(selectedPlan.id);
@@ -243,6 +252,16 @@ function CompensationPlans() {
   const handleManagePlan = (plan) => {
     setSelectedPlan(plan);
     refreshSelectedPlan(plan.id);
+  };
+
+  const handleEditPlan = async (plan) => {
+    try {
+      const res = await api.get(`compensation-plans/${plan.id}/`);
+      setEditingPlan(res.data);
+      setView("edit");
+    } catch {
+      error("Failed to load plan details for editing");
+    }
   };
 
   const gridStyle = {
@@ -281,7 +300,10 @@ function CompensationPlans() {
           <button
             type="button"
             className="btn-secondary"
-            onClick={() => setView("list")}
+            onClick={() => {
+              setEditingPlan(null);
+              setView("list");
+            }}
           >
             ← Back to plans list
           </button>
@@ -292,6 +314,17 @@ function CompensationPlans() {
         <PlanHeaderForm
           onPlanCreated={handlePlanCreated}
           onCancel={() => setView("list")}
+        />
+      )}
+
+      {view === "edit" && editingPlan && (
+        <PlanHeaderForm
+          initialPlan={editingPlan}
+          onPlanUpdated={handlePlanUpdated}
+          onCancel={() => {
+            setEditingPlan(null);
+            setView("list");
+          }}
         />
       )}
 
@@ -361,14 +394,22 @@ function CompensationPlans() {
                         <td>{rateCount}</td>
                         <td>{ruleCount}</td>
                         <td>
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            style={{ padding: "6px 12px", fontSize: 13 }}
-                            onClick={() => handleManagePlan(plan)}
-                          >
-                            {isSelected ? "Managing" : "Manage rates"}
-                          </button>
+                          <div className="comp-plans-actions">
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={() => handleEditPlan(plan)}
+                            >
+                              Edit details
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={() => handleManagePlan(plan)}
+                            >
+                              {isSelected ? "Managing" : "Manage rates"}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import api, { getApiErrorMessage } from "../api";
 import { useToast } from "../Components/Toast";
 import MonthPickerField from "../Components/MonthPickerField";
@@ -19,10 +19,45 @@ const INITIAL_FORM = {
   default_commission_rate: "",
 };
 
-function PlanHeaderForm({ onPlanCreated, onCancel }) {
+function monthFromDate(dateValue) {
+  if (!dateValue) return "";
+  return String(dateValue).slice(0, 7);
+}
+
+function tableTypeFromPlan(plan) {
+  const type = String(plan?.commission_table_type || "RATE").toUpperCase();
+  if (type === "FLAT") return "flat";
+  if (type === "LOOKUP") return "lookup";
+  return "rate";
+}
+
+function formFromPlan(plan) {
+  if (!plan) return INITIAL_FORM;
+  return {
+    plan_name: plan.plan_name || "",
+    description: plan.description || "",
+    comp_period: monthFromDate(plan.effective_start_date),
+    status: plan.status || "Active",
+    pay_period_type: plan.pay_period_type || "Monthly",
+    plan_basis: plan.plan_basis || "Role",
+    position_name: plan.position_name || "",
+    role: plan.role || "",
+    title: plan.title || "",
+    business_group: plan.business_group || "",
+    table_type: tableTypeFromPlan(plan),
+    default_commission_rate: "",
+  };
+}
+
+function PlanHeaderForm({ initialPlan = null, onPlanCreated, onPlanUpdated, onCancel }) {
   const { error } = useToast();
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState(INITIAL_FORM);
+  const [form, setForm] = useState(() => formFromPlan(initialPlan));
+  const editing = Boolean(initialPlan?.id);
+
+  useEffect(() => {
+    setForm(formFromPlan(initialPlan));
+  }, [initialPlan]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -64,7 +99,7 @@ function PlanHeaderForm({ onPlanCreated, onCancel }) {
       };
 
       const defaultRate = parseFloat(form.default_commission_rate);
-      if (form.table_type === "rate" && !Number.isNaN(defaultRate) && defaultRate > 0) {
+      if (!editing && form.table_type === "rate" && !Number.isNaN(defaultRate) && defaultRate > 0) {
         payload.sc_rate_tables = [
           {
             tier_name: "Default",
@@ -77,7 +112,7 @@ function PlanHeaderForm({ onPlanCreated, onCancel }) {
           },
         ];
       }
-      if (form.table_type === "flat" && !Number.isNaN(defaultRate) && defaultRate > 0) {
+      if (!editing && form.table_type === "flat" && !Number.isNaN(defaultRate) && defaultRate > 0) {
         payload.sc_flat_rate_tables = [
           {
             flat_rate: defaultRate,
@@ -86,11 +121,15 @@ function PlanHeaderForm({ onPlanCreated, onCancel }) {
         ];
       }
 
-      const res = await api.post("compensation-plans/", payload);
-      if (onPlanCreated) onPlanCreated(res.data);
-      setForm(INITIAL_FORM);
+      if (editing) {
+        const res = await api.patch(`compensation-plans/${initialPlan.id}/`, payload);
+        if (onPlanUpdated) onPlanUpdated(res.data);
+      } else {
+        const res = await api.post("compensation-plans/", payload);
+        if (onPlanCreated) onPlanCreated(res.data);
+        setForm(INITIAL_FORM);
+      }
     } catch (err) {
-      const data = err.response?.data;
       const msg = getApiErrorMessage(err, "Error creating compensation plan");
       error(msg);
     } finally {
@@ -102,10 +141,13 @@ function PlanHeaderForm({ onPlanCreated, onCancel }) {
 
   return (
     <div className="panel">
-      <h2 className="panel__title">Create new compensation plan</h2>
+      <h2 className="panel__title">
+        {editing ? "Edit compensation plan" : "Create new compensation plan"}
+      </h2>
       <p style={{ color: "var(--text-muted)", marginTop: 0, marginBottom: 20, fontSize: 14 }}>
-        Required fields are marked with *. Role must match User Setup. Pick the month this plan
-        applies to — orders only match plans in the same calendar month.
+        {editing
+          ? "Update the plan header fields. Commission rates and lookup rows stay unchanged here; use the rate management section below to edit rate tables."
+          : "Required fields are marked with *. Role must match User Setup. Pick the month this plan applies to — orders only match plans in the same calendar month."}
       </p>
 
       <div className="form-grid">
@@ -168,7 +210,7 @@ function PlanHeaderForm({ onPlanCreated, onCancel }) {
             Used to show rule bonus amounts in the right currency.
           </small>
         </div>
-        {form.table_type !== "lookup" && (
+        {!editing && form.table_type !== "lookup" && (
         <div className="form-field">
           <label>
             Default commission rate %{" "}
@@ -205,7 +247,7 @@ function PlanHeaderForm({ onPlanCreated, onCancel }) {
           </button>
         )}
         <button type="button" className="btn-primary" onClick={savePlan} disabled={loading}>
-          {loading ? "Creating…" : "Create plan"}
+          {loading ? (editing ? "Saving…" : "Creating…") : editing ? "Save changes" : "Create plan"}
         </button>
       </div>
     </div>

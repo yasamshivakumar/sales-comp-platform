@@ -44,6 +44,19 @@
   background: rgba(99, 102, 241, 0.06);
 }
 
+.comp-plans-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.comp-plans-actions .btn-secondary {
+  padding: 6px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .comp-plans-empty {
   padding: 32px 20px;
   text-align: center;
