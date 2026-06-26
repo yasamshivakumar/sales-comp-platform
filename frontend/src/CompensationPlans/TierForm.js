@@ -1,19 +1,69 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../api";
 import { useToast } from "../Components/Toast";
 import { currencyForBusinessGroup } from "../utils/businessGroups";
 
-function TierForm({ selectedPlan, onTierUpdated }) {
+const EMPTY_RATE_FORM = {
+  tier_name: "",
+  from_amount: "0",
+  to_amount: "",
+  commission_rate: "",
+  bonus_amount: "0",
+};
+
+function cleanRateRow(row) {
+  return {
+    tier_name: row.tier_name || "",
+    from_amount: row.from_amount === "" || row.from_amount == null ? 0 : row.from_amount,
+    to_amount: row.to_amount === "" || row.to_amount == null ? null : row.to_amount,
+    commission_rate: row.commission_rate,
+    bonus_amount: row.bonus_amount === "" || row.bonus_amount == null ? 0 : row.bonus_amount,
+    sequence: row.sequence || 1,
+    is_active: row.is_active !== false,
+  };
+}
+
+function cleanFlatRow(row) {
+  return {
+    minimum_sales_threshold:
+      row.minimum_sales_threshold === "" || row.minimum_sales_threshold == null
+        ? 0
+        : row.minimum_sales_threshold,
+    flat_rate: row.flat_rate,
+    bonus_amount: row.bonus_amount === "" || row.bonus_amount == null ? 0 : row.bonus_amount,
+    is_active: row.is_active !== false,
+  };
+}
+
+function formFromEditingTier(editingTier, isFlat) {
+  if (!editingTier?.row) return EMPTY_RATE_FORM;
+  if (isFlat) {
+    return {
+      ...EMPTY_RATE_FORM,
+      commission_rate: editingTier.row.flat_rate ?? "",
+      bonus_amount: editingTier.row.bonus_amount ?? "0",
+    };
+  }
+  return {
+    tier_name: editingTier.row.tier_name || "",
+    from_amount: editingTier.row.from_amount ?? "0",
+    to_amount: editingTier.row.to_amount ?? "",
+    commission_rate: editingTier.row.commission_rate ?? "",
+    bonus_amount: editingTier.row.bonus_amount ?? "0",
+  };
+}
+
+function TierForm({ selectedPlan, editingTier = null, onTierUpdated, onCancelEdit }) {
   const { error } = useToast();
   const [loading, setLoading] = useState(false);
+  const isFlat = selectedPlan.commission_table_type === "FLAT";
 
-  const [form, setForm] = useState({
-    tier_name: "",
-    from_amount: "0",
-    to_amount: "",
-    commission_rate: "",
-    bonus_amount: "0",
-  });
+  const [form, setForm] = useState(() => formFromEditingTier(editingTier, isFlat));
+  const editing = Boolean(editingTier);
+
+  useEffect(() => {
+    setForm(formFromEditingTier(editingTier, isFlat));
+  }, [editingTier, isFlat]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -30,62 +80,46 @@ function TierForm({ selectedPlan, onTierUpdated }) {
     try {
       if (selectedPlan.commission_table_type === "FLAT") {
         const existing = selectedPlan.sc_flat_rate_tables || [];
+        const newRow = cleanFlatRow({
+          ...(editingTier?.row || {}),
+          flat_rate: rate,
+          bonus_amount: form.bonus_amount,
+        });
+        const rows = editing
+          ? existing.map((row, index) =>
+              index === editingTier.index ? newRow : cleanFlatRow(row)
+            )
+          : [...existing.map(cleanFlatRow), newRow];
         await api.patch(`compensation-plans/${selectedPlan.id}/`, {
-          sc_flat_rate_tables: [
-            ...existing.map(({ flat_rate, is_active }) => ({
-              flat_rate,
-              is_active: is_active !== false,
-            })),
-            { flat_rate: rate, is_active: true },
-          ],
+          sc_flat_rate_tables: rows,
         });
       } else {
         const existing = selectedPlan.sc_rate_tables || [];
         const nextSequence =
           existing.reduce((max, row) => Math.max(max, row.sequence || 0), 0) + 1;
-        const newRow = {
+        const newRow = cleanRateRow({
+          ...(editingTier?.row || {}),
           tier_name: form.tier_name.trim() || `Tier ${nextSequence}`,
           from_amount: form.from_amount === "" ? 0 : form.from_amount,
           to_amount: form.to_amount === "" ? null : form.to_amount,
           commission_rate: rate,
           bonus_amount: form.bonus_amount === "" ? 0 : form.bonus_amount,
-          sequence: nextSequence,
+          sequence: editingTier?.row?.sequence || nextSequence,
           is_active: true,
-        };
+        });
+        const rows = editing
+          ? existing.map((row, index) =>
+              index === editingTier.index ? newRow : cleanRateRow(row)
+            )
+          : [...existing.map(cleanRateRow), newRow];
         await api.patch(`compensation-plans/${selectedPlan.id}/`, {
-          sc_rate_tables: [
-            ...existing.map(
-              ({
-                tier_name,
-                from_amount,
-                to_amount,
-                commission_rate,
-                bonus_amount,
-                sequence,
-                is_active,
-              }) => ({
-                tier_name,
-                from_amount,
-                to_amount,
-                commission_rate,
-                bonus_amount,
-                sequence,
-                is_active: is_active !== false,
-              })
-            ),
-            newRow,
-          ],
+          sc_rate_tables: rows,
         });
       }
 
-      setForm({
-        tier_name: "",
-        from_amount: "0",
-        to_amount: "",
-        commission_rate: "",
-        bonus_amount: "0",
-      });
+      setForm(EMPTY_RATE_FORM);
       onTierUpdated();
+      onCancelEdit?.();
     } catch (err) {
       const data = err.response?.data;
       error(
@@ -97,13 +131,12 @@ function TierForm({ selectedPlan, onTierUpdated }) {
     }
   };
 
-  const isFlat = selectedPlan.commission_table_type === "FLAT";
   const currency = selectedPlan?.currency || currencyForBusinessGroup(selectedPlan?.business_group || "", "");
   const amountLabel = currency || "order currency";
 
   return (
     <div className="panel">
-      <h3 className="panel__title">Add commission rate</h3>
+      <h3 className="panel__title">{editing ? "Edit commission rate" : "Add commission rate"}</h3>
 
       {isFlat ? (
         <div className="form-grid">
@@ -183,13 +216,13 @@ function TierForm({ selectedPlan, onTierUpdated }) {
       )}
 
       <div className="form-actions">
-        <button
-          type="button"
-          className="btn-success"
-          onClick={saveTier}
-          disabled={loading}
-        >
-          {loading ? "Saving…" : "Save rate"}
+        {editing && (
+          <button type="button" className="btn-secondary" onClick={onCancelEdit} disabled={loading}>
+            Cancel edit
+          </button>
+        )}
+        <button type="button" className="btn-success" onClick={saveTier} disabled={loading}>
+          {loading ? "Saving…" : editing ? "Update rate" : "Save rate"}
         </button>
       </div>
     </div>

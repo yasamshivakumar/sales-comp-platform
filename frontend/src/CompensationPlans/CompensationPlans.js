@@ -195,6 +195,7 @@ function CompensationPlans() {
   const [plans, setPlans] = useState([]);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [editingPlan, setEditingPlan] = useState(null);
+  const [editingTier, setEditingTier] = useState(null);
   const [view, setView] = useState("list");
   const [loading, setLoading] = useState(false);
   const { success, error } = useToast();
@@ -228,6 +229,7 @@ function CompensationPlans() {
   const handlePlanCreated = (plan) => {
     fetchPlans();
     setSelectedPlan(plan);
+    setEditingTier(null);
     setView("list");
     success("Compensation plan created. Add commission rate tiers below if needed.");
   };
@@ -236,6 +238,7 @@ function CompensationPlans() {
     setPlans((prev) => prev.map((p) => (p.id === plan.id ? plan : p)));
     setSelectedPlan(plan);
     setEditingPlan(null);
+    setEditingTier(null);
     setView("list");
     success("Compensation plan updated.");
   };
@@ -246,11 +249,13 @@ function CompensationPlans() {
     } else {
       fetchPlans();
     }
+    setEditingTier(null);
     success("Commission rates saved.");
   };
 
   const handleManagePlan = (plan) => {
     setSelectedPlan(plan);
+    setEditingTier(null);
     refreshSelectedPlan(plan.id);
   };
 
@@ -258,6 +263,7 @@ function CompensationPlans() {
     try {
       const res = await api.get(`compensation-plans/${plan.id}/`);
       setEditingPlan(res.data);
+      setEditingTier(null);
       setView("edit");
     } catch {
       error("Failed to load plan details for editing");
@@ -302,6 +308,7 @@ function CompensationPlans() {
             className="btn-secondary"
             onClick={() => {
               setEditingPlan(null);
+              setEditingTier(null);
               setView("list");
             }}
           >
@@ -323,6 +330,7 @@ function CompensationPlans() {
           onPlanUpdated={handlePlanUpdated}
           onCancel={() => {
             setEditingPlan(null);
+            setEditingTier(null);
             setView("list");
           }}
         />
@@ -429,17 +437,27 @@ function CompensationPlans() {
                   <>
                     <LookupTierForm
                       selectedPlan={selectedPlan}
+                      editingTier={editingTier}
                       onTierUpdated={handleTierUpdated}
+                      onCancelEdit={() => setEditingTier(null)}
                     />
-                    <LookupTierList selectedPlan={selectedPlan} />
+                    <LookupTierList
+                      selectedPlan={selectedPlan}
+                      onEditTier={(row, index) => setEditingTier({ row, index, type: "lookup" })}
+                    />
                   </>
                 ) : (
                   <>
                     <TierForm
                       selectedPlan={selectedPlan}
+                      editingTier={editingTier}
                       onTierUpdated={handleTierUpdated}
+                      onCancelEdit={() => setEditingTier(null)}
                     />
-                    <TierList selectedPlan={selectedPlan} />
+                    <TierList
+                      selectedPlan={selectedPlan}
+                      onEditTier={(row, index) => setEditingTier({ row, index, type: "rate" })}
+                    />
                   </>
                 )}
               </div>

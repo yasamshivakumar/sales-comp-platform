@@ -75,6 +75,19 @@
   margin-top: 8px;
 }
 
+.tier-list-item__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tier-list-item__head .btn-secondary {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
 .ai-plan-builder {
   margin-bottom: 24px;
 }

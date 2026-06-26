@@ -1,7 +1,7 @@
 import { formatMoney } from "../utils/currency";
 import { currencyForBusinessGroup } from "../utils/businessGroups";
 
-function TierList({ selectedPlan }) {
+function TierList({ selectedPlan, onEditTier }) {
   const isFlat = selectedPlan?.commission_table_type === "FLAT";
   const rateRows = selectedPlan?.sc_rate_tables || [];
   const flatRows = selectedPlan?.sc_flat_rate_tables || [];
@@ -21,7 +21,12 @@ function TierList({ selectedPlan }) {
       ) : isFlat ? (
         flatRows.map((row, index) => (
           <div key={row.id ?? index} className="tier-list-item">
-            <strong>Flat rate</strong>
+            <div className="tier-list-item__head">
+              <strong>Flat rate</strong>
+              <button type="button" className="btn-secondary" onClick={() => onEditTier?.(row, index)}>
+                Edit
+              </button>
+            </div>
             <p>Commission: {row.flat_rate}%</p>
             <p>Active: {row.is_active !== false ? "Yes" : "No"}</p>
           </div>
@@ -29,7 +34,12 @@ function TierList({ selectedPlan }) {
       ) : (
         rateRows.map((row, index) => (
           <div key={row.id ?? index} className="tier-list-item">
-            <strong>{row.tier_name || `Tier ${row.sequence || index + 1}`}</strong>
+            <div className="tier-list-item__head">
+              <strong>{row.tier_name || `Tier ${row.sequence || index + 1}`}</strong>
+              <button type="button" className="btn-secondary" onClick={() => onEditTier?.(row, index)}>
+                Edit
+              </button>
+            </div>
             <p>
               Sales range: {money(row.from_amount)} – {row.to_amount != null ? money(row.to_amount) : "No limit"}
             </p>

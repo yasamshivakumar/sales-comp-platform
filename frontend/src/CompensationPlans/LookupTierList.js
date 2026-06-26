@@ -6,7 +6,7 @@ function dimLabel(value) {
   return text || "Any";
 }
 
-function LookupTierList({ selectedPlan }) {
+function LookupTierList({ selectedPlan, onEditTier }) {
   const rows = selectedPlan?.sc_lookup_tables || [];
   const currency = selectedPlan?.currency || currencyForBusinessGroup(selectedPlan?.business_group || "", "");
   const money = (value) => (currency ? formatMoney(value, currency) : value);
@@ -22,7 +22,12 @@ function LookupTierList({ selectedPlan }) {
       ) : (
         rows.map((row, index) => (
           <div key={row.id ?? index} className="tier-list-item">
-            <strong>{row.tier_name || `Lookup ${row.sequence || index + 1}`}</strong>
+            <div className="tier-list-item__head">
+              <strong>{row.tier_name || `Lookup ${row.sequence || index + 1}`}</strong>
+              <button type="button" className="btn-secondary" onClick={() => onEditTier?.(row, index)}>
+                Edit
+              </button>
+            </div>
             <p>
               Product: {dimLabel(row.product_name)} · Service: {dimLabel(row.service_name)} ·
               Distribution: {dimLabel(row.distribution)}
