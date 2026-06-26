@@ -132,6 +132,7 @@ Operational runbooks:
 - **[docs/Backup-And-Restore-Runbook.md](docs/Backup-And-Restore-Runbook.md)**
 - **[docs/Monitoring-Runbook.md](docs/Monitoring-Runbook.md)**
 - **[docs/Deploy-And-Rollback-Runbook.md](docs/Deploy-And-Rollback-Runbook.md)**
+- **[docs/Log-Review-Runbook.md](docs/Log-Review-Runbook.md)**
 
 ## Required fields
 

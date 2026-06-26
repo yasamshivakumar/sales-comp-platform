@@ -30,7 +30,7 @@ Goal: production failures should be visible, recoverable, and easy to diagnose.
 - [x] Add application error monitoring, for example Sentry.
 - [x] Add uptime monitoring for frontend, backend health, and readiness.
 - [x] Document deploy and rollback steps.
-- [ ] Define production log retention and review process.
+- [x] Define production log retention and review process.
 
 ## 3. Enterprise Security
 
