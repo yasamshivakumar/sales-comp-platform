@@ -11,14 +11,12 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import BoltIcon from "@mui/icons-material/Bolt";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import api, { getApiErrorMessage } from "./api";
 import { useToast } from "./Components/Toast";
 import AuthTextField from "./Components/AuthTextField";
 import AuthPageLayout, { authFormCardSx } from "./Components/AuthPageLayout";
-import { enterprise } from "./theme/muiTheme";
 
 function Signup() {
   const [companyName, setCompanyName] = useState("");
@@ -80,20 +78,17 @@ function Signup() {
   const brandPanel = (
     <>
       <Box
+        component="img"
+        src="/incentra-icon.svg"
+        alt="Incentra"
         sx={{
           width: 52,
           height: 52,
           borderRadius: 2,
-          bgcolor: enterprise.accent,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
           mb: 3,
           boxShadow: "0 8px 24px rgba(1,118,211,0.35)",
         }}
-      >
-        <BoltIcon />
-      </Box>
+      />
       <Typography
         variant="h3"
         fontWeight={800}

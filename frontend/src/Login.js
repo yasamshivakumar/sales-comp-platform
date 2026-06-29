@@ -10,7 +10,6 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import BoltIcon from "@mui/icons-material/Bolt";
 import SecurityIcon from "@mui/icons-material/Security";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import VisibilityIcon from "@mui/icons-material/Visibility";
@@ -19,7 +18,6 @@ import api, { getApiErrorMessage, saveAuthSession } from "./api";
 import { useToast } from "./Components/Toast";
 import AuthTextField from "./Components/AuthTextField";
 import AuthPageLayout, { authFormCardSx } from "./Components/AuthPageLayout";
-import { enterprise } from "./theme/muiTheme";
 
 const apiHost = process.env.REACT_APP_API_HOST || "http://localhost:8000";
 const oidcEnabled = process.env.REACT_APP_OIDC_ENABLED === "true";
@@ -87,20 +85,17 @@ function Login() {
   const brandPanel = (
     <>
       <Box
+        component="img"
+        src="/incentra-icon.svg"
+        alt="Incentra"
         sx={{
           width: 52,
           height: 52,
           borderRadius: 2,
-          bgcolor: enterprise.accent,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
           mb: 3,
           boxShadow: "0 8px 24px rgba(1,118,211,0.35)",
         }}
-      >
-        <BoltIcon />
-      </Box>
+      />
       <Typography
         variant="h3"
         fontWeight={800}

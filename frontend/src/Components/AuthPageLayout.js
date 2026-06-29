@@ -1,5 +1,4 @@
 import { Box, Grid, Typography } from "@mui/material";
-import BoltIcon from "@mui/icons-material/Bolt";
 import { enterprise } from "../theme/muiTheme";
 
 export const authFormCardSx = {
@@ -86,19 +85,16 @@ function AuthPageLayout({ brand, children }) {
       >
         <Box sx={mobileBrandSx}>
           <Box
+            component="img"
+            src="/incentra-icon.svg"
+            alt="Incentra"
             sx={{
               width: 40,
               height: 40,
               borderRadius: 1.5,
-              bgcolor: enterprise.accent,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
               boxShadow: "0 4px 12px rgba(1,118,211,0.35)",
             }}
-          >
-            <BoltIcon fontSize="small" />
-          </Box>
+          />
           <Typography fontWeight={800} letterSpacing="-0.02em">
             Incentra
           </Typography>
