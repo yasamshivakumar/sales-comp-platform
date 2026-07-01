@@ -98,6 +98,9 @@ if not DEBUG:
     ):
         if _host not in ALLOWED_HOSTS:
             ALLOWED_HOSTS.append(_host)
+    _render_hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME", "").strip()
+    if _render_hostname and _render_hostname not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_render_hostname)
 
 # --- Error monitoring (optional) ---
 SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
@@ -136,6 +139,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "commissions.middleware.DeployErrorMiddleware",
+    "commissions.middleware.LivenessMiddleware",
     "commissions.middleware.RequestIdMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
@@ -280,6 +285,7 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_ROOT.mkdir(parents=True, exist_ok=True)
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
