@@ -30,10 +30,13 @@ def _env_list(name, default):
 
 def _normalize_render_database_url(url):
     """
-    Render internal URLs use short hosts like dpg-xxx-a that only resolve on
-    Render private DNS. If lookup fails in some deploys, the full external host
-    (dpg-xxx-a.<region>-postgres.render.com) still works.
+    Render internal URLs use short hosts like dpg-xxx-a on private DNS.
+    Keep that URL when running on Render (same-region services). Outside Render,
+    expand to the regional external hostname for tools that cannot resolve the short name.
     """
+    if os.getenv("RENDER"):
+        return url
+
     import re
     from urllib.parse import urlparse, urlunparse
 
@@ -209,12 +212,22 @@ if _database_url:
             "Run: pip install -r requirements.txt"
         ) from exc
 
+    import re
+    from urllib.parse import urlparse
+
     _database_url = _normalize_render_database_url(_database_url)
+    _db_host = urlparse(_database_url).hostname or ""
+    _render_internal = bool(re.fullmatch(r"dpg-.+-a", _db_host))
+    _render_external = _db_host.endswith(".postgres.render.com")
+
     DATABASES["default"] = dj_database_url.parse(
         _database_url,
         conn_max_age=600,
-        ssl_require=not DEBUG,
+        # Internal Render Postgres (short host) does not use SSL; external does.
+        ssl_require=not DEBUG and not _render_internal,
     )
+    if not DEBUG and _render_external:
+        DATABASES["default"].setdefault("OPTIONS", {})["sslmode"] = "require"
 
 # --- Auth ---
 AUTH_PASSWORD_VALIDATORS = [
