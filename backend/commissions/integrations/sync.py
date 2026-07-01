@@ -8,6 +8,7 @@ from django.utils import timezone
 from ..imports import process_orders_rows
 from ..models import ExternalIntegration, IntegrationSyncLog
 from .base import ConnectorError
+from .employee_ids import resolve_crm_owner_to_employee_id
 from .mapper import map_records, normalize_date_value
 from .registry import get_connector
 from .user_import import process_users_rows
@@ -37,6 +38,28 @@ def _normalize_order_rows(rows):
     return normalized
 
 
+def _resolve_order_employee_ids(organization, rows):
+    """Map CRM owner ids from deals to Incentra employee_id before order import."""
+    resolved = []
+    for row in rows:
+        item = dict(row)
+        if not str(item.get("employee_id", "")).strip():
+            crm_owner_id = (
+                item.get("crm_owner_id")
+                or item.get("hubspot_owner_id")
+                or item.get("crm_user_id")
+            )
+            employee_id = resolve_crm_owner_to_employee_id(organization, crm_owner_id)
+            if not employee_id:
+                raise ValueError(
+                    f"No Incentra employee mapped for CRM owner id {crm_owner_id}. "
+                    "Run user sync first."
+                )
+            item["employee_id"] = employee_id
+        resolved.append(item)
+    return resolved
+
+
 def run_pull_sync(integration, sync_type, triggered_by=None, limit=None):
     """Pull users or orders from CRM and import via existing pipelines."""
     log = IntegrationSyncLog.objects.create(
@@ -61,6 +84,7 @@ def run_pull_sync(integration, sync_type, triggered_by=None, limit=None):
             integration.last_user_sync_at = timezone.now()
             integration.save(update_fields=["last_user_sync_at", "updated_at"])
         elif sync_type == IntegrationSyncLog.SYNC_ORDERS:
+            mapped = _resolve_order_employee_ids(org, mapped)
             result = process_orders_rows(org, _normalize_order_rows(mapped))
             integration.last_order_sync_at = timezone.now()
             integration.save(update_fields=["last_order_sync_at", "updated_at"])
@@ -150,3 +174,34 @@ def test_integration(integration):
         return {"ok": True, "message": "Connection successful"}
     except ConnectorError as exc:
         return {"ok": False, "message": str(exc)}
+
+
+def run_full_sync(integration, triggered_by=None, limit=None):
+    """
+    Full CRM workflow: sync users → sync orders (with commission calculation).
+    Users must be synced first so CRM owner ids map to Incentra employee ids.
+    """
+    user_log = run_pull_sync(
+        integration,
+        IntegrationSyncLog.SYNC_USERS,
+        triggered_by=triggered_by,
+        limit=limit,
+    )
+    order_log = run_pull_sync(
+        integration,
+        IntegrationSyncLog.SYNC_ORDERS,
+        triggered_by=triggered_by,
+        limit=limit,
+    )
+    return {
+        "users": {
+            "log_id": user_log.pk,
+            "status": user_log.status,
+            "result": user_log.result,
+        },
+        "orders": {
+            "log_id": order_log.pk,
+            "status": order_log.status,
+            "result": order_log.result,
+        },
+    }

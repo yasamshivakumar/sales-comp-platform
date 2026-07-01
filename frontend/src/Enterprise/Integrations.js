@@ -134,14 +134,23 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
     setMessage("");
     try {
       const res = await api.post(`integrations/${selectedId}/${action}/`);
-      setMessage(
-        action.includes("sync")
-          ? `Sync done: ${res.data.result?.success ?? 0} succeeded, ${res.data.result?.failed ?? 0} failed.`
-          : res.data.message || "OK"
-      );
+      if (action === "sync/full/") {
+        const users = res.data.users?.result;
+        const orders = res.data.orders?.result;
+        setMessage(
+          `Full sync done. Users: ${users?.success ?? 0} ok. Orders: ${orders?.success ?? 0} ok, ` +
+            `${orders?.commissions_created ?? 0} commissions created.`
+        );
+      } else {
+        setMessage(
+          action.includes("sync")
+            ? `Sync done: ${res.data.result?.success ?? 0} succeeded, ${res.data.result?.failed ?? 0} failed.`
+            : res.data.message || "OK"
+        );
+      }
       loadLogs(selectedId);
       loadAll();
-      if (action.includes("sync/orders") && onOrdersSynced) {
+      if ((action.includes("sync/orders") || action === "sync/full/") && onOrdersSynced) {
         onOrdersSynced(res.data);
       }
     } catch (err) {
@@ -150,6 +159,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
   };
 
   const selected = integrations.find((i) => i.id === selectedId);
+  const selectedProviderMeta = providers.find((p) => p.id === selected?.provider);
   const credFields = CREDENTIAL_FIELDS[form.provider] || [];
 
   return (
@@ -171,7 +181,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
               {inline ? "Connect CRM" : "CRM integrations"}
             </h2>
             <p className="integrations-panel__subtitle">
-              Pull orders and users from Salesforce, REST APIs, or webhooks. CSV upload and manual entry still work on other tabs.
+              Pull users and deals from HubSpot or Salesforce. HubSpot: owners become Incentra employees (with auto employee id), then closed-won deals map to those employees and calculate commissions.
             </p>
           </div>
           {onClose && (
@@ -313,11 +323,16 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
             </button>
             {selected.provider !== "webhook" && (
               <>
+                {selectedProviderMeta?.supports_full_sync && (
+                  <button type="button" className="btn-primary" onClick={() => runAction("sync/full/")}>
+                    Full sync (users → orders → commissions)
+                  </button>
+                )}
                 <button type="button" className="btn-secondary" onClick={() => runAction("sync/users/")}>
-                  Sync users
+                  Sync users only
                 </button>
                 <button type="button" className="btn-secondary" onClick={() => runAction("sync/orders/")}>
-                  Sync orders
+                  Sync orders only
                 </button>
               </>
             )}

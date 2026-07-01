@@ -9,6 +9,7 @@ from .audit import record_audit
 from .integrations.registry import DEFAULT_CONFIG, list_providers
 from .integrations.sync import (
     ensure_webhook_secret,
+    run_full_sync,
     run_pull_sync,
     run_webhook_import,
     test_integration,
@@ -131,6 +132,37 @@ def sync_integration_users(request, integration_id):
 def sync_integration_orders(request, integration_id):
     require_admin(request)
     return _run_sync(request, integration_id, IntegrationSyncLog.SYNC_ORDERS)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def sync_integration_full(request, integration_id):
+    """Users → orders → commissions in one workflow."""
+    require_admin(request)
+    org = getattr(request, "organization", None)
+    integration = ExternalIntegration.objects.filter(
+        pk=integration_id,
+        organization=org,
+        is_active=True,
+    ).first()
+    if not integration:
+        return Response({"error": "Integration not found or inactive"}, status=404)
+    if integration.provider == ExternalIntegration.PROVIDER_WEBHOOK:
+        return Response(
+            {"error": "Webhook integrations receive data via POST; use webhook URLs."},
+            status=400,
+        )
+    limit = request.data.get("limit")
+    try:
+        result = run_full_sync(integration, triggered_by=request.user, limit=limit)
+    except Exception as exc:
+        return Response({"error": str(exc)}, status=400)
+    record_audit(
+        request,
+        "integration_sync_full",
+        {"integration_id": integration.pk, "result": result},
+    )
+    return Response(result)
 
 
 def _run_sync(request, integration_id, sync_type):

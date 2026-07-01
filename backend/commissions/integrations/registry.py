@@ -1,5 +1,6 @@
 from .base import BaseConnector
 from .generic_rest import GenericRestConnector
+from .hubspot import HubSpotConnector
 from .salesforce import SalesforceConnector
 from .webhook import WebhookConnector
 
@@ -31,11 +32,12 @@ PROVIDER_CHOICES = [
     },
     {
         "id": "hubspot",
-        "name": "HubSpot (via REST)",
-        "description": "Use Generic REST with HubSpot CRM API URLs, or Webhook from HubSpot workflows.",
+        "name": "HubSpot",
+        "description": "Pull owners and closed-won deals via HubSpot CRM API (private app token).",
         "supports_pull_users": True,
         "supports_pull_orders": True,
-        "supports_webhook": True,
+        "supports_webhook": False,
+        "supports_full_sync": True,
     },
 ]
 
@@ -98,6 +100,29 @@ DEFAULT_CONFIG = {
         "users": {"json_path": "records", "field_map": {}},
         "orders": {"json_path": "records", "field_map": {}},
     },
+    "hubspot": {
+        "users": {
+            "field_map": {
+                "email": "email",
+                "name": "full_name",
+                "first_name": "firstName",
+                "last_name": "lastName",
+                "crm_user_id": "id",
+                "role": "=Sales Rep",
+            },
+        },
+        "orders": {
+            "deal_stages": ["closedwon"],
+            "field_map": {
+                "order_id": "id",
+                "sales_amount": "amount",
+                "order_date": "closedate",
+                "crm_owner_id": "hubspot_owner_id",
+                "order_status": "=Booked",
+                "currency": "currency",
+            },
+        },
+    },
 }
 
 
@@ -106,7 +131,7 @@ def get_connector(integration):
         "salesforce": SalesforceConnector,
         "generic_rest": GenericRestConnector,
         "webhook": WebhookConnector,
-        "hubspot": GenericRestConnector,
+        "hubspot": HubSpotConnector,
     }
     cls = mapping.get(integration.provider)
     if not cls:

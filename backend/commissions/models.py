@@ -633,6 +633,12 @@ class UserProfile(models.Model):
     last_name = models.CharField(max_length=100, blank=True)
     prefix = models.CharField(max_length=50, blank=True)
     employee_id = models.CharField(max_length=100, blank=True, db_index=True)
+    crm_user_id = models.CharField(
+        max_length=100,
+        blank=True,
+        db_index=True,
+        help_text="External CRM owner/user ID (e.g. HubSpot owner id).",
+    )
 
     personal_target = models.DecimalField(
         max_digits=12,

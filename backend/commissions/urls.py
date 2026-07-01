@@ -81,6 +81,11 @@ urlpatterns = [
         name="integration-sync-orders",
     ),
     path(
+        "integrations/<int:integration_id>/sync/full/",
+        integration_views.sync_integration_full,
+        name="integration-sync-full",
+    ),
+    path(
         "integrations/<int:integration_id>/sync-logs/",
         integration_views.integration_sync_logs,
         name="integration-sync-logs",

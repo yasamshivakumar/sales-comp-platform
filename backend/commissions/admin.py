@@ -3,17 +3,11 @@ from .models import (
     Employee,
     Sale,
     Commission,
-
     UserProfile,
     Order,
     AuditLog,
     Organization,
     ImportJob,
-    Territory,
-    PayoutRun,
-    CommissionDispute,
-    ExternalIntegration,
-    IntegrationSyncLog,
 )
 
 admin.site.register(Organization)
@@ -23,8 +17,8 @@ admin.site.register(Sale)
 admin.site.register(UserProfile)
 admin.site.register(Order)
 
-from .models import CompensationPlan, CompensationTier, SCRateTable, SCFlatRateTable, SCLookupTable
-from .models import CommissionRule, CommissionRuleCondition, CommissionRuleResult
+from .models import CompensationPlan, CompensationTier
+from .models import CompensationPlan, SCRateTable, SCFlatRateTable
 
 
 # ---------------------------------------------------
@@ -57,24 +51,6 @@ class SCFlatRateTableInline(admin.TabularInline):
         'minimum_sales_threshold',
         'is_active'
     )
-
-
-class SCLookupTableInline(admin.TabularInline):
-    model = SCLookupTable
-    extra = 1
-    fields = (
-        "tier_name",
-        "product_name",
-        "service_name",
-        "distribution",
-        "from_amount",
-        "to_amount",
-        "commission_rate",
-        "bonus_amount",
-        "sequence",
-        "is_active",
-    )
-    ordering = ["sequence", "from_amount"]
 
 
 # ---------------------------------------------------
@@ -113,28 +89,11 @@ class CompensationPlanAdmin(admin.ModelAdmin):
     inlines = [
         SCRateTableInline,
         SCFlatRateTableInline,
-        SCLookupTableInline,
     ]
 
 
-class CommissionRuleConditionInline(admin.TabularInline):
-    model = CommissionRuleCondition
-    extra = 1
-
-
-class CommissionRuleResultInline(admin.TabularInline):
-    model = CommissionRuleResult
-    extra = 1
-
-
-@admin.register(CommissionRule)
-class CommissionRuleAdmin(admin.ModelAdmin):
-    list_display = ("name", "compensation_plan", "rule_type", "sequence", "is_active")
-    list_filter = ("rule_type", "is_active")
-    search_fields = ("name", "compensation_plan__plan_name")
-    inlines = [CommissionRuleConditionInline, CommissionRuleResultInline]
-
-
+# ---------------------------------------------------
+# Optional: Register child tables separately
 # ---------------------------------------------------
 @admin.register(SCRateTable)
 class SCRateTableAdmin(admin.ModelAdmin):
@@ -326,46 +285,3 @@ class CommissionAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
-
-
-@admin.register(Territory)
-class TerritoryAdmin(admin.ModelAdmin):
-    list_display = ("name", "code", "organization", "is_active", "created_at")
-    list_filter = ("is_active", "organization")
-    search_fields = ("name", "code")
-
-
-@admin.register(PayoutRun)
-class PayoutRunAdmin(admin.ModelAdmin):
-    list_display = ("name", "status", "start_date", "end_date", "payment_reference", "paid_at")
-    list_filter = ("status",)
-    search_fields = ("name", "payment_reference")
-
-
-@admin.register(CommissionDispute)
-class CommissionDisputeAdmin(admin.ModelAdmin):
-    list_display = (
-        "id",
-        "commission",
-        "status",
-        "raised_by",
-        "employee_acknowledged_at",
-        "created_at",
-    )
-    list_filter = ("status",)
-    search_fields = ("message", "commission__employee__name")
-
-
-@admin.register(ExternalIntegration)
-class ExternalIntegrationAdmin(admin.ModelAdmin):
-    list_display = ("name", "provider", "organization", "is_active", "last_user_sync_at", "last_order_sync_at")
-    list_filter = ("provider", "is_active")
-    search_fields = ("name",)
-    readonly_fields = ("webhook_secret", "created_at", "updated_at")
-
-
-@admin.register(IntegrationSyncLog)
-class IntegrationSyncLogAdmin(admin.ModelAdmin):
-    list_display = ("integration", "sync_type", "status", "records_fetched", "started_at")
-    list_filter = ("sync_type", "status")
-    readonly_fields = ("started_at", "completed_at")

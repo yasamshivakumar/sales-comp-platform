@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Employee, Commission, UserProfile, HierarchyRelationship, CompensationTier, Order
+from .models import Employee, Sale, Commission, UserProfile, HierarchyRelationship, CompensationTier, Order
 
 from .models import (
     CompensationPlan,
@@ -35,6 +35,12 @@ def _validate_tenant_owned(obj, organization, field_name):
 class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
+        fields = '__all__'
+
+
+class SaleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Sale
         fields = '__all__'
 
 

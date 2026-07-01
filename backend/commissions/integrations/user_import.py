@@ -6,6 +6,7 @@ from datetime import datetime
 from ..business_groups import currency_for_business_group
 from ..currencies import normalize_currency
 from ..models import HierarchyRelationship, Territory, UserProfile
+from .employee_ids import allocate_employee_id
 
 logger = logging.getLogger("commissions")
 
@@ -44,9 +45,24 @@ def process_users_rows(organization, rows, *, allow_updates=True):
 
             role_val = str(row.get("role", "Sales Rep")).strip() or "Sales Rep"
             employee_id_val = str(row.get("employee_id", "")).strip()
+            crm_user_id_val = str(row.get("crm_user_id", "")).strip()
             name_val = str(row.get("name", "")).strip()
+
+            if crm_user_id_val and organization:
+                existing_by_crm = UserProfile.objects.filter(
+                    organization=organization,
+                    crm_user_id=crm_user_id_val,
+                ).first()
+                if not existing_by_crm:
+                    existing_by_crm = UserProfile.objects.filter(
+                        organization=organization,
+                        email__iexact=email,
+                    ).first()
+                if existing_by_crm and not employee_id_val:
+                    employee_id_val = existing_by_crm.employee_id
+
             if not employee_id_val:
-                raise ValueError("employee_id is required")
+                employee_id_val = allocate_employee_id(organization)
             if not name_val:
                 raise ValueError("name is required")
 
@@ -71,9 +87,16 @@ def process_users_rows(organization, rows, *, allow_updates=True):
                 else currency_for_business_group(business_group)
             )
 
-            profile_lookup = {"email": email}
-            if organization:
-                profile_lookup["organization"] = organization
+            profile_lookup = {}
+            if crm_user_id_val and organization:
+                profile_lookup = {
+                    "organization": organization,
+                    "crm_user_id": crm_user_id_val,
+                }
+            else:
+                profile_lookup = {"email": email}
+                if organization:
+                    profile_lookup["organization"] = organization
 
             territory_id = row.get("territory") or row.get("territory_id")
             defaults = {
@@ -86,6 +109,7 @@ def process_users_rows(organization, rows, *, allow_updates=True):
                 "last_name": str(row.get("last_name", "")).strip(),
                 "prefix": str(row.get("prefix", "")).strip(),
                 "employee_id": employee_id_val,
+                "crm_user_id": crm_user_id_val,
                 "hire_date": hire_date,
                 "personal_target": personal_target,
                 "personal_currency": personal_currency,

@@ -112,19 +112,19 @@ function MarketingSite() {
       </div>
       <header className="marketing-nav">
         <Link to="/" className="marketing-brand" aria-label="Incentra home">
-          {/* <span className="marketing-brand__mark">I</span> */}
+
           <Box
-        component="img"
-        src="/incentra-icon.svg"
-        alt="Incentra"
-        sx={{
-          width: 45,
-          height: 45,
-          borderRadius: 2,
-          mb: 3,
-          boxShadow: "0 8px 24px rgba(1,118,211,0.35)",
-        }}
-      />
+            component="img"
+            src="/incentra-icon.svg"
+            alt="Incentra"
+            sx={{
+              width: 45,
+              height: 45,
+              borderRadius: 2,
+              mb: 3,
+              boxShadow: "0 8px 24px rgba(1,118,211,0.35)",
+            }}
+          />
           <span style={{ fontSize: '20px', fontWeight: 'bold' }}
           >Incentra</span>
         </Link>
