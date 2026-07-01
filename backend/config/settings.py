@@ -90,6 +90,7 @@ DEBUG = _env_bool("DEBUG", "True")
 
 ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS", "localhost,127.0.0.1")
 if not DEBUG:
+    SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
     for _host in (
         "api.incentra.co.in",
         "incentra-backend.onrender.com",
@@ -359,7 +360,8 @@ CSRF_TRUSTED_ORIGINS = list(CORS_ALLOWED_ORIGINS)
 if not DEBUG:
     # Behind nginx/Caddy: terminate TLS at proxy, pass X-Forwarded-Proto
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    USE_X_FORWARDED_HOST = _env_bool("USE_X_FORWARDED_HOST", "True")
+    # Render/custom domains: prefer the Host header unless you explicitly enable forwarded host.
+    USE_X_FORWARDED_HOST = _env_bool("USE_X_FORWARDED_HOST", "False")
     # Set SECURE_SSL_REDIRECT=False when the reverse proxy already redirects HTTP→HTTPS
     SECURE_SSL_REDIRECT = _env_bool("SECURE_SSL_REDIRECT", "False")
     SESSION_COOKIE_SECURE = True
@@ -374,6 +376,10 @@ if not DEBUG:
 # --- Logging ---
 LOGS_DIR = os.path.join(BASE_DIR, "logs")
 os.makedirs(LOGS_DIR, exist_ok=True)
+
+_LOG_HANDLERS = ["console"]
+if not os.getenv("RENDER"):
+    _LOG_HANDLERS.append("file")
 
 LOGGING = {
     "version": 1,
@@ -402,17 +408,17 @@ LOGGING = {
         },
     },
     "root": {
-        "handlers": ["console", "file"],
+        "handlers": _LOG_HANDLERS,
         "level": "INFO",
     },
     "loggers": {
         "django": {
-            "handlers": ["console", "file"],
+            "handlers": _LOG_HANDLERS,
             "level": os.getenv("DJANGO_LOG_LEVEL", "INFO"),
             "propagate": False,
         },
         "commissions": {
-            "handlers": ["console", "file"],
+            "handlers": _LOG_HANDLERS,
             "level": os.getenv("COMMISSIONS_LOG_LEVEL", "INFO"),
             "propagate": False,
         },

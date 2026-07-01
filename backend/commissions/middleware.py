@@ -11,7 +11,7 @@ class TenantMiddleware:
 
     def __call__(self, request):
         # Health endpoints must not require database connectivity.
-        if request.path.startswith("/api/health"):
+        if request.path.startswith("/api/health") or request.path == "/ping":
             request.organization = None
             return self.get_response(request)
         request.organization = resolve_request_organization(request)

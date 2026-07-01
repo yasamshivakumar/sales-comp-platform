@@ -17,11 +17,24 @@ Including another URLconf
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.http import JsonResponse
 from django.urls import include, path
 
 from commissions.health import api_root
 
+
+def ping(request):
+    """Minimal liveness probe without DRF or tenant logic."""
+    import os
+
+    return JsonResponse({
+        "status": "ok",
+        "commit": os.getenv("RENDER_GIT_COMMIT", ""),
+    })
+
+
 urlpatterns = [
+    path("ping", ping),
     path("", api_root),
     path("admin/", admin.site.urls),
     path("api/", include("commissions.urls")),
