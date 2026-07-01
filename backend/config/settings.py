@@ -219,6 +219,7 @@ if _database_url:
     _db_host = urlparse(_database_url).hostname or ""
     _render_internal = bool(re.fullmatch(r"dpg-.+-a", _db_host))
     _render_external = _db_host.endswith(".postgres.render.com")
+    _neon_host = _db_host.endswith(".neon.tech")
 
     DATABASES["default"] = dj_database_url.parse(
         _database_url,
@@ -226,7 +227,7 @@ if _database_url:
         # Internal Render Postgres (short host) does not use SSL; external does.
         ssl_require=not DEBUG and not _render_internal,
     )
-    if not DEBUG and _render_external:
+    if not DEBUG and (_render_external or _neon_host):
         DATABASES["default"].setdefault("OPTIONS", {})["sslmode"] = "require"
 
 # --- Auth ---
