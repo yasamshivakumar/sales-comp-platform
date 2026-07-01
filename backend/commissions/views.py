@@ -38,6 +38,10 @@ from rest_framework.permissions import AllowAny
 from django.contrib.auth import authenticate
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError
+from django.db.models import Prefetch
 from .serializers import UserProfileSerializer, HierarchyRelationshipSerializer
 from django.conf import settings
 from .services import (
@@ -54,10 +58,11 @@ from .permissions import (
     get_request_user_profile,
 )
 from .audit import record_audit
-from .emails import notify_admins
+from .emails import notify_admins, notify_user
+from .invites import accept_invite, get_valid_invite, invite_context
 from .models import AuditLog, ImportJob
 from .imports import process_orders_csv, should_use_async_import
-from .tenants import filter_queryset_by_organization
+from .tenants import filter_queryset_by_organization, get_profile_for_user
 from django.core.files.base import ContentFile
 from django.db import transaction
 from django.http import HttpResponse
@@ -262,6 +267,102 @@ def signup(request):
         'token': token.key
     })
 
+signup.throttle_scope = "login"
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def book_demo_request(request):
+    """Public marketing form endpoint that emails demo requests to the sales inbox."""
+    data = request.data or {}
+    name = str(data.get("name") or "").strip()
+    email = str(data.get("email") or "").strip().lower()
+    company = str(data.get("company") or "").strip()
+    phone = str(data.get("phone") or "").strip()
+    message = str(data.get("message") or "").strip()
+
+    if not name:
+        return Response({"error": "Name is required."}, status=status.HTTP_400_BAD_REQUEST)
+    if not email:
+        return Response({"error": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        validate_email(email)
+    except ValidationError:
+        return Response({"error": "Enter a valid email address."}, status=status.HTTP_400_BAD_REQUEST)
+
+    recipient = getattr(settings, "DEMO_REQUEST_EMAIL", "shivakumar@incentra.co.in")
+    subject = f"[Incentra] Demo request from {name}"
+    body = (
+        "New demo request from the Incentra marketing website.\n\n"
+        f"Name: {name}\n"
+        f"Email: {email}\n"
+        f"Company: {company or 'Not provided'}\n"
+        f"Phone: {phone or 'Not provided'}\n\n"
+        f"Message:\n{message or 'Not provided'}\n"
+    )
+    sent = notify_user(recipient, subject, body)
+    if not sent:
+        return Response(
+            {
+                "error": "Email service is temporarily unavailable. Please contact us directly.",
+                "contact_email": recipient,
+                "contact_phone": "8499087617",
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    return Response({"message": "Demo request sent successfully."})
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@throttle_classes([ScopedRateThrottle])
+def invite_detail(request, token):
+    invite = get_valid_invite(token)
+    if not invite:
+        return Response(
+            {"error": "Invite is invalid, expired, or already used."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return Response(invite_context(invite))
+
+
+invite_detail.throttle_scope = "login"
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([ScopedRateThrottle])
+def invite_accept(request, token):
+    password = request.data.get("password") or ""
+    confirm_password = request.data.get("confirm_password") or password
+    if len(password) < 8:
+        return Response(
+            {"error": "Password must be at least 8 characters."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if password != confirm_password:
+        return Response(
+            {"error": "Password and confirmation do not match."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user = accept_invite(token, password)
+    if not user:
+        return Response(
+            {"error": "Invite is invalid, expired, or already used."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    record_audit(
+        request,
+        "invite_accepted",
+        {"email": user.email, "user_id": user.id},
+    )
+    return Response({"message": "Password set successfully. You can now sign in."})
+
+
+invite_accept.throttle_scope = "login"
+
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -337,6 +438,41 @@ class CompensationPlanListCreateView(generics.ListCreateAPIView):
         """Only admins can update compensation plans"""
         self.check_admin_permission(request)
         return super().update(request, *args, **kwargs)
+
+
+class CompensationPlanDetailView(generics.RetrieveUpdateAPIView):
+    serializer_class = CompensationPlanSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = CompensationPlan.objects.prefetch_related(
+            "sc_rate_tables",
+            "sc_flat_rate_tables",
+            "sc_lookup_tables",
+            "commission_rules",
+            "commission_rules__conditions",
+            "commission_rules__results",
+        )
+        return filter_queryset_by_organization(
+            qs, getattr(self.request, "organization", None)
+        )
+
+    def check_admin_permission(self, request):
+        if not user_is_admin(request):
+            raise PermissionDenied("Only administrators can access compensation plans")
+        return True
+
+    def retrieve(self, request, *args, **kwargs):
+        self.check_admin_permission(request)
+        return super().retrieve(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        self.check_admin_permission(request)
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        self.check_admin_permission(request)
+        return super().partial_update(request, *args, **kwargs)
 
 
 class UserProfileListCreateView(generics.ListCreateAPIView):
@@ -892,6 +1028,53 @@ class CompensationTierListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
 
+def _orders_queryset_for_request(request):
+    """Orders visible to the user, with commission data prefetched."""
+    from .list_scope import order_search_q
+
+    org = getattr(request, "organization", None)
+    queryset = filter_queryset_by_organization(
+        Order.objects.select_related("sale_record")
+        .prefetch_related(
+            Prefetch(
+                "sale_record__commission_set",
+                queryset=filter_queryset_by_organization(
+                    Commission.objects.order_by("id"),
+                    org,
+                ),
+            )
+        )
+        .order_by("-order_date", "-id"),
+        org,
+    )
+
+    search_term = (
+        request.query_params.get("q") or request.query_params.get("search") or ""
+    ).strip()
+    if search_term:
+        queryset = queryset.filter(order_search_q(search_term))
+    else:
+        status_filter = (request.query_params.get("order_status") or "").strip()
+        if status_filter:
+            queryset = queryset.filter(order_status__iexact=status_filter)
+
+    user = request.user
+    try:
+        user_profile = get_profile_for_user(
+            user,
+            organization=getattr(request, "organization", None),
+        )
+        if not user_profile:
+            raise UserProfile.DoesNotExist
+        is_admin = user_profile.role.lower() in ["admin", "administrator"]
+        if is_admin:
+            return queryset
+        if user_profile.employee_id:
+            return queryset.filter(employee_id=user_profile.employee_id)
+        return queryset.filter(employee_email=user.email)
+    except UserProfile.DoesNotExist:
+        return queryset.none()
+
 
 class OrderListCreateView(generics.ListCreateAPIView):
     """
@@ -939,6 +1122,35 @@ class OrderListCreateView(generics.ListCreateAPIView):
             organization=getattr(self.request, "organization", None)
         )
         calculate_commission_for_order(order)
+
+
+class OrderDetailView(generics.RetrieveUpdateAPIView):
+    """GET/PATCH /api/orders/<id>/ — updates recalculate commission when eligible."""
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return _orders_queryset_for_request(self.request)
+
+    def perform_update(self, serializer):
+        if not user_is_admin(self.request):
+            raise PermissionDenied("Only administrators can update orders")
+        order = serializer.save()
+        calculate_commission_for_order(order)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        refreshed = (
+            self.get_queryset()
+            .select_related("sale_record")
+            .prefetch_related("sale_record__commission_set")
+            .get(pk=instance.pk)
+        )
+        return Response(self.get_serializer(refreshed).data)
 
 
 class OrderUploadView(APIView):
@@ -1266,6 +1478,63 @@ def get_user_profile(request):
 # =====================================================
 # REPORTS API
 # =====================================================
+
+def _profile_display_name(profile):
+    if not profile:
+        return ""
+    full = f"{profile.first_name} {profile.last_name}".strip()
+    return full or (profile.name or "").strip() or profile.email
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def employee_directory(request):
+    """Employees for order-form search with position, manager, and territory."""
+    from .list_scope import list_limit_for_request, profile_search_q
+
+    org = getattr(request, "organization", None)
+    profiles = filter_queryset_by_organization(
+        UserProfile.objects.exclude(employee_id="")
+        .exclude(employee_id__isnull=True)
+        .select_related("territory"),
+        org,
+    ).order_by("employee_id")
+
+    query = (request.query_params.get("q") or "").strip()
+    if query:
+        profiles = profiles.filter(profile_search_q(query))
+
+    limit = list_limit_for_request(request, searching=bool(query))
+    profile_list = list(profiles[:limit])
+    profile_ids = [profile.id for profile in profile_list]
+    manager_by_child = {}
+    if profile_ids:
+        for rel in HierarchyRelationship.objects.filter(
+            child_participant_id__in=profile_ids
+        ).filter(
+            parent_participant__organization=org,
+            child_participant__organization=org,
+        ).select_related("parent_participant"):
+            manager_by_child[rel.child_participant_id] = rel.parent_participant
+
+    results = []
+    for profile in profile_list:
+        manager = manager_by_child.get(profile.id)
+        results.append(
+            {
+                "id": profile.id,
+                "employee_id": profile.employee_id,
+                "display_name": _profile_display_name(profile),
+                "position_name": profile.position_name or "",
+                "business_group": profile.business_group or "",
+                "manager_name": _profile_display_name(manager) if manager else "",
+                "territory_id": profile.territory_id,
+                "territory_name": profile.territory.name if profile.territory else "",
+            }
+        )
+
+    return Response(results)
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

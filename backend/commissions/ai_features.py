@@ -21,7 +21,7 @@ from .currencies import active_currency_totals, normalize_currency
 from .models import Commission, CompensationPlan, Order, UserProfile
 from .serializers import CompensationPlanSerializer, CommissionRuleSerializer
 from .tenants import filter_queryset_by_organization
-from .views import commission_date_q, with_commission_currency
+from .enterprise_views import commission_date_q, with_commission_currency
 
 
 PLAN_SCHEMA_HINT = """
