@@ -28,6 +28,33 @@ def _env_list(name, default):
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _normalize_render_database_url(url):
+    """
+    Render internal URLs use short hosts like dpg-xxx-a that only resolve on
+    Render private DNS. If lookup fails in some deploys, the full external host
+    (dpg-xxx-a.<region>-postgres.render.com) still works.
+    """
+    import re
+    from urllib.parse import urlparse, urlunparse
+
+    parsed = urlparse(url)
+    host = parsed.hostname or ""
+    if not re.fullmatch(r"dpg-.+-a", host):
+        return url
+    suffix = os.getenv("RENDER_PG_HOST_SUFFIX", ".oregon-postgres.render.com")
+    if not suffix.startswith("."):
+        suffix = f".{suffix}"
+    full_host = f"{host}{suffix}"
+    port = f":{parsed.port}" if parsed.port else ""
+    userinfo = ""
+    if parsed.username:
+        userinfo = parsed.username
+        if parsed.password:
+            userinfo = f"{userinfo}:{parsed.password}"
+        userinfo = f"{userinfo}@"
+    return urlunparse(parsed._replace(netloc=f"{userinfo}{full_host}{port}"))
+
+
 # --- Security (required in production) ---
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
@@ -182,6 +209,7 @@ if _database_url:
             "Run: pip install -r requirements.txt"
         ) from exc
 
+    _database_url = _normalize_render_database_url(_database_url)
     DATABASES["default"] = dj_database_url.parse(
         _database_url,
         conn_max_age=600,
