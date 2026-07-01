@@ -15,11 +15,14 @@ from .models import (
 
 
 def get_default_organization():
-    org, _ = Organization.objects.get_or_create(
-        slug="default",
-        defaults={"name": "Default Organization"},
-    )
-    return org
+    try:
+        org, _ = Organization.objects.get_or_create(
+            slug="default",
+            defaults={"name": "Default Organization"},
+        )
+        return org
+    except Exception:
+        return None
 
 
 def allow_default_organization_fallback():

@@ -58,6 +58,26 @@ def _normalize_render_database_url(url):
     return urlunparse(parsed._replace(netloc=f"{userinfo}{full_host}{port}"))
 
 
+def _sanitize_database_url(url):
+    """Drop Neon params that break psycopg2 on some hosts; keep sslmode=require."""
+    from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+    parsed = urlparse(url)
+    if not parsed.scheme:
+        return url
+    query = []
+    for key, value in parse_qsl(parsed.query, keep_blank_values=True):
+        if key.lower() == "channel_binding":
+            continue
+        query.append((key, value))
+    if not any(k == "sslmode" for k, _ in query) and parsed.hostname and (
+        str(parsed.hostname).endswith(".neon.tech")
+        or str(parsed.hostname).endswith(".postgres.render.com")
+    ):
+        query.append(("sslmode", "require"))
+    return urlunparse(parsed._replace(query=urlencode(query)))
+
+
 # --- Security (required in production) ---
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
@@ -69,6 +89,14 @@ if not SECRET_KEY:
 DEBUG = _env_bool("DEBUG", "True")
 
 ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS", "localhost,127.0.0.1")
+if not DEBUG:
+    for _host in (
+        "api.incentra.co.in",
+        "incentra-backend.onrender.com",
+        ".onrender.com",
+    ):
+        if _host not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(_host)
 
 # --- Error monitoring (optional) ---
 SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
@@ -215,7 +243,9 @@ if _database_url:
     import re
     from urllib.parse import urlparse
 
-    _database_url = _normalize_render_database_url(_database_url)
+    _database_url = _sanitize_database_url(
+        _normalize_render_database_url(_database_url)
+    )
     _db_host = urlparse(_database_url).hostname or ""
     _render_internal = bool(re.fullmatch(r"dpg-.+-a", _db_host))
     _render_external = _db_host.endswith(".postgres.render.com")

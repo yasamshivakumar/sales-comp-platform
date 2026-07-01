@@ -37,7 +37,12 @@ def api_root(request):
 @permission_classes([AllowAny])
 def health_check(request):
     """Liveness probe — process is up."""
-    return Response({"status": "ok"})
+    import os
+
+    return Response({
+        "status": "ok",
+        "commit": os.getenv("RENDER_GIT_COMMIT", ""),
+    })
 
 
 @api_view(["GET"])

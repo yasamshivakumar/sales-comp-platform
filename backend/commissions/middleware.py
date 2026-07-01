@@ -10,10 +10,8 @@ class TenantMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        # Liveness checks must not require database connectivity.
-        if request.path.startswith("/api/health") and not request.path.startswith(
-            "/api/health/ready"
-        ):
+        # Health endpoints must not require database connectivity.
+        if request.path.startswith("/api/health"):
             request.organization = None
             return self.get_response(request)
         request.organization = resolve_request_organization(request)
