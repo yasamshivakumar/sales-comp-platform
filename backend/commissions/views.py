@@ -1566,6 +1566,10 @@ def approve_commissions_view(request):
 
     Body: { "ids": [1,2,3] } and/or { "start_date": "2025-01-01", "end_date": "2025-01-31" }
     """
+    from django.db.models import Q
+
+    from .enterprise_views import commission_date_q
+
     require_admin(request)
     ids = request.data.get("ids") or []
     start_date = parse_date(request.data.get("start_date") or "")
@@ -1576,11 +1580,11 @@ def approve_commissions_view(request):
         queryset = queryset.filter(id__in=ids)
     org = getattr(request, "organization", None)
     if org:
-        queryset = queryset.filter(sale__order__organization=org)
-    if start_date and end_date:
         queryset = queryset.filter(
-            sale__order__order_date__range=[start_date, end_date]
-        )
+            Q(organization=org) | Q(sale__order__organization=org)
+        ).distinct()
+    if start_date and end_date:
+        queryset = queryset.filter(commission_date_q(start_date, end_date))
     if not ids and not (start_date and end_date):
         return Response(
             {"error": "Provide commission ids and/or start_date + end_date"},
@@ -1609,15 +1613,15 @@ def commission_payroll_export(request):
 
     Query: start_date, end_date, status=approved|calculated|all
     """
+    from .enterprise_views import commission_date_q
+
     start_date = parse_date(request.query_params.get("start_date") or "")
     end_date = parse_date(request.query_params.get("end_date") or "")
     status_param = (request.query_params.get("status") or "approved").lower()
 
     queryset = _commission_queryset_for_export(request)
     if start_date and end_date:
-        queryset = queryset.filter(
-            sale__order__order_date__range=[start_date, end_date]
-        )
+        queryset = queryset.filter(commission_date_q(start_date, end_date))
     if status_param == "approved":
         queryset = queryset.filter(status=Commission.STATUS_APPROVED)
     elif status_param == "calculated":

@@ -107,6 +107,27 @@
   flex: 0 0 auto;
 }
 
+.commissions-filter-dates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.commissions-filter-date-field {
+  width: 148px;
+  min-width: 148px;
+}
+
+.commissions-filter-date-field .MuiInputBase-root {
+  min-height: 38px;
+}
+
+.commissions-toolbar__filters,
+.commissions-toolbar__actions {
+  align-items: flex-end;
+}
+
 .commissions-banner {
   padding: 8px 12px;
   margin-top: 10px;
@@ -394,10 +415,15 @@
   .commissions-filter-search,
   .commissions-filter-search.search-bar,
   .commissions-filter-status,
-  .commissions-filter-date {
+  .commissions-filter-dates,
+  .commissions-filter-date-field {
     flex: 1 1 160px;
     width: auto;
     max-width: none;
+  }
+
+  .commissions-filter-date-field {
+    min-width: 0;
   }
 
   .commissions-page .btn-primary,
@@ -414,7 +440,8 @@
   .commissions-filter-search,
   .commissions-filter-search.search-bar,
   .commissions-filter-status,
-  .commissions-filter-date,
+  .commissions-filter-dates,
+  .commissions-filter-date-field,
   .commissions-page .btn-primary,
   .commissions-page .btn-secondary,
   .commissions-page .btn-success {
