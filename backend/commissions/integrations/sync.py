@@ -8,7 +8,7 @@ from django.utils import timezone
 from ..imports import process_orders_rows
 from ..models import ExternalIntegration, IntegrationSyncLog
 from .base import ConnectorError
-from .employee_ids import resolve_crm_owner_to_employee_id
+from .employee_ids import build_hubspot_owner_index, resolve_crm_owner_to_employee_id
 from .mapper import map_records, normalize_date_value
 from .registry import get_connector
 from .user_import import process_users_rows
@@ -38,7 +38,7 @@ def _normalize_order_rows(rows):
     return normalized
 
 
-def _resolve_order_employee_ids(organization, rows, integration=None):
+def _resolve_order_employee_ids(organization, rows, integration=None, owner_index=None):
     """Map CRM owner ids from deals to Incentra employee_id before order import."""
     resolved = []
     for row in rows:
@@ -53,6 +53,7 @@ def _resolve_order_employee_ids(organization, rows, integration=None):
                 organization,
                 crm_owner_id,
                 integration=integration,
+                owner_index=owner_index,
             )
             if not employee_id:
                 raise ValueError(
@@ -100,7 +101,17 @@ def run_pull_sync(integration, sync_type, triggered_by=None, limit=None):
             integration.last_user_sync_at = timezone.now()
             integration.save(update_fields=["last_user_sync_at", "updated_at"])
         elif sync_type == IntegrationSyncLog.SYNC_ORDERS:
-            mapped = _resolve_order_employee_ids(org, mapped, integration=integration)
+            owner_index = (
+                build_hubspot_owner_index(integration)
+                if integration.provider == "hubspot"
+                else None
+            )
+            mapped = _resolve_order_employee_ids(
+                org,
+                mapped,
+                integration=integration,
+                owner_index=owner_index,
+            )
             result = process_orders_rows(org, _normalize_order_rows(mapped))
             integration.last_order_sync_at = timezone.now()
             integration.save(update_fields=["last_order_sync_at", "updated_at"])
