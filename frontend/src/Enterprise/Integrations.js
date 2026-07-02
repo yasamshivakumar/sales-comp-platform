@@ -147,12 +147,13 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
   const runAction = async (action) => {
     if (!selectedId) return;
     setMessage("");
+    const actionPath = String(action).replace(/^\/+|\/+$/g, "");
     try {
       await saveCredentialsIfNeeded();
-      const res = await api.post(`integrations/${selectedId}/${action}/`, {}, {
-        timeout: action.includes("sync") ? 120000 : 30000,
+      const res = await api.post(`integrations/${selectedId}/${actionPath}/`, {}, {
+        timeout: actionPath.includes("sync") ? 120000 : 30000,
       });
-      if (action === "sync/full/") {
+      if (actionPath === "sync/full") {
         const users = res.data.users?.result;
         const orders = res.data.orders?.result;
         setMessage(
@@ -161,14 +162,14 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
         );
       } else {
         setMessage(
-          action.includes("sync")
+          actionPath.includes("sync")
             ? `Sync done: ${res.data.result?.success ?? 0} succeeded, ${res.data.result?.failed ?? 0} failed.`
             : res.data.message || "OK"
         );
       }
       loadLogs(selectedId);
       loadAll();
-      if ((action.includes("sync/orders") || action === "sync/full/") && onOrdersSynced) {
+      if ((actionPath.includes("sync/orders") || actionPath === "sync/full") && onOrdersSynced) {
         onOrdersSynced(res.data);
       }
     } catch (err) {
@@ -363,20 +364,20 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
           )}
 
           <div className="enterprise-form-row">
-            <button type="button" className="btn-secondary" onClick={() => runAction("test/")}>
+            <button type="button" className="btn-secondary" onClick={() => runAction("test")}>
               Test connection
             </button>
             {selected.provider !== "webhook" && (
               <>
                 {selectedProviderMeta?.supports_full_sync && (
-                  <button type="button" className="btn-primary" onClick={() => runAction("sync/full/")}>
+                  <button type="button" className="btn-primary" onClick={() => runAction("sync/full")}>
                     Full sync (users → orders → commissions)
                   </button>
                 )}
-                <button type="button" className="btn-secondary" onClick={() => runAction("sync/users/")}>
+                <button type="button" className="btn-secondary" onClick={() => runAction("sync/users")}>
                   Sync users only
                 </button>
-                <button type="button" className="btn-secondary" onClick={() => runAction("sync/orders/")}>
+                <button type="button" className="btn-secondary" onClick={() => runAction("sync/orders")}>
                   Sync orders only
                 </button>
               </>
