@@ -4,7 +4,7 @@ import logging
 
 from django.utils import timezone
 
-from ..imports import process_orders_rows
+from .order_sync import process_orders_rows
 from .user_import import process_users_rows
 from ..models import IntegrationSyncLog
 from .mapper import map_record, map_records
@@ -83,7 +83,12 @@ def import_hubspot_deal(integration, deal_id):
             "skipped_orders": skipped_orders,
         }
 
-    result = process_orders_rows(org, _normalize_order_rows(mapped))
+    result = process_orders_rows(
+        org,
+        _normalize_order_rows(mapped),
+        crm_provider=integration.provider,
+        integration=integration,
+    )
     result["deal_id"] = str(deal_id)
     return result
 

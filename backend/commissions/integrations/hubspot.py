@@ -165,7 +165,7 @@ class HubSpotConnector(BaseConnector):
             "currency": props.get("hs_currency") or props.get("deal_currency_code"),
         }
 
-    def _fetch_deals(self, limit=None):
+    def _fetch_deals(self, limit=None, since=None):
         section = self.config.get("orders") or {}
         deal_stages = section.get("deal_stages") or ["closedwon"]
         properties = section.get("properties") or [
@@ -181,6 +181,16 @@ class HubSpotConnector(BaseConnector):
             "operator": "IN",
             "values": list(deal_stages),
         }]
+        if since:
+            if hasattr(since, "timestamp"):
+                since_ms = str(int(since.timestamp() * 1000))
+            else:
+                since_ms = str(since)
+            filters.append({
+                "propertyName": "hs_lastmodifieddate",
+                "operator": "GTE",
+                "value": since_ms,
+            })
         raw_deals = self._paginate_search("deals", filters, properties, limit=limit)
         return [self._normalize_deal_record(deal) for deal in raw_deals]
 
@@ -209,11 +219,11 @@ class HubSpotConnector(BaseConnector):
             return None
         return self._normalize_deal_record(payload)
 
-    def fetch_records(self, resource_type, limit=None):
+    def fetch_records(self, resource_type, limit=None, since=None):
         if resource_type == "users":
             return self._fetch_owners(limit=limit)
         if resource_type == "orders":
-            return self._fetch_deals(limit=limit)
+            return self._fetch_deals(limit=limit, since=since)
         raise ConnectorError(f"Unsupported resource type: {resource_type}")
 
     def test_connection(self):

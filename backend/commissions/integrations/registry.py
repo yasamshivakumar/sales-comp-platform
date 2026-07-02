@@ -3,6 +3,7 @@ from .generic_rest import GenericRestConnector
 from .hubspot import HubSpotConnector
 from .salesforce import SalesforceConnector
 from .webhook import WebhookConnector
+from .zoho import ZohoConnector
 
 
 PROVIDER_CHOICES = [
@@ -40,6 +41,16 @@ PROVIDER_CHOICES = [
         "supports_auto_sync": True,
         "supports_full_sync": True,
     },
+    {
+        "id": "zoho",
+        "name": "Zoho CRM",
+        "description": "Pull users and closed deals via Zoho CRM API (OAuth access token).",
+        "supports_pull_users": True,
+        "supports_pull_orders": True,
+        "supports_webhook": False,
+        "supports_auto_sync": True,
+        "supports_full_sync": True,
+    },
 ]
 
 DEFAULT_CONFIG = {
@@ -61,6 +72,7 @@ DEFAULT_CONFIG = {
             },
         },
         "orders": {
+            "incremental_sync": True,
             "soql": (
                 "SELECT Id, Name, Amount, CloseDate, OwnerId, StageName, CurrencyIsoCode "
                 "FROM Opportunity WHERE IsClosed = true AND IsWon = true"
@@ -115,6 +127,7 @@ DEFAULT_CONFIG = {
             },
         },
         "orders": {
+            "incremental_sync": True,
             "deal_stages": ["closedwon"],
             "skip_archived_owners": True,
             "auto_import_owners": True,
@@ -130,6 +143,34 @@ DEFAULT_CONFIG = {
             },
         },
     },
+    "zoho": {
+        "api_version": "v2",
+        "users": {
+            "module": "users",
+            "field_map": {
+                "email": "email",
+                "name": "full_name",
+                "first_name": "firstName",
+                "last_name": "lastName",
+                "crm_user_id": "id",
+                "role": "=Sales Rep",
+            },
+        },
+        "orders": {
+            "incremental_sync": True,
+            "module": "Deals",
+            "deal_stage": "Closed Won",
+            "auto_mark_success": True,
+            "field_map": {
+                "order_id": "id",
+                "sales_amount": "amount",
+                "order_date": "closedate",
+                "crm_owner_id": "crm_owner_id",
+                "order_status": "=Success",
+                "currency": "currency",
+            },
+        },
+    },
 }
 
 
@@ -139,6 +180,7 @@ def get_connector(integration):
         "generic_rest": GenericRestConnector,
         "webhook": WebhookConnector,
         "hubspot": HubSpotConnector,
+        "zoho": ZohoConnector,
     }
     cls = mapping.get(integration.provider)
     if not cls:

@@ -23,7 +23,7 @@ class BaseConnector:
         self.fetch_records("users", limit=1)
         return True
 
-    def fetch_records(self, resource_type, limit=None):
+    def fetch_records(self, resource_type, limit=None, since=None):
         raise NotImplementedError
 
 

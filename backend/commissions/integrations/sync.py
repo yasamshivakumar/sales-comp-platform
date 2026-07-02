@@ -5,18 +5,17 @@ import secrets
 
 from django.utils import timezone
 
-from ..imports import process_orders_rows
 from ..models import ExternalIntegration, IntegrationSyncLog
-from .base import ConnectorError
 from .employee_ids import (
     build_hubspot_owner_index,
-    normalize_hubspot_id,
+    normalize_crm_id,
     repair_hubspot_profile_mappings,
-    resolve_crm_owner_to_employee_id,
+    resolve_crm_user_to_employee_id,
     resolve_error_hint,
     resolve_remap_target,
     _lookup_owner_meta,
 )
+from .order_sync import process_orders_rows
 from .mapper import map_records, normalize_date_value
 from .registry import get_connector
 from .user_import import process_users_rows
@@ -107,7 +106,7 @@ def _resolve_order_employee_ids(organization, rows, integration=None, owner_inde
             })
             continue
 
-        owner_id = normalize_hubspot_id(crm_owner_id)
+        owner_id = normalize_crm_id(crm_owner_id)
         remap_target = remap.get(str(crm_owner_id)) or remap.get(owner_id)
         if remap_target:
             employee_id = resolve_remap_target(
@@ -134,7 +133,7 @@ def _resolve_order_employee_ids(organization, rows, integration=None, owner_inde
             })
             continue
 
-        employee_id = resolve_crm_owner_to_employee_id(
+        employee_id = resolve_crm_user_to_employee_id(
             organization,
             crm_owner_id,
             integration=integration,
@@ -158,6 +157,18 @@ def _resolve_order_employee_ids(organization, rows, integration=None, owner_inde
     return resolved, skipped, unresolved
 
 
+def _incremental_since(integration, sync_type):
+    """Return datetime watermark for incremental CRM order/user pulls."""
+    section = _section_config(integration, sync_type)
+    if section.get("incremental_sync", True) is False:
+        return None
+    if sync_type == IntegrationSyncLog.SYNC_ORDERS:
+        return integration.last_order_sync_at
+    if sync_type == IntegrationSyncLog.SYNC_USERS:
+        return integration.last_user_sync_at
+    return None
+
+
 def run_pull_sync(integration, sync_type, triggered_by=None, limit=None):
     """Pull users or orders from CRM and import via existing pipelines."""
     log = IntegrationSyncLog.objects.create(
@@ -172,7 +183,8 @@ def run_pull_sync(integration, sync_type, triggered_by=None, limit=None):
         field_map = section.get("field_map") or {}
         defaults = section.get("defaults") or {}
 
-        raw_records = connector.fetch_records(sync_type, limit=limit)
+        since = _incremental_since(integration, sync_type)
+        raw_records = connector.fetch_records(sync_type, limit=limit, since=since)
         mapped = map_records(raw_records, field_map, defaults=defaults)
         if sync_type == IntegrationSyncLog.SYNC_ORDERS:
             mapped = _apply_order_automation_defaults(mapped, integration)
@@ -208,7 +220,12 @@ def run_pull_sync(integration, sync_type, triggered_by=None, limit=None):
                 integration=integration,
                 owner_index=owner_index,
             )
-            result = process_orders_rows(org, _normalize_order_rows(mapped))
+            result = process_orders_rows(
+                org,
+                _normalize_order_rows(mapped),
+                crm_provider=integration.provider,
+                integration=integration,
+            )
             if skipped_orders:
                 result["skipped_orders"] = skipped_orders
                 result["skipped"] = len(skipped_orders)
@@ -277,7 +294,12 @@ def run_webhook_import(integration, sync_type, payload, triggered_by=None):
                 integration=integration,
             )
             mapped = _apply_order_automation_defaults(mapped, integration)
-            result = process_orders_rows(org, _normalize_order_rows(mapped))
+            result = process_orders_rows(
+                org,
+                _normalize_order_rows(mapped),
+                crm_provider=integration.provider,
+                integration=integration,
+            )
             if skipped_orders:
                 result["skipped_orders"] = skipped_orders
                 result["skipped"] = len(skipped_orders)

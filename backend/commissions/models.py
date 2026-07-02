@@ -875,6 +875,30 @@ class Order(models.Model):
         help_text="Set when order data changes and commission should be recalculated.",
     )
 
+    # CRM sync metadata
+    crm_provider = models.CharField(
+        max_length=32,
+        blank=True,
+        null=True,
+        db_index=True,
+        help_text="CRM source for this order (hubspot, salesforce, zoho, etc.).",
+    )
+    crm_owner_id = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        db_index=True,
+        help_text="CRM owner/user id at import time (audit trail).",
+    )
+    external_integration = models.ForeignKey(
+        "ExternalIntegration",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="imported_orders",
+        help_text="Integration that imported this order, when applicable.",
+    )
+
     # Audit fields
     uploaded_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1082,11 +1106,13 @@ class ExternalIntegration(models.Model):
     PROVIDER_GENERIC_REST = "generic_rest"
     PROVIDER_WEBHOOK = "webhook"
     PROVIDER_HUBSPOT = "hubspot"
+    PROVIDER_ZOHO = "zoho"
     PROVIDER_CHOICES = [
         (PROVIDER_SALESFORCE, "Salesforce"),
         (PROVIDER_GENERIC_REST, "Generic REST API"),
         (PROVIDER_WEBHOOK, "Webhook / Zapier"),
         (PROVIDER_HUBSPOT, "HubSpot (REST)"),
+        (PROVIDER_ZOHO, "Zoho CRM"),
     ]
 
     organization = models.ForeignKey(

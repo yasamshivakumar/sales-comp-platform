@@ -250,6 +250,31 @@ def resolve_remap_target(organization, target, integration=None, owner_index=Non
     )
 
 
+def normalize_crm_id(value):
+    """Normalize CRM numeric ids that may arrive as strings or floats."""
+    return normalize_hubspot_id(value)
+
+
+def resolve_crm_user_to_employee_id(
+    organization,
+    crm_user_id,
+    integration=None,
+    owner_index=None,
+    *,
+    auto_import=False,
+    match_archived_owners=False,
+):
+    """Map any CRM owner/user id to an Incentra employee_id via stored profile mapping."""
+    return resolve_crm_owner_to_employee_id(
+        organization,
+        crm_user_id,
+        integration=integration,
+        owner_index=owner_index,
+        auto_import=auto_import,
+        match_archived_owners=match_archived_owners,
+    )
+
+
 def resolve_crm_owner_to_employee_id(
     organization,
     crm_owner_id,
@@ -260,7 +285,7 @@ def resolve_crm_owner_to_employee_id(
     match_archived_owners=False,
 ):
     """Map a CRM owner/user id to the Incentra employee_id."""
-    owner_id = normalize_hubspot_id(crm_owner_id)
+    owner_id = normalize_crm_id(crm_owner_id)
     if not owner_id:
         return None
 

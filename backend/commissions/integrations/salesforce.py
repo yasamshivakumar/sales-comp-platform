@@ -96,12 +96,31 @@ class SalesforceConnector(BaseConnector):
             cleaned.append(item)
         return cleaned
 
-    def fetch_records(self, resource_type, limit=None):
+    def fetch_records(self, resource_type, limit=None, since=None):
         section = self.config.get(resource_type) or {}
         soql = section.get("soql")
         if not soql:
             raise ConnectorError(f"No SOQL configured for {resource_type}")
+        if since and resource_type == "orders":
+            soql = self._apply_incremental_soql(soql, since)
         return self._query(soql, limit=limit)
+
+    def _apply_incremental_soql(self, soql, since):
+        """Append LastModifiedDate filter for incremental order sync."""
+        if "lastmodifieddate" in soql.lower():
+            return soql
+        if hasattr(since, "strftime"):
+            since_iso = since.strftime("%Y-%m-%dT%H:%M:%SZ")
+        else:
+            since_iso = str(since)
+        clause = f"LastModifiedDate >= {since_iso}"
+        upper = soql.upper()
+        if " WHERE " in upper:
+            return f"{soql} AND {clause}"
+        if " FROM " in upper:
+            parts = soql.rsplit("FROM", 1)
+            return f"{parts[0]}FROM{parts[1]} WHERE {clause}"
+        return soql
 
     def test_connection(self):
         self._query("SELECT Id FROM User LIMIT 1")
