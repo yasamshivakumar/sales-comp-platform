@@ -42,7 +42,19 @@ def _http_request(method, url, headers=None, body=None, timeout=60):
             raw = response.read().decode("utf-8")
             if not raw:
                 return {}
-            return json.loads(raw)
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise ConnectorError(
+                    f"Invalid JSON response from {url}: {raw[:200]}"
+                ) from exc
+            if not isinstance(data, dict):
+                raise ConnectorError(
+                    f"Unexpected response type from {url}: expected object, got {type(data).__name__}"
+                )
+            return data
+    except ConnectorError:
+        raise
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise ConnectorError(f"HTTP {exc.code}: {detail[:500]}") from exc

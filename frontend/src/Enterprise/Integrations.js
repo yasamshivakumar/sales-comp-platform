@@ -115,11 +115,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
     if (!selectedId) return;
     const hasCredentials = Object.keys(form.credentials).some((k) => form.credentials[k]?.trim());
     if (!hasCredentials) return;
-    const payload = { credentials: form.credentials };
-    if (form.configText.trim()) {
-      payload.config = JSON.parse(form.configText);
-    }
-    await api.patch(`integrations/${selectedId}/`, payload);
+    await api.patch(`integrations/${selectedId}/`, { credentials: form.credentials });
   };
 
   const handleUpdate = async () => {

@@ -64,6 +64,9 @@ class ExternalIntegrationViewSet(viewsets.ModelViewSet):
         )
         if instance.provider == ExternalIntegration.PROVIDER_WEBHOOK:
             ensure_webhook_secret(instance)
+        elif not instance.webhook_secret:
+            instance.webhook_secret = None
+            instance.save(update_fields=["webhook_secret"])
         record_audit(
             self.request,
             "integration_created",
@@ -75,6 +78,9 @@ class ExternalIntegrationViewSet(viewsets.ModelViewSet):
         instance = serializer.save()
         if instance.provider == ExternalIntegration.PROVIDER_WEBHOOK and not instance.webhook_secret:
             ensure_webhook_secret(instance)
+        elif instance.webhook_secret == "":
+            instance.webhook_secret = None
+            instance.save(update_fields=["webhook_secret"])
         record_audit(self.request, "integration_updated", {"id": instance.pk})
 
     def perform_destroy(self, instance):
@@ -116,10 +122,13 @@ def test_integration_connection(request, integration_id):
     ).first()
     if not integration:
         return Response({"error": "Integration not found"}, status=404)
-    result = test_integration(integration)
-    if not result["ok"]:
+    try:
+        result = test_integration(integration)
+    except Exception as exc:
+        return Response({"ok": False, "error": str(exc), "message": str(exc)}, status=400)
+    if not result.get("ok"):
         result["error"] = result.get("message") or "Connection failed"
-    return Response(result, status=200 if result["ok"] else 400)
+    return Response(result, status=200 if result.get("ok") else 400)
 
 
 @api_view(["POST"])

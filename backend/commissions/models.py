@@ -1095,7 +1095,13 @@ class ExternalIntegration(models.Model):
     is_active = models.BooleanField(default=True)
     credentials = models.JSONField(default=dict, blank=True)
     config = models.JSONField(default=dict, blank=True)
-    webhook_secret = models.CharField(max_length=64, unique=True, blank=True, db_index=True)
+    webhook_secret = models.CharField(
+        max_length=64,
+        unique=True,
+        blank=True,
+        null=True,
+        db_index=True,
+    )
     last_user_sync_at = models.DateTimeField(null=True, blank=True)
     last_order_sync_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(

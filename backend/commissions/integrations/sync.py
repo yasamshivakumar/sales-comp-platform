@@ -168,11 +168,18 @@ def run_webhook_import(integration, sync_type, payload, triggered_by=None):
 
 
 def test_integration(integration):
-    connector = get_connector(integration)
+    try:
+        connector = get_connector(integration)
+    except Exception as exc:
+        logger.exception("Failed to initialize connector for integration %s", integration.pk)
+        return {"ok": False, "message": str(exc)}
     try:
         connector.test_connection()
         return {"ok": True, "message": "Connection successful"}
     except ConnectorError as exc:
+        return {"ok": False, "message": str(exc)}
+    except Exception as exc:
+        logger.exception("Integration test failed for integration %s", integration.pk)
         return {"ok": False, "message": str(exc)}
 
 
