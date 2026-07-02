@@ -26,3 +26,23 @@ def process_import_job_task(self, job_id):
     except Exception as exc:
         logger.exception("Celery import job %s failed", job_id)
         raise self.retry(exc=exc)
+
+
+@shared_task(bind=True, max_retries=1, default_retry_delay=60)
+def run_auto_sync_for_integration_task(self, integration_id):
+    from .integrations.sync import run_auto_sync_for_integration
+    from .models import ExternalIntegration
+
+    try:
+        integration = ExternalIntegration.objects.get(pk=integration_id, is_active=True)
+        return run_auto_sync_for_integration(integration)
+    except Exception as exc:
+        logger.exception("Auto sync task failed for integration %s", integration_id)
+        raise self.retry(exc=exc)
+
+
+@shared_task
+def run_due_auto_integration_syncs_task():
+    from .integrations.sync import run_due_auto_integration_syncs
+
+    return run_due_auto_integration_syncs()

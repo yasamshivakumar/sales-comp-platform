@@ -299,6 +299,12 @@ CELERY_TASK_ALWAYS_EAGER = _env_bool(
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
+CELERY_BEAT_SCHEDULE = {
+    "run-due-auto-integration-syncs": {
+        "task": "commissions.tasks.run_due_auto_integration_syncs_task",
+        "schedule": 300.0,
+    },
+}
 USE_ASYNC_IMPORTS = _env_bool("USE_ASYNC_IMPORTS", "True")
 ASYNC_IMPORT_MIN_ROWS = int(os.getenv("ASYNC_IMPORT_MIN_ROWS", "50"))
 

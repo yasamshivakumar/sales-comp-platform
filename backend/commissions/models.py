@@ -1110,6 +1110,15 @@ class ExternalIntegration(models.Model):
     )
     last_user_sync_at = models.DateTimeField(null=True, blank=True)
     last_order_sync_at = models.DateTimeField(null=True, blank=True)
+    auto_sync_enabled = models.BooleanField(
+        default=False,
+        help_text="Periodically pull CRM users and deals into Incentra.",
+    )
+    auto_sync_interval_minutes = models.PositiveIntegerField(
+        default=15,
+        help_text="Minimum minutes between automatic sync runs.",
+    )
+    last_auto_sync_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -1132,11 +1141,15 @@ class IntegrationSyncLog(models.Model):
     SYNC_ORDERS = "orders"
     SYNC_WEBHOOK_USERS = "webhook_users"
     SYNC_WEBHOOK_ORDERS = "webhook_orders"
+    SYNC_HUBSPOT_WEBHOOK = "hubspot_webhook"
+    SYNC_AUTO = "auto"
     SYNC_TYPE_CHOICES = [
         (SYNC_USERS, "Users pull"),
         (SYNC_ORDERS, "Orders pull"),
         (SYNC_WEBHOOK_USERS, "Users webhook"),
         (SYNC_WEBHOOK_ORDERS, "Orders webhook"),
+        (SYNC_HUBSPOT_WEBHOOK, "HubSpot webhook"),
+        (SYNC_AUTO, "Automatic scheduled sync"),
     ]
 
     STATUS_RUNNING = "running"

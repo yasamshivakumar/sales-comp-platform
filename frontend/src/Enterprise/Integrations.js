@@ -39,6 +39,8 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
     name: "",
     provider: "salesforce",
     is_active: true,
+    auto_sync_enabled: false,
+    auto_sync_interval_minutes: 15,
     credentials: {},
     configText: "",
   });
@@ -82,15 +84,38 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
     }
   };
 
-  const selectIntegration = (item) => {
+  const selectIntegration = async (item) => {
     setSelectedId(item.id);
-    setForm({
-      name: item.name,
-      provider: item.provider,
-      is_active: item.is_active,
-      credentials: {},
-      configText: JSON.stringify(item.config || {}, null, 2),
-    });
+    try {
+      const res = await api.get(`integrations/${item.id}/`);
+      const detail = res.data;
+      setForm({
+        name: detail.name,
+        provider: detail.provider,
+        is_active: detail.is_active,
+        auto_sync_enabled: Boolean(detail.auto_sync_enabled),
+        auto_sync_interval_minutes: detail.auto_sync_interval_minutes || 15,
+        credentials: {},
+        configText: JSON.stringify(detail.config || {}, null, 2),
+      });
+      if (detail.webhook_urls) {
+        setIntegrations((current) =>
+          current.map((row) =>
+            row.id === item.id ? { ...row, webhook_urls: detail.webhook_urls } : row
+          )
+        );
+      }
+    } catch {
+      setForm({
+        name: item.name,
+        provider: item.provider,
+        is_active: item.is_active,
+        auto_sync_enabled: Boolean(item.auto_sync_enabled),
+        auto_sync_interval_minutes: item.auto_sync_interval_minutes || 15,
+        credentials: {},
+        configText: JSON.stringify(item.config || {}, null, 2),
+      });
+    }
     loadLogs(item.id);
     loadSyncedUsers(item.id);
   };
@@ -111,6 +136,8 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
         name: form.name,
         provider: form.provider,
         is_active: form.is_active,
+        auto_sync_enabled: form.auto_sync_enabled,
+        auto_sync_interval_minutes: form.auto_sync_interval_minutes,
         credentials: form.credentials,
         config,
       });
@@ -136,6 +163,8 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
       const payload = {
         name: form.name,
         is_active: form.is_active,
+        auto_sync_enabled: form.auto_sync_enabled,
+        auto_sync_interval_minutes: Number(form.auto_sync_interval_minutes) || 15,
       };
       if (Object.keys(form.credentials).some((k) => form.credentials[k])) {
         payload.credentials = form.credentials;
@@ -164,10 +193,10 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
     if (commissionsCreated || commissionsSkipped) {
       text += `. Commissions: ${commissionsCreated} created`;
       if (commissionsSkipped) {
-        text += `, ${commissionsSkipped} pending (orders import as Booked — mark Success in Order queue)`;
+        text += `, ${commissionsSkipped} skipped (check User Setup + compensation plan)`;
       }
     } else if (result.success > 0) {
-      text += ". Orders import as Booked — mark Success in Order queue to calculate commissions (same as CSV).";
+      text += ". Closed-won CRM deals import as Success and calculate commissions when configured.";
     }
     return `${text}.`;
   };
@@ -343,6 +372,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
                 <th>Status</th>
                 <th>Last user sync</th>
                 <th>Last order sync</th>
+                <th>Auto</th>
                 <th />
               </tr>
             </thead>
@@ -354,6 +384,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
                   <td>{item.is_active ? "Active" : "Inactive"}</td>
                   <td>{item.last_user_sync_at ? new Date(item.last_user_sync_at).toLocaleString() : "—"}</td>
                   <td>{item.last_order_sync_at ? new Date(item.last_order_sync_at).toLocaleString() : "—"}</td>
+                  <td>{item.auto_sync_enabled ? `Every ${item.auto_sync_interval_minutes || 15}m` : "—"}</td>
                   <td>
                     <button type="button" className="btn-secondary" onClick={() => selectIntegration(item)}>
                       Manage
@@ -371,8 +402,57 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
           <h3 className="panel__title">Manage: {selected.name}</h3>
           {selected.provider === "hubspot" && (
             <p className="integrations-panel__subtitle" style={{ marginBottom: "0.75rem" }}>
-              Paste your HubSpot private app token below, then Test or Full sync (saved automatically before sync).
+              HubSpot automation: enable auto-sync below for periodic ingest, or register the
+              webhook URL in HubSpot for real-time closed-won deals. New owners are imported
+              automatically when deals reference them.
             </p>
+          )}
+
+          {selected.provider === "hubspot" && selected.webhook_urls?.events && (
+            <div className="banner" style={{ marginBottom: "1rem" }}>
+              <strong>HubSpot webhook URL</strong> (POST deal events — subscribe to{" "}
+              <code>deal.creation</code> and <code>deal.propertyChange</code> for{" "}
+              <code>dealstage</code>)
+              <br />
+              <code>{selected.webhook_urls.events}</code>
+            </div>
+          )}
+
+          {selected.provider !== "webhook" && (
+            <div className="enterprise-form-row" style={{ marginBottom: "1rem" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <input
+                  type="checkbox"
+                  checked={form.auto_sync_enabled}
+                  onChange={(e) =>
+                    setForm({ ...form, auto_sync_enabled: e.target.checked })
+                  }
+                />
+                Automatic sync (users → closed-won deals → commissions)
+              </label>
+              <label>
+                Interval (minutes)
+                <input
+                  className="input"
+                  type="number"
+                  min={5}
+                  max={1440}
+                  value={form.auto_sync_interval_minutes}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      auto_sync_interval_minutes: e.target.value,
+                    })
+                  }
+                  disabled={!form.auto_sync_enabled}
+                />
+              </label>
+              {selected.last_auto_sync_at && (
+                <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                  Last auto sync: {new Date(selected.last_auto_sync_at).toLocaleString()}
+                </span>
+              )}
+            </div>
           )}
 
           {selected.provider !== "webhook" && (CREDENTIAL_FIELDS[selected.provider] || []).length > 0 && (

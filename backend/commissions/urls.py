@@ -105,6 +105,16 @@ urlpatterns = [
         integration_views.integration_webhook_orders,
         name="integration-webhook-orders",
     ),
+    path(
+        "integrations/hubspot/webhook/<str:webhook_secret>/",
+        integration_views.integration_hubspot_webhook,
+        name="integration-hubspot-webhook",
+    ),
+    path(
+        "integrations/<int:integration_id>/auto-sync/",
+        integration_views.trigger_auto_sync,
+        name="integration-auto-sync",
+    ),
     path("audit-logs/", audit_log_list, name="audit-logs"),
     path("ai/status/", ai_views.ai_status, name="ai-status"),
     path(

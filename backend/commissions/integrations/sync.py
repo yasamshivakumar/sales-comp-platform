@@ -46,6 +46,23 @@ def _normalize_order_rows(rows):
     return normalized
 
 
+def _apply_order_automation_defaults(rows, integration):
+    """Apply CRM automation flags (e.g. auto-mark closed-won deals as Success)."""
+    section = _section_config(integration, "orders")
+    auto_success = section.get(
+        "auto_mark_success",
+        integration.provider == ExternalIntegration.PROVIDER_HUBSPOT,
+    )
+    if not auto_success:
+        return rows
+    updated = []
+    for row in rows:
+        item = dict(row)
+        item["order_status"] = "Success"
+        updated.append(item)
+    return updated
+
+
 def _sync_organization(integration):
     org = integration.organization
     if not org:
@@ -61,6 +78,10 @@ def _resolve_order_employee_ids(organization, rows, integration=None, owner_inde
     section = _section_config(integration, "orders") if integration else {}
     skip_archived = section.get("skip_archived_owners", True)
     remap = section.get("archived_owner_remap") or {}
+    auto_import = section.get(
+        "auto_import_owners",
+        bool(integration and integration.provider == ExternalIntegration.PROVIDER_HUBSPOT),
+    )
 
     resolved = []
     skipped = []
@@ -118,7 +139,7 @@ def _resolve_order_employee_ids(organization, rows, integration=None, owner_inde
             crm_owner_id,
             integration=integration,
             owner_index=owner_index,
-            auto_import=False,
+            auto_import=auto_import,
             match_archived_owners=False,
         )
         if not employee_id:
@@ -153,6 +174,8 @@ def run_pull_sync(integration, sync_type, triggered_by=None, limit=None):
 
         raw_records = connector.fetch_records(sync_type, limit=limit)
         mapped = map_records(raw_records, field_map, defaults=defaults)
+        if sync_type == IntegrationSyncLog.SYNC_ORDERS:
+            mapped = _apply_order_automation_defaults(mapped, integration)
         log.records_fetched = len(mapped)
 
         org = _sync_organization(integration)
@@ -253,6 +276,7 @@ def run_webhook_import(integration, sync_type, payload, triggered_by=None):
                 mapped,
                 integration=integration,
             )
+            mapped = _apply_order_automation_defaults(mapped, integration)
             result = process_orders_rows(org, _normalize_order_rows(mapped))
             if skipped_orders:
                 result["skipped_orders"] = skipped_orders
@@ -329,3 +353,76 @@ def run_full_sync(integration, triggered_by=None, limit=None):
             "result": order_log.result,
         },
     }
+
+
+def run_auto_sync_for_integration(integration, *, triggered_by=None, limit=None):
+    """Run a full CRM sync for one integration and stamp last_auto_sync_at."""
+    if integration.provider == ExternalIntegration.PROVIDER_WEBHOOK:
+        return {"skipped": True, "reason": "Webhook integrations use inbound POST only."}
+    if not integration.is_active:
+        return {"skipped": True, "reason": "Integration is inactive."}
+
+    log = IntegrationSyncLog.objects.create(
+        integration=integration,
+        sync_type=IntegrationSyncLog.SYNC_AUTO,
+        status=IntegrationSyncLog.STATUS_RUNNING,
+        triggered_by=triggered_by,
+    )
+    result = {}
+    try:
+        result = run_full_sync(integration, triggered_by=triggered_by, limit=limit)
+        integration.last_auto_sync_at = timezone.now()
+        integration.save(update_fields=["last_auto_sync_at", "updated_at"])
+        log.result = result
+        log.status = IntegrationSyncLog.STATUS_COMPLETED
+        log.records_fetched = (
+            (result.get("users", {}).get("result") or {}).get("success", 0)
+            + (result.get("orders", {}).get("result") or {}).get("success", 0)
+        )
+    except Exception as exc:
+        logger.exception("Auto sync failed for integration %s", integration.pk)
+        log.status = IntegrationSyncLog.STATUS_FAILED
+        log.error_message = str(exc)
+        log.result = {}
+        raise
+    finally:
+        log.completed_at = timezone.now()
+        log.save(
+            update_fields=[
+                "status",
+                "result",
+                "error_message",
+                "records_fetched",
+                "completed_at",
+            ]
+        )
+    return {"log_id": log.pk, "result": result}
+
+
+def run_due_auto_integration_syncs():
+    """Queue or run automatic sync for integrations that are due."""
+    from datetime import timedelta
+
+    now = timezone.now()
+    due_ids = []
+    for integration in ExternalIntegration.objects.filter(
+        is_active=True,
+        auto_sync_enabled=True,
+    ).exclude(provider=ExternalIntegration.PROVIDER_WEBHOOK):
+        interval = max(int(integration.auto_sync_interval_minutes or 15), 5)
+        last = integration.last_auto_sync_at
+        if not last or (now - last) >= timedelta(minutes=interval):
+            due_ids.append(integration.pk)
+
+    queued = []
+    for integration_id in due_ids:
+        try:
+            from ..tasks import run_auto_sync_for_integration_task
+
+            run_auto_sync_for_integration_task.delay(integration_id)
+            queued.append(integration_id)
+        except Exception:
+            integration = ExternalIntegration.objects.get(pk=integration_id)
+            run_auto_sync_for_integration(integration)
+            queued.append(integration_id)
+    return {"queued": queued, "count": len(queued)}

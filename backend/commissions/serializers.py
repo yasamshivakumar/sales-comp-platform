@@ -678,22 +678,28 @@ class ExternalIntegrationSerializer(serializers.ModelSerializer):
             "webhook_secret",
             "last_user_sync_at",
             "last_order_sync_at",
+            "last_auto_sync_at",
             "created_at",
             "updated_at",
         ]
 
     def get_webhook_urls(self, obj):
         request = self.context.get("request")
-        if not request or obj.provider != ExternalIntegration.PROVIDER_WEBHOOK:
+        if not request or not obj.webhook_secret:
             return {}
-        if not obj.webhook_secret:
-            return {}
-        base = request.build_absolute_uri("/api/integrations/webhook/").rstrip("/")
-        secret = obj.webhook_secret
-        return {
-            "users": f"{base}/{secret}/users/",
-            "orders": f"{base}/{secret}/orders/",
-        }
+        if obj.provider == ExternalIntegration.PROVIDER_WEBHOOK:
+            base = request.build_absolute_uri("/api/integrations/webhook/").rstrip("/")
+            secret = obj.webhook_secret
+            return {
+                "users": f"{base}/{secret}/users/",
+                "orders": f"{base}/{secret}/orders/",
+            }
+        if obj.provider == ExternalIntegration.PROVIDER_HUBSPOT:
+            base = request.build_absolute_uri("/api/integrations/hubspot/webhook/").rstrip(
+                "/"
+            )
+            return {"events": f"{base}/{obj.webhook_secret}/"}
+        return {}
 
 
 class IntegrationSyncLogSerializer(serializers.ModelSerializer):

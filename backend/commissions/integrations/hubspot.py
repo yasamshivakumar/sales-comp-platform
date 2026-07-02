@@ -153,6 +153,18 @@ class HubSpotConnector(BaseConnector):
             owners.append(self._normalize_owner(owner))
         return owners
 
+    def _normalize_deal_record(self, deal):
+        props = deal.get("properties") or {}
+        return {
+            "id": str(deal.get("id", "")),
+            "amount": props.get("amount"),
+            "closedate": props.get("closedate"),
+            "hubspot_owner_id": props.get("hubspot_owner_id"),
+            "dealname": props.get("dealname"),
+            "dealstage": props.get("dealstage"),
+            "currency": props.get("hs_currency") or props.get("deal_currency_code"),
+        }
+
     def _fetch_deals(self, limit=None):
         section = self.config.get("orders") or {}
         deal_stages = section.get("deal_stages") or ["closedwon"]
@@ -170,19 +182,32 @@ class HubSpotConnector(BaseConnector):
             "values": list(deal_stages),
         }]
         raw_deals = self._paginate_search("deals", filters, properties, limit=limit)
-        normalized = []
-        for deal in raw_deals:
-            props = deal.get("properties") or {}
-            normalized.append({
-                "id": str(deal.get("id", "")),
-                "amount": props.get("amount"),
-                "closedate": props.get("closedate"),
-                "hubspot_owner_id": props.get("hubspot_owner_id"),
-                "dealname": props.get("dealname"),
-                "dealstage": props.get("dealstage"),
-                "currency": props.get("hs_currency") or props.get("deal_currency_code"),
-            })
-        return normalized
+        return [self._normalize_deal_record(deal) for deal in raw_deals]
+
+    def fetch_deal_by_id(self, deal_id):
+        section = self.config.get("orders") or {}
+        properties = section.get("properties") or [
+            "amount",
+            "closedate",
+            "hubspot_owner_id",
+            "dealname",
+            "dealstage",
+            "hs_currency",
+        ]
+        deal_id = str(deal_id or "").strip()
+        if not deal_id:
+            return None
+        params = urllib.parse.urlencode(
+            {"properties": ",".join(properties)},
+            quote_via=urllib.parse.quote,
+        )
+        payload = http_get_json(
+            f"{HUBSPOT_API}/crm/v3/objects/deals/{deal_id}?{params}",
+            headers=self._headers(),
+        )
+        if not payload:
+            return None
+        return self._normalize_deal_record(payload)
 
     def fetch_records(self, resource_type, limit=None):
         if resource_type == "users":

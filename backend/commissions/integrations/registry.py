@@ -36,7 +36,8 @@ PROVIDER_CHOICES = [
         "description": "Pull owners and closed-won deals via HubSpot CRM API (private app token).",
         "supports_pull_users": True,
         "supports_pull_orders": True,
-        "supports_webhook": False,
+        "supports_webhook": True,
+        "supports_auto_sync": True,
         "supports_full_sync": True,
     },
 ]
@@ -116,13 +117,15 @@ DEFAULT_CONFIG = {
         "orders": {
             "deal_stages": ["closedwon"],
             "skip_archived_owners": True,
+            "auto_import_owners": True,
+            "auto_mark_success": True,
             "archived_owner_remap": {},
             "field_map": {
                 "order_id": "id",
                 "sales_amount": "amount",
                 "order_date": "closedate",
                 "crm_owner_id": "hubspot_owner_id",
-                "order_status": "=Booked",
+                "order_status": "=Success",
                 "currency": "currency",
             },
         },

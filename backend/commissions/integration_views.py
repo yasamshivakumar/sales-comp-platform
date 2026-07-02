@@ -9,11 +9,13 @@ from .audit import record_audit
 from .integrations.registry import DEFAULT_CONFIG, list_providers
 from .integrations.sync import (
     ensure_webhook_secret,
+    run_auto_sync_for_integration,
     run_full_sync,
     run_pull_sync,
     run_webhook_import,
     test_integration,
 )
+from .integrations.hubspot_events import run_hubspot_webhook_import
 from .models import ExternalIntegration, IntegrationSyncLog, UserProfile
 from .permissions import require_admin
 from .serializers import ExternalIntegrationSerializer, IntegrationSyncLogSerializer, UserProfileSerializer
@@ -64,6 +66,8 @@ class ExternalIntegrationViewSet(viewsets.ModelViewSet):
         )
         if instance.provider == ExternalIntegration.PROVIDER_WEBHOOK:
             ensure_webhook_secret(instance)
+        elif instance.provider == ExternalIntegration.PROVIDER_HUBSPOT:
+            ensure_webhook_secret(instance)
         elif not instance.webhook_secret:
             instance.webhook_secret = None
             instance.save(update_fields=["webhook_secret"])
@@ -98,6 +102,8 @@ class ExternalIntegrationViewSet(viewsets.ModelViewSet):
         data["credentials_masked"] = _mask_credentials(data.get("credentials"))
         if data.get("provider") == ExternalIntegration.PROVIDER_WEBHOOK:
             data["webhook_urls"] = _webhook_urls(request, data.get("webhook_secret"))
+        elif data.get("provider") == ExternalIntegration.PROVIDER_HUBSPOT:
+            data["webhook_urls"] = _hubspot_webhook_url(request, data.get("webhook_secret"))
         return Response(data)
 
 
@@ -109,6 +115,13 @@ def _webhook_urls(request, secret):
         "users": f"{base}/{secret}/users/",
         "orders": f"{base}/{secret}/orders/",
     }
+
+
+def _hubspot_webhook_url(request, secret):
+    if not secret:
+        return {}
+    base = request.build_absolute_uri("/api/integrations/hubspot/webhook/").rstrip("/")
+    return {"events": f"{base}/{secret}/"}
 
 
 @api_view(["POST"])
@@ -251,6 +264,47 @@ def integration_webhook_users(request, webhook_secret):
 @permission_classes([AllowAny])
 def integration_webhook_orders(request, webhook_secret):
     return _webhook_handler(request, webhook_secret, IntegrationSyncLog.SYNC_WEBHOOK_ORDERS)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def integration_hubspot_webhook(request, webhook_secret):
+    integration = ExternalIntegration.objects.filter(
+        webhook_secret=webhook_secret,
+        is_active=True,
+        provider=ExternalIntegration.PROVIDER_HUBSPOT,
+    ).first()
+    if not integration:
+        return Response({"error": "Invalid webhook secret"}, status=404)
+    try:
+        log = run_hubspot_webhook_import(integration, request.data)
+    except Exception as exc:
+        return Response({"error": str(exc)}, status=400)
+    return Response({
+        "message": "HubSpot event processed",
+        "log_id": log.pk,
+        "result": log.result,
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def trigger_auto_sync(request, integration_id):
+    """Manually trigger one automatic full sync (admin)."""
+    require_admin(request)
+    org = getattr(request, "organization", None)
+    integration = ExternalIntegration.objects.filter(
+        pk=integration_id,
+        organization=org,
+        is_active=True,
+    ).first()
+    if not integration:
+        return Response({"error": "Integration not found or inactive"}, status=404)
+    try:
+        result = run_auto_sync_for_integration(integration, triggered_by=request.user)
+    except Exception as exc:
+        return Response({"error": str(exc)}, status=400)
+    return Response(result)
 
 
 def _webhook_handler(request, webhook_secret, sync_type):
