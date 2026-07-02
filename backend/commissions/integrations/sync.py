@@ -81,6 +81,16 @@ def run_pull_sync(integration, sync_type, triggered_by=None, limit=None):
         org = integration.organization
         if sync_type == IntegrationSyncLog.SYNC_USERS:
             result = process_users_rows(org, mapped)
+            result["fetched"] = [
+                {
+                    "email": row.get("email"),
+                    "name": row.get("name"),
+                    "crm_user_id": row.get("crm_user_id"),
+                    "first_name": row.get("first_name"),
+                    "last_name": row.get("last_name"),
+                }
+                for row in mapped
+            ]
             integration.last_user_sync_at = timezone.now()
             integration.save(update_fields=["last_user_sync_at", "updated_at"])
         elif sync_type == IntegrationSyncLog.SYNC_ORDERS:

@@ -14,9 +14,9 @@ from .integrations.sync import (
     run_webhook_import,
     test_integration,
 )
-from .models import ExternalIntegration, IntegrationSyncLog
+from .models import ExternalIntegration, IntegrationSyncLog, UserProfile
 from .permissions import require_admin
-from .serializers import ExternalIntegrationSerializer, IntegrationSyncLogSerializer
+from .serializers import ExternalIntegrationSerializer, IntegrationSyncLogSerializer, UserProfileSerializer
 from .tenants import filter_queryset_by_organization
 
 
@@ -216,6 +216,29 @@ def integration_sync_logs(request, integration_id):
         return Response({"error": "Integration not found"}, status=404)
     logs = integration.sync_logs.all()[:50]
     return Response(IntegrationSyncLogSerializer(logs, many=True).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def integration_synced_users(request, integration_id):
+    """CRM-linked employees imported or updated via integrations."""
+    require_admin(request)
+    org = getattr(request, "organization", None)
+    integration = ExternalIntegration.objects.filter(
+        pk=integration_id,
+        organization=org,
+    ).first()
+    if not integration:
+        return Response({"error": "Integration not found"}, status=404)
+    profiles = (
+        UserProfile.objects.filter(organization=org)
+        .exclude(crm_user_id="")
+        .order_by("name", "email")
+    )
+    return Response({
+        "count": profiles.count(),
+        "users": UserProfileSerializer(profiles, many=True).data,
+    })
 
 
 @api_view(["POST"])

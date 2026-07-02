@@ -91,6 +91,11 @@ urlpatterns = [
         name="integration-sync-logs",
     ),
     path(
+        "integrations/<int:integration_id>/synced-users/",
+        integration_views.integration_synced_users,
+        name="integration-synced-users",
+    ),
+    path(
         "integrations/webhook/<str:webhook_secret>/users/",
         integration_views.integration_webhook_users,
         name="integration-webhook-users",

@@ -31,6 +31,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
   const [integrations, setIntegrations] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [logs, setLogs] = useState([]);
+  const [syncedUsers, setSyncedUsers] = useState([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -72,6 +73,15 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
     }
   };
 
+  const loadSyncedUsers = async (id) => {
+    try {
+      const res = await api.get(`integrations/${id}/synced-users/`);
+      setSyncedUsers(res.data?.users || []);
+    } catch {
+      setSyncedUsers([]);
+    }
+  };
+
   const selectIntegration = (item) => {
     setSelectedId(item.id);
     setForm({
@@ -82,6 +92,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
       configText: JSON.stringify(item.config || {}, null, 2),
     });
     loadLogs(item.id);
+    loadSyncedUsers(item.id);
   };
 
   const handleCreate = async (e) => {
@@ -164,6 +175,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
         );
       }
       loadLogs(selectedId);
+      loadSyncedUsers(selectedId);
       loadAll();
       if ((actionPath.includes("sync/orders") || actionPath === "sync/full") && onOrdersSynced) {
         onOrdersSynced(res.data);
@@ -176,6 +188,20 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
   const selected = integrations.find((i) => i.id === selectedId);
   const selectedProviderMeta = providers.find((p) => p.id === selected?.provider);
   const credFields = CREDENTIAL_FIELDS[form.provider] || [];
+  const latestUserLog = logs.find((log) => log.sync_type === "users");
+  const lastSyncRecords = latestUserLog?.result?.records || [];
+  const lastSyncFetched = latestUserLog?.result?.fetched || [];
+  const userRows =
+    lastSyncRecords.length > 0
+      ? lastSyncRecords
+      : lastSyncFetched.map((row, index) => ({
+          row: index + 1,
+          name: row.name,
+          email: row.email,
+          crm_user_id: row.crm_user_id,
+          employee_id: "",
+          status: "fetched",
+        }));
 
   return (
     <div
@@ -382,6 +408,87 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
               Save changes
             </button>
           </div>
+
+          {(selected.provider !== "webhook") && (
+            <>
+              <h4 style={{ marginTop: "1.25rem" }}>CRM-linked employees in Incentra</h4>
+              {syncedUsers.length === 0 ? (
+                <p style={{ color: "#64748b", marginBottom: "1rem" }}>
+                  No CRM-linked employees yet. Run <strong>Sync users</strong> to import HubSpot owners.
+                </p>
+              ) : (
+                <table className="enterprise-table" style={{ marginBottom: "1rem" }}>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>CRM user ID</th>
+                      <th>Employee ID</th>
+                      <th>Role</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {syncedUsers.map((user) => (
+                      <tr key={user.id}>
+                        <td>{user.name || `${user.first_name || ""} ${user.last_name || ""}`.trim() || "—"}</td>
+                        <td>{user.email}</td>
+                        <td><code>{user.crm_user_id || "—"}</code></td>
+                        <td><code>{user.employee_id || "—"}</code></td>
+                        <td>{user.role || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              {userRows.length > 0 ? (
+                <>
+                  <h4 style={{ marginTop: "0.5rem" }}>
+                    Last user sync
+                    {latestUserLog?.started_at
+                      ? ` (${new Date(latestUserLog.started_at).toLocaleString()})`
+                      : ""}
+                  </h4>
+                  <table className="enterprise-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>CRM user ID</th>
+                        <th>Employee ID</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {userRows.map((row) => (
+                        <tr key={`user-row-${row.row}-${row.email || row.crm_user_id}`}>
+                          <td>{row.row}</td>
+                          <td>{row.name || "—"}</td>
+                          <td>{row.email || "—"}</td>
+                          <td><code>{row.crm_user_id || "—"}</code></td>
+                          <td><code>{row.employee_id || "—"}</code></td>
+                          <td>
+                            {row.status === "failed" ? (
+                              <span style={{ color: "#b45309" }} title={row.error}>
+                                failed{row.error ? `: ${row.error}` : ""}
+                              </span>
+                            ) : (
+                              row.status || "—"
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              ) : (
+                <p style={{ color: "#64748b" }}>
+                  No user sync run yet for this connection.
+                </p>
+              )}
+            </>
+          )}
 
           {logs.length > 0 && (
             <>

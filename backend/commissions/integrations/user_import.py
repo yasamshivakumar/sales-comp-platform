@@ -33,6 +33,7 @@ def process_users_rows(organization, rows, *, allow_updates=True):
     success = 0
     failed = 0
     errors = []
+    records = []
     email_to_profile = {}
     username_to_profile = {}
     employee_id_to_profile = {}
@@ -144,7 +145,7 @@ def process_users_rows(organization, rows, *, allow_updates=True):
                 )
 
             if allow_updates:
-                profile, _created = UserProfile.objects.update_or_create(
+                profile, created = UserProfile.objects.update_or_create(
                     **profile_lookup,
                     defaults=defaults,
                 )
@@ -159,6 +160,7 @@ def process_users_rows(organization, rows, *, allow_updates=True):
                 if dup_errors:
                     raise ValueError(" ".join(dup_errors))
                 profile = UserProfile.objects.create(email=email, **defaults)
+                created = True
 
             email_to_profile[email] = profile
             username_to_profile[username] = profile
@@ -191,14 +193,32 @@ def process_users_rows(organization, rows, *, allow_updates=True):
                     )
 
             success += 1
+            records.append({
+                "row": index,
+                "email": email,
+                "name": name_val,
+                "employee_id": profile.employee_id,
+                "crm_user_id": crm_user_id_val,
+                "status": "created" if created else "updated",
+            })
         except Exception as exc:
             failed += 1
             errors.append({"row": index, "email": row.get("email", ""), "error": str(exc)})
+            records.append({
+                "row": index,
+                "email": str(row.get("email", "")).strip(),
+                "name": str(row.get("name", "")).strip(),
+                "employee_id": str(row.get("employee_id", "")).strip(),
+                "crm_user_id": str(row.get("crm_user_id", "")).strip(),
+                "status": "failed",
+                "error": str(exc),
+            })
             logger.exception("User import row %s failed", index)
 
     return {
         "success": success,
         "failed": failed,
         "errors": errors[:20],
+        "records": records,
         "total_rows": len(rows),
     }
