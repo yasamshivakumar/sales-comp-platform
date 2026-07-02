@@ -62,7 +62,7 @@ from .audit import record_audit
 from .emails import notify_admins, notify_user
 from .invites import accept_invite, get_valid_invite, invite_context
 from .models import AuditLog, ImportJob
-from .imports import process_orders_csv, should_use_async_import
+from .imports import process_orders_csv, process_users_csv, should_use_async_import
 from .tenants import filter_queryset_by_organization, get_profile_for_user
 from django.core.files.base import ContentFile
 from django.db import transaction
@@ -677,314 +677,72 @@ class UserProfileUploadView(APIView):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "upload"
 
-    @transaction.atomic
     def post(self, request):
-        # ---------------------------------------------------
-        # Check file exists
-        # ---------------------------------------------------
-        if 'file' not in request.FILES:
+        if "file" not in request.FILES:
             return Response(
-                {'error': 'No file uploaded'},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "No file uploaded"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        uploaded_file = request.FILES['file']
-
-        # ---------------------------------------------------
-        # This version supports CSV files only
-        # ---------------------------------------------------
-        if not uploaded_file.name.lower().endswith('.csv'):
+        uploaded_file = request.FILES["file"]
+        if not uploaded_file.name.lower().endswith(".csv"):
             return Response(
-                {'error': 'Only CSV files are supported'},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "Only CSV files are supported"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        organization = getattr(request, "organization", None)
+        if not organization:
+            return Response(
+                {"error": "Organization context missing"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
-            # Read CSV file
-            decoded_file = uploaded_file.read().decode('utf-8')
-            csv_reader = csv.DictReader(io.StringIO(decoded_file))
-            rows = list(csv_reader)
-
-        except Exception as e:
+            decoded_file = uploaded_file.read().decode("utf-8")
+            rows = list(csv.DictReader(io.StringIO(decoded_file)))
+        except Exception as exc:
             return Response(
-                {'error': f'Error reading CSV file: {str(e)}'},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": f"Error reading CSV file: {exc}"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        success = 0
-        failed = 0
-        errors = []
-        
-        # Cache for lookups to reduce database queries
-        email_to_profile = {}
-        username_to_profile = {}
-        employee_id_to_profile = {}
+        if should_use_async_import(len(rows)):
+            from .tasks import process_import_job_task
 
-        # ---------------------------------------------------
-        # Process each row with batch optimization
-        # ---------------------------------------------------
-        for index, row in enumerate(rows, start=2):
-            try:
-                # ---------------------------------------------------
-                # Required field: Email
-                # ---------------------------------------------------
-                email = str(row.get('email', '')).strip().lower()
+            job = ImportJob.objects.create(
+                organization=organization,
+                created_by=request.user,
+                job_type=ImportJob.JOB_USERS,
+                source_filename=uploaded_file.name,
+                row_count=len(rows),
+            )
+            job.input_file.save(
+                uploaded_file.name,
+                ContentFile(decoded_file.encode("utf-8")),
+                save=True,
+            )
+            process_import_job_task.delay(job.id)
+            record_audit(
+                request,
+                "user_setup_upload_queued",
+                {"job_id": job.id, "rows": len(rows), "filename": uploaded_file.name},
+            )
+            return Response(
+                {
+                    "message": "Import queued for background processing",
+                    "async": True,
+                    "job_id": job.id,
+                    "status": job.status,
+                    "row_count": len(rows),
+                },
+                status=status.HTTP_202_ACCEPTED,
+            )
 
-                if not email:
-                    raise Exception('Email is required')
-
-                role_val = str(row.get('role', '')).strip()
-                employee_id_val = str(row.get('employee_id', '')).strip()
-                name_val = str(row.get('name', '')).strip()
-                if not role_val:
-                    raise Exception('role is required')
-                if not employee_id_val:
-                    raise Exception('employee_id is required')
-                if not name_val:
-                    raise Exception('name is required')
-
-                # ---------------------------------------------------
-                # Boolean conversion for enable_login
-                # Accepts: yes, true, 1
-                # ---------------------------------------------------
-                enable_login = str(
-                    row.get('enable_login', 'False')
-                ).strip().lower() in ['true', '1', 'yes']
-
-                # ---------------------------------------------------
-                # Numeric conversion
-                # ---------------------------------------------------
-                personal_target = row.get('personal_target', 0)
-                if personal_target in ['', None]:
-                    personal_target = 0
-                personal_target = float(personal_target)
-
-                split_percentage = row.get('split_percentage', 100)
-                if split_percentage in ['', None]:
-                    split_percentage = 100
-                split_percentage = float(split_percentage)
-
-                # ---------------------------------------------------
-                # Date conversion
-                # Supports:
-                # - 12-03-2026
-                # - 12/03/2026
-                # - 2026-03-12
-                # ---------------------------------------------------
-                hire_date = row.get('hire_date', '')
-
-                if hire_date in ['', None]:
-                    hire_date = None
-                else:
-                    hire_date_str = str(hire_date).strip()
-
-                    parsed_date = None
-                    date_formats = [
-                        '%d-%m-%Y',
-                        '%d/%m/%Y',
-                        '%Y-%m-%d',
-                    ]
-
-                    for fmt in date_formats:
-                        try:
-                            parsed_date = datetime.strptime(
-                                hire_date_str,
-                                fmt
-                            ).date()
-                            break
-                        except ValueError:
-                            pass
-
-                    if parsed_date is None:
-                        raise Exception(
-                            f'Invalid hire_date format: {hire_date_str}. '
-                            f'Use DD-MM-YYYY or YYYY-MM-DD.'
-                        )
-
-                    hire_date = parsed_date
-
-                # ---------------------------------------------------
-                # Username for login
-                # Priority:
-                # 1. username column
-                # 2. email
-                # ---------------------------------------------------
-                username = str(
-                    row.get('username', '')
-                ).strip()
-
-                if not username:
-                    username = email
-
-                # ---------------------------------------------------
-                # Create or Update UserProfile
-                # ---------------------------------------------------
-                org = getattr(request, "organization", None)
-                profile_lookup = {"email": email}
-                if org:
-                    profile_lookup["organization"] = org
-
-                profile, created = UserProfile.objects.update_or_create(
-                    **profile_lookup,
-                    defaults={
-                        "organization": org,
-                        # User
-                        'enable_login': enable_login,
-                        'name': name_val,
-                        'role': role_val,
-
-                        # People
-                        'username': username,
-                        'first_name': str(
-                            row.get('first_name', '')
-                        ).strip(),
-                        'last_name': str(
-                            row.get('last_name', '')
-                        ).strip(),
-                        'prefix': str(
-                            row.get('prefix', '')
-                        ).strip(),
-                        'employee_id': employee_id_val,
-                        'hire_date': hire_date,
-                        'personal_target': personal_target,
-                        'personal_currency': str(
-                            row.get('personal_currency', 'INR')
-                        ).strip(),
-                        'business_group': str(
-                            row.get('business_group', 'India')
-                        ).strip(),
-
-                        # Title
-                        'title': str(
-                            row.get('title', '')
-                        ).strip(),
-                        'pay_period_type': str(
-                            row.get('pay_period_type', 'Monthly')
-                        ).strip(),
-
-                        # Position
-                        'position_name': str(
-                            row.get('position_name', '')
-                        ).strip(),
-                        'position_title': str(
-                            row.get('position_title', '')
-                        ).strip(),
-                    }
-                )
-                
-                # Update cache
-                email_to_profile[email] = profile
-                username_to_profile[username] = profile
-                if profile.employee_id:
-                    employee_id_to_profile[profile.employee_id] = profile
-
-                # ---------------------------------------------------
-                # Create Django Login User
-                #
-                # If enable_login = yes/true/1,
-                # create a Django auth user.
-                #
-                # Login: password set only if DEFAULT_ONBOARDING_PASSWORD is in .env
-                # ---------------------------------------------------
-                if enable_login:
-                    django_user, user_created = User.objects.get_or_create(
-                        username=username,
-                        defaults={
-                            'email': email,
-                            'first_name': profile.first_name,
-                            'last_name': profile.last_name,
-                            'is_active': True,
-                        }
-                    )
-
-                    # Always update latest details
-                    django_user.email = email
-                    django_user.first_name = profile.first_name
-                    django_user.last_name = profile.last_name
-                    django_user.is_active = True
-
-                    _apply_onboarding_password(django_user, user_created)
-                    django_user.save()
-
-                # ---------------------------------------------------
-                # Create Hierarchy Relationship
-                # Lookup by username, employee_id, or email
-                # Uses cache to reduce database queries
-                # ---------------------------------------------------
-                parent_value = str(
-                    row.get('parent_participant', '')
-                ).strip()
-
-                child_value = str(
-                    row.get('child_participant', '')
-                ).strip()
-
-                if parent_value and child_value:
-                    # Try cache first, then database
-                    parent_profile = (
-                        username_to_profile.get(parent_value)
-                        or employee_id_to_profile.get(parent_value)
-                        or email_to_profile.get(parent_value)
-                        or UserProfile.objects.filter(
-                            username=parent_value
-                        ).first()
-                        or UserProfile.objects.filter(
-                            employee_id=parent_value
-                        ).first()
-                        or UserProfile.objects.filter(
-                            email=parent_value
-                        ).first()
-                    )
-
-                    child_profile = (
-                        username_to_profile.get(child_value)
-                        or employee_id_to_profile.get(child_value)
-                        or email_to_profile.get(child_value)
-                        or UserProfile.objects.filter(
-                            username=child_value
-                        ).first()
-                        or UserProfile.objects.filter(
-                            employee_id=child_value
-                        ).first()
-                        or UserProfile.objects.filter(
-                            email=child_value
-                        ).first()
-                    )
-
-                    if parent_profile and child_profile:
-                        HierarchyRelationship.objects.update_or_create(
-                            parent_participant=parent_profile,
-                            child_participant=child_profile,
-                            defaults={
-                                'split_percentage': split_percentage,
-                                'is_active': True,
-                            }
-                        )
-
-                # ---------------------------------------------------
-                # Row processed successfully
-                # ---------------------------------------------------
-                success += 1
-
-            except Exception as e:
-                failed += 1
-                errors.append({
-                    'row': index,
-                    'email': row.get('email', ''),
-                    'error': str(e),
-                })
-                logger.error(
-                    f"Error processing row {index}: {str(e)}"
-                )
-
-        # ---------------------------------------------------
-        # Final response
-        # ---------------------------------------------------
+        result = process_users_csv(organization, decoded_file)
         payload = {
             "message": "Upload completed successfully",
-            "success": success,
-            "failed": failed,
-            "errors": errors[:20],
+            **result,
         }
         if getattr(settings, "DEFAULT_ONBOARDING_PASSWORD", ""):
             payload["note"] = (
@@ -994,7 +752,11 @@ class UserProfileUploadView(APIView):
         record_audit(
             request,
             "user_setup_upload",
-            {"success": success, "failed": failed, "filename": uploaded_file.name},
+            {
+                "success": result["success"],
+                "failed": result["failed"],
+                "filename": uploaded_file.name,
+            },
         )
         return Response(payload)
 

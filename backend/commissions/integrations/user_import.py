@@ -54,10 +54,20 @@ def _find_existing_profile(organization, email, crm_user_id="", crm_alt_user_id=
     return None
 
 
-def process_users_rows(organization, rows, *, allow_updates=True):
+def process_users_rows(
+    organization,
+    rows,
+    *,
+    allow_updates=True,
+    login_via_invite=True,
+    strict_csv=False,
+):
     """
     Import UserProfile rows from dicts (CSV / CRM column names).
     Returns {success, failed, errors, total_rows}.
+
+    strict_csv: require employee_id + role (CSV upload contract).
+    login_via_invite: CRM sends invite emails; CSV uses direct onboarding password.
     """
     success = 0
     failed = 0
@@ -78,6 +88,12 @@ def process_users_rows(organization, rows, *, allow_updates=True):
             crm_user_id_val = str(row.get("crm_user_id", "")).strip()
             crm_alt_user_id_val = str(row.get("crm_alt_user_id", "")).strip()
             name_val = str(row.get("name", "")).strip()
+
+            if strict_csv:
+                if not str(row.get("role", "")).strip():
+                    raise ValueError("role is required")
+                if not employee_id_val:
+                    raise ValueError("employee_id is required")
 
             if organization and (crm_user_id_val or crm_alt_user_id_val):
                 existing_by_crm = _find_existing_profile(
@@ -196,23 +212,37 @@ def process_users_rows(organization, rows, *, allow_updates=True):
                 employee_id_to_profile[profile.employee_id] = profile
 
             if enable_login:
-                from ..invites import create_user_invite
+                if login_via_invite:
+                    from ..invites import create_user_invite
 
-                create_user_invite(profile)
+                    create_user_invite(profile)
+                else:
+                    from ..auth_utils import provision_login_user
+
+                    provision_login_user(profile)
 
             parent_value = str(row.get("parent_participant", "")).strip()
             child_value = str(row.get("child_participant", "")).strip()
             if parent_value and child_value:
-                parent_profile = (
-                    username_to_profile.get(parent_value)
-                    or employee_id_to_profile.get(parent_value)
-                    or email_to_profile.get(parent_value)
-                )
-                child_profile = (
-                    username_to_profile.get(child_value)
-                    or employee_id_to_profile.get(child_value)
-                    or email_to_profile.get(child_value)
-                )
+                org_filter = _org_profile_filter(organization)
+
+                def _resolve_hierarchy_ref(value):
+                    profile_ref = (
+                        username_to_profile.get(value)
+                        or employee_id_to_profile.get(value)
+                        or email_to_profile.get(value)
+                    )
+                    if profile_ref:
+                        return profile_ref
+                    qs = UserProfile.objects.filter(org_filter)
+                    return (
+                        qs.filter(username=value).first()
+                        or qs.filter(employee_id=value).first()
+                        or qs.filter(email__iexact=value).first()
+                    )
+
+                parent_profile = _resolve_hierarchy_ref(parent_value)
+                child_profile = _resolve_hierarchy_ref(child_value)
                 if parent_profile and child_profile:
                     HierarchyRelationship.objects.update_or_create(
                         parent_participant=parent_profile,

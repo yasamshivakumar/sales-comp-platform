@@ -80,7 +80,7 @@ function OrderUpload({ onUploadSuccess }) {
         } else if (skipped > 0) {
           warning({
             title: "Partial import",
-            message: `${skipped} order(s) were saved without a commission. Check User Setup and compensation plans.`,
+            message: `${skipped} order(s) were saved without a commission. Orders import as Booked — mark Success in the Order queue when ready (same workflow as CRM sync).`,
           });
         } else {
           success({

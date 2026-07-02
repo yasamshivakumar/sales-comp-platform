@@ -151,6 +151,27 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
     }
   };
 
+  const formatSyncResult = (result) => {
+    if (!result) return "Sync done.";
+    const skipped = result.skipped ?? result.skipped_orders?.length ?? 0;
+    const unresolved = result.unresolved_orders?.length ?? 0;
+    const commissionsCreated = result.commissions_created ?? 0;
+    const commissionsSkipped = result.commissions_skipped ?? 0;
+    let text =
+      `Sync done: ${result.success ?? 0} succeeded, ${result.failed ?? 0} failed`;
+    if (skipped) text += `, ${skipped} skipped (archived CRM owners)`;
+    if (unresolved) text += `, ${unresolved} unresolved owner mapping(s)`;
+    if (commissionsCreated || commissionsSkipped) {
+      text += `. Commissions: ${commissionsCreated} created`;
+      if (commissionsSkipped) {
+        text += `, ${commissionsSkipped} pending (orders import as Booked — mark Success in Order queue)`;
+      }
+    } else if (result.success > 0) {
+      text += ". Orders import as Booked — mark Success in Order queue to calculate commissions (same as CSV).";
+    }
+    return `${text}.`;
+  };
+
   const runAction = async (action) => {
     if (!selectedId) return;
     setMessage("");
@@ -163,19 +184,13 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
       if (actionPath === "sync/full") {
         const users = res.data.users?.result;
         const orders = res.data.orders?.result;
-        const skipped = orders?.skipped ?? orders?.skipped_orders?.length ?? 0;
         setMessage(
-          `Full sync done. Users: ${users?.success ?? 0} ok. Orders: ${orders?.success ?? 0} ok, ` +
-            `${orders?.commissions_created ?? 0} commissions created` +
-            (skipped ? `, ${skipped} skipped (removed HubSpot owners).` : ".")
+          `Full sync done. Users: ${users?.success ?? 0} ok. ${formatSyncResult(orders)}`
         );
       } else {
-        const result = res.data.result;
-        const skipped = result?.skipped ?? result?.skipped_orders?.length ?? 0;
         setMessage(
           actionPath.includes("sync")
-            ? `Sync done: ${result?.success ?? 0} succeeded, ${result?.failed ?? 0} failed` +
-              (skipped ? `, ${skipped} skipped (removed HubSpot owners).` : ".")
+            ? formatSyncResult(res.data.result)
             : res.data.message || "OK"
         );
       }
@@ -228,7 +243,8 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
               {inline ? "Connect CRM" : "CRM integrations"}
             </h2>
             <p className="integrations-panel__subtitle">
-              Pull users and deals from HubSpot or Salesforce. HubSpot: owners become Incentra employees (with auto employee id), then closed-won deals map to those employees and calculate commissions.
+              Pull users and deals from HubSpot or Salesforce — same import pipeline as CSV uploads.
+              Synced orders land in the Order queue as Booked; mark Success to calculate commissions.
             </p>
           </div>
           {onClose && (

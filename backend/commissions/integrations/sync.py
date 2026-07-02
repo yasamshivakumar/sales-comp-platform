@@ -46,6 +46,16 @@ def _normalize_order_rows(rows):
     return normalized
 
 
+def _sync_organization(integration):
+    org = integration.organization
+    if not org:
+        raise ValueError(
+            "Integration has no organization assigned. "
+            "Set organization on the integration before syncing."
+        )
+    return org
+
+
 def _resolve_order_employee_ids(organization, rows, integration=None, owner_index=None):
     """Map CRM owner ids from deals to Incentra employee_id before order import."""
     section = _section_config(integration, "orders") if integration else {}
@@ -54,6 +64,7 @@ def _resolve_order_employee_ids(organization, rows, integration=None, owner_inde
 
     resolved = []
     skipped = []
+    unresolved = []
     for row in rows:
         item = dict(row)
         if str(item.get("employee_id", "")).strip():
@@ -65,6 +76,16 @@ def _resolve_order_employee_ids(organization, rows, integration=None, owner_inde
             or item.get("hubspot_owner_id")
             or item.get("crm_user_id")
         )
+        if not str(crm_owner_id or "").strip():
+            unresolved.append({
+                "order_id": item.get("order_id") or item.get("id"),
+                "reason": (
+                    "No employee_id or CRM owner id on order row. "
+                    "Map crm_owner_id in integration config or include employee_id."
+                ),
+            })
+            continue
+
         owner_id = normalize_hubspot_id(crm_owner_id)
         remap_target = remap.get(str(crm_owner_id)) or remap.get(owner_id)
         if remap_target:
@@ -102,13 +123,18 @@ def _resolve_order_employee_ids(organization, rows, integration=None, owner_inde
         )
         if not employee_id:
             hint = resolve_error_hint(crm_owner_id, integration, owner_index)
-            raise ValueError(
-                f"No Incentra employee mapped for CRM owner id {crm_owner_id}."
-                f"{hint}"
-            )
+            unresolved.append({
+                "order_id": item.get("order_id") or item.get("id"),
+                "crm_owner_id": crm_owner_id,
+                "reason": (
+                    f"No Incentra employee mapped for CRM owner id {crm_owner_id}."
+                    f"{hint}"
+                ),
+            })
+            continue
         item["employee_id"] = employee_id
         resolved.append(item)
-    return resolved, skipped
+    return resolved, skipped, unresolved
 
 
 def run_pull_sync(integration, sync_type, triggered_by=None, limit=None):
@@ -129,11 +155,7 @@ def run_pull_sync(integration, sync_type, triggered_by=None, limit=None):
         mapped = map_records(raw_records, field_map, defaults=defaults)
         log.records_fetched = len(mapped)
 
-        org = integration.organization
-        if not org:
-            from ..tenants import get_default_organization
-
-            org = get_default_organization()
+        org = _sync_organization(integration)
         if sync_type == IntegrationSyncLog.SYNC_USERS:
             result = process_users_rows(org, mapped)
             result["fetched"] = [
@@ -157,7 +179,7 @@ def run_pull_sync(integration, sync_type, triggered_by=None, limit=None):
             )
             if owner_index:
                 repair_hubspot_profile_mappings(org, owner_index)
-            mapped, skipped_orders = _resolve_order_employee_ids(
+            mapped, skipped_orders, unresolved_orders = _resolve_order_employee_ids(
                 org,
                 mapped,
                 integration=integration,
@@ -167,6 +189,9 @@ def run_pull_sync(integration, sync_type, triggered_by=None, limit=None):
             if skipped_orders:
                 result["skipped_orders"] = skipped_orders
                 result["skipped"] = len(skipped_orders)
+            if unresolved_orders:
+                result["unresolved_orders"] = unresolved_orders
+                result["failed"] = result.get("failed", 0) + len(unresolved_orders)
             integration.last_order_sync_at = timezone.now()
             integration.save(update_fields=["last_order_sync_at", "updated_at"])
         else:
@@ -216,14 +241,25 @@ def run_webhook_import(integration, sync_type, payload, triggered_by=None):
         )
         mapped = map_records(raw_records, section.get("field_map") or {}, section.get("defaults"))
         log.records_fetched = len(mapped)
-        org = integration.organization
+        org = _sync_organization(integration)
 
         if sync_type == IntegrationSyncLog.SYNC_WEBHOOK_USERS:
             result = process_users_rows(org, mapped)
             integration.last_user_sync_at = timezone.now()
             integration.save(update_fields=["last_user_sync_at", "updated_at"])
         else:
+            mapped, skipped_orders, unresolved_orders = _resolve_order_employee_ids(
+                org,
+                mapped,
+                integration=integration,
+            )
             result = process_orders_rows(org, _normalize_order_rows(mapped))
+            if skipped_orders:
+                result["skipped_orders"] = skipped_orders
+                result["skipped"] = len(skipped_orders)
+            if unresolved_orders:
+                result["unresolved_orders"] = unresolved_orders
+                result["failed"] = result.get("failed", 0) + len(unresolved_orders)
             integration.last_order_sync_at = timezone.now()
             integration.save(update_fields=["last_order_sync_at", "updated_at"])
 

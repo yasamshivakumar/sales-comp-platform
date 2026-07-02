@@ -212,7 +212,13 @@ def process_users_csv(organization, decoded_csv):
 
     csv_reader = csv.DictReader(io.StringIO(decoded_csv))
     rows = list(csv_reader)
-    return process_users_rows(organization, rows, allow_updates=False)
+    return process_users_rows(
+        organization,
+        rows,
+        allow_updates=True,
+        login_via_invite=False,
+        strict_csv=True,
+    )
 
 
 def run_import_job(job_id):
