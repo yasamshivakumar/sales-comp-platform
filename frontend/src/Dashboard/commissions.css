@@ -335,6 +335,28 @@
 
 [data-theme="dark"] .commissions-page {
   --comm-row-hover: rgba(0, 112, 210, 0.1);
+  --comm-header-bg: var(--bg-light);
+}
+
+[data-theme="dark"] .commissions-page .commissions-toolbar .search-bar {
+  background: rgba(15, 23, 42, 0.5);
+  border-color: var(--border-color);
+}
+
+[data-theme="dark"] .commissions-page .commissions-toolbar .input,
+[data-theme="dark"] .commissions-page .commissions-toolbar .search-bar__input {
+  background: rgba(15, 23, 42, 0.5);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+[data-theme="dark"] .commissions-table thead th {
+  background: var(--bg-light);
+  color: var(--text-muted);
+}
+
+[data-theme="dark"] .commissions-table tbody tr:hover td {
+  background: var(--comm-row-hover);
 }
 
 [data-theme="dark"] .commissions-table__emp-id {

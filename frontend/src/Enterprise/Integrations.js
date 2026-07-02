@@ -515,7 +515,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
             <>
               <h4 style={{ marginTop: "1.25rem" }}>CRM-linked employees in Incentra</h4>
               {syncedUsers.length === 0 ? (
-                <p style={{ color: "#64748b", marginBottom: "1rem" }}>
+                <p style={{ color: "var(--text-muted)", marginBottom: "1rem" }}>
                   No CRM-linked employees yet. Run <strong>Sync users</strong> to import HubSpot owners.
                 </p>
               ) : (
@@ -576,7 +576,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
                           <td><code>{row.employee_id || "—"}</code></td>
                           <td>
                             {row.status === "failed" ? (
-                              <span style={{ color: "#b45309" }} title={row.error}>
+                              <span style={{ color: "var(--warning-color)" }} title={row.error}>
                                 failed{row.error ? `: ${row.error}` : ""}
                               </span>
                             ) : (
@@ -589,7 +589,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
                   </table>
                 </>
               ) : (
-                <p style={{ color: "#64748b" }}>
+                <p style={{ color: "var(--text-muted)" }}>
                   No user sync run yet for this connection.
                 </p>
               )}
@@ -622,7 +622,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
                             (log.result.skipped ? ` / ${log.result.skipped} skipped` : "")
                           : log.error_message || "—"}
                         {log.result?.skipped_orders?.length > 0 && (
-                          <div style={{ marginTop: "0.35rem", fontSize: "0.85rem", color: "#64748b" }}>
+                          <div style={{ marginTop: "0.35rem", fontSize: "0.85rem", color: "var(--text-muted)" }}>
                             {log.result.skipped_orders.map((item, idx) => (
                               <div key={`${log.id}-skip-${idx}`}>
                                 Order {item.order_id || "—"}: {item.reason}
@@ -632,7 +632,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
                           </div>
                         )}
                         {log.result?.errors?.length > 0 && (
-                          <div style={{ marginTop: "0.35rem", fontSize: "0.85rem", color: "#b45309" }}>
+                          <div style={{ marginTop: "0.35rem", fontSize: "0.85rem", color: "var(--warning-color)" }}>
                             {log.result.errors.map((item, idx) => (
                               <div key={`${log.id}-err-${idx}`}>
                                 Row {item.row}

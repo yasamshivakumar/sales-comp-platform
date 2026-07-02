@@ -27,6 +27,7 @@
   --bg-dark: #f8fafc;
   --bg-darker: #ffffff;
   --bg-card: #ffffff;
+  --bg-white: #ffffff;
   --bg-light: #f1f5f9;
   --bg-hover: #e0e7ff;
   
@@ -63,6 +64,7 @@
   --bg-dark: #020617;
   --bg-darker: #0f172a;
   --bg-card: #111827;
+  --bg-white: #111827;
   --bg-light: #1e293b;
   --bg-hover: #1e3a8a;
   --text-primary: #ffffff;
@@ -800,15 +802,17 @@ body.sidebar-collapsed {
 }
 
 [data-theme="dark"] h2 {
-  color: var(--primary-light);
+  color: var(--text-primary);
 }
 
 [data-theme="dark"] a {
   color: var(--primary-light);
 }
 
-[data-theme="dark"] th {
-  color: var(--primary-light);
+[data-theme="dark"] .enterprise-table th,
+[data-theme="dark"] .disputes-table th,
+[data-theme="dark"] .commissions-table th {
+  color: var(--text-muted);
 }
 
 [data-theme="dark"] .text-primary {
@@ -1404,7 +1408,7 @@ body.sidebar-collapsed {
 }
 
 [data-theme="dark"] .panel {
-  background: rgba(30, 41, 59, 0.55);
+  background: #111827;
   border-color: rgba(148, 163, 184, 0.12);
 }
 
@@ -1451,6 +1455,12 @@ body.sidebar-collapsed {
   background: rgba(59, 130, 246, 0.12);
   color: var(--text-secondary);
   font-size: 14px;
+}
+
+[data-theme="dark"] .banner {
+  background: rgba(59, 130, 246, 0.14);
+  border-color: rgba(59, 130, 246, 0.35);
+  color: var(--text-secondary);
 }
 
 .filter-row {

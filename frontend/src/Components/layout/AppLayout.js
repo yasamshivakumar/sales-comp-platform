@@ -728,8 +728,16 @@ function AppLayout({ children }) {
         maxWidth="lg"
         scroll="paper"
         aria-labelledby="integrations-dialog-title"
+        PaperProps={{
+          sx: {
+            bgcolor: "background.paper",
+            backgroundImage: "none",
+            border: "1px solid",
+            borderColor: "divider",
+          },
+        }}
       >
-        <DialogContent sx={{ p: { xs: 2, sm: 3 } }}>
+        <DialogContent sx={{ p: { xs: 2, sm: 3 }, bgcolor: "background.paper" }}>
           <Integrations
             embedded
             inline

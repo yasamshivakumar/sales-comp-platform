@@ -114,6 +114,41 @@ select:focus {
   box-shadow: 0 0 0 3px rgba(1, 118, 211, 0.15) !important;
 }
 
+[data-theme="dark"] input:not(.search-bar__input):not([type="checkbox"]):not([type="radio"]),
+[data-theme="dark"] textarea,
+[data-theme="dark"] select,
+[data-theme="dark"] .input {
+  background: rgba(15, 23, 42, 0.6) !important;
+  border-color: rgba(148, 163, 184, 0.24) !important;
+  color: #f3f4f6 !important;
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] input:not(.search-bar__input):not([type="checkbox"]):not([type="radio"]):focus,
+[data-theme="dark"] textarea:focus,
+[data-theme="dark"] select:focus,
+[data-theme="dark"] .input:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2) !important;
+}
+
+[data-theme="dark"] .panel__title,
+[data-theme="dark"] .integrations-panel__title {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .integrations-panel__subtitle {
+  color: var(--text-muted);
+}
+
+[data-theme="dark"] .enterprise-form-row label {
+  color: var(--text-secondary);
+}
+
 table {
   font-size: 0.875rem;
   width: 100%;

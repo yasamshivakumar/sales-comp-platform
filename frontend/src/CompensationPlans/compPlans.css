@@ -141,3 +141,17 @@
   margin: 8px 0 0;
   padding-left: 18px;
 }
+
+[data-theme="dark"] .comp-plans-table th {
+  background: var(--bg-light);
+  color: var(--text-muted);
+}
+
+[data-theme="dark"] .comp-plans-table tbody tr:hover td {
+  background: rgba(99, 102, 241, 0.1);
+}
+
+[data-theme="dark"] .ai-plan-builder__result {
+  background: rgba(27, 150, 255, 0.1);
+  border-color: rgba(27, 150, 255, 0.25);
+}

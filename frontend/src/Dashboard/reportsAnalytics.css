@@ -1171,6 +1171,29 @@
   background: rgba(27, 150, 255, 0.04);
 }
 
+[data-theme="dark"] .ra-ai-insights__group {
+  background: rgba(11, 18, 32, 0.72);
+  border-color: rgba(27, 150, 255, 0.2);
+}
+
+[data-theme="dark"] .ra-ai-insights__error {
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .ra-btn--ghost {
+  color: var(--ra-text-muted);
+  border-color: var(--ra-panel-border);
+}
+
+[data-theme="dark"] .ra-btn--ghost:hover:not(:disabled) {
+  color: #93c5fd;
+  background: rgba(27, 150, 255, 0.1);
+}
+
+[data-theme="dark"] .ra-kpi {
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+}
+
 /* Compact performance view + live refresh */
 .ra-toolbar__title-block {
   flex: 1 1 100%;

@@ -183,7 +183,7 @@
   border-radius: 4px;
   padding: 10px 12px;
   font-size: 13px;
-  background: #fff;
+  background: var(--x-surface);
   color: var(--x-text);
 }
 
@@ -204,7 +204,7 @@
   margin: 0;
   padding: 4px 0;
   list-style: none;
-  background: #fff;
+  background: var(--x-surface);
   border: 1px solid var(--x-border);
   border-radius: 4px;
   box-shadow: 0 8px 24px rgba(22, 50, 92, 0.12);
@@ -331,7 +331,7 @@
   font-size: 13px;
   font-weight: 600;
   border: 1px solid var(--x-border);
-  background: #fff;
+  background: var(--x-surface);
   color: var(--x-text);
 }
 
@@ -366,7 +366,7 @@
 .orders-upload-zone:hover,
 .orders-upload-zone--active {
   border-color: var(--x-primary);
-  background: #f0f6fc;
+  background: var(--x-row-hover);
 }
 
 .orders-upload-zone__icon {
@@ -777,4 +777,21 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+[data-theme="dark"] .employee-search__input,
+[data-theme="dark"] .employee-search__list {
+  background: var(--x-surface);
+  color: var(--x-text);
+  border-color: var(--x-border);
+}
+
+[data-theme="dark"] .orders-page .btn-secondary {
+  background: transparent;
+  color: var(--x-text);
+  border-color: var(--x-border);
+}
+
+[data-theme="dark"] .orders-page .btn-secondary:hover:not(:disabled) {
+  background: var(--x-row-hover);
 }
