@@ -201,7 +201,7 @@ def _resolve_from_owner_meta(organization, owner_meta, *, auto_import=False):
             last_name__iexact=last_name,
         ).first()
 
-    if not profile and auto_import:
+    if not profile and auto_import and not owner_meta.get("archived"):
         result = _import_hubspot_owner_row(organization, owner_meta)
         if result.get("success"):
             profile = _find_profile_by_email(organization, email)
@@ -232,6 +232,24 @@ def _lookup_owner_meta(owner_id, integration, owner_index):
     return None
 
 
+def resolve_remap_target(organization, target, integration=None, owner_index=None):
+    """Resolve archived_owner_remap value to an Incentra employee_id."""
+    target = str(target or "").strip()
+    if not target:
+        return None
+    if target.upper().startswith("INC"):
+        profile = _find_profile(organization, employee_id=target)
+        return _ensure_profile_employee_id(profile, organization)
+    return resolve_crm_owner_to_employee_id(
+        organization,
+        target,
+        integration=integration,
+        owner_index=owner_index,
+        auto_import=False,
+        match_archived_owners=False,
+    )
+
+
 def resolve_crm_owner_to_employee_id(
     organization,
     crm_owner_id,
@@ -239,6 +257,7 @@ def resolve_crm_owner_to_employee_id(
     owner_index=None,
     *,
     auto_import=False,
+    match_archived_owners=False,
 ):
     """Map a CRM owner/user id to the Incentra employee_id."""
     owner_id = normalize_hubspot_id(crm_owner_id)
@@ -252,6 +271,9 @@ def resolve_crm_owner_to_employee_id(
         return _ensure_profile_employee_id(profile, organization)
 
     owner_meta = _lookup_owner_meta(owner_id, integration, owner_index)
+    if owner_meta and owner_meta.get("archived") and not match_archived_owners:
+        return None
+
     employee_id = _resolve_from_owner_meta(
         organization,
         owner_meta,
@@ -260,7 +282,7 @@ def resolve_crm_owner_to_employee_id(
     if employee_id:
         return employee_id
 
-    if auto_import and owner_meta:
+    if auto_import and owner_meta and not owner_meta.get("archived"):
         return _resolve_from_owner_meta(
             organization,
             owner_meta,
@@ -280,22 +302,27 @@ def resolve_error_hint(owner_id, integration, owner_index):
             "or reassign the deal in HubSpot to an active owner."
         )
     email = meta.get("email") or ""
-    user_id = normalize_hubspot_id(meta.get("userId"))
     owner_id = normalize_hubspot_id(meta.get("id"))
-    archived_note = " (archived in HubSpot)" if meta.get("archived") else ""
+    if meta.get("archived"):
+        return (
+            f" Deal owner {owner_id} ({email or 'unknown'}) is archived/removed in HubSpot. "
+            "Reassign the deal to an active owner in HubSpot, or add archived_owner_remap in integration config "
+            '(e.g. {"165817923": "INC0003-00001"}).'
+        )
+    user_id = normalize_hubspot_id(meta.get("userId"))
     profile = _find_profile_by_email(None, str(email).strip().lower()) if email else None
     if profile and not str(profile.employee_id or "").strip():
         return (
-            f" HubSpot owner email={email or 'n/a'}, ownerId={owner_id or 'n/a'}{archived_note}. "
+            f" HubSpot owner email={email or 'n/a'}, ownerId={owner_id or 'n/a'}. "
             f"Found Incentra profile for {email} but it has no employee id yet; retry after deploy."
         )
     if profile:
         return (
-            f" HubSpot owner email={email or 'n/a'}, ownerId={owner_id or 'n/a'}{archived_note}. "
+            f" HubSpot owner email={email or 'n/a'}, ownerId={owner_id or 'n/a'}. "
             f"Matched {email} but could not assign an employee id."
         )
     return (
         f" HubSpot owner email={email or 'n/a'}, ownerId={owner_id or 'n/a'}, "
-        f"userId={user_id or 'n/a'}{archived_note}. "
+        f"userId={user_id or 'n/a'}. "
         "Add this email in User Setup or reassign the deal to an active HubSpot owner."
     )

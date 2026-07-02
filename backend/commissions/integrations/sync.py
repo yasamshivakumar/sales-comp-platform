@@ -10,9 +10,12 @@ from ..models import ExternalIntegration, IntegrationSyncLog
 from .base import ConnectorError
 from .employee_ids import (
     build_hubspot_owner_index,
+    normalize_hubspot_id,
     repair_hubspot_profile_mappings,
     resolve_crm_owner_to_employee_id,
     resolve_error_hint,
+    resolve_remap_target,
+    _lookup_owner_meta,
 )
 from .mapper import map_records, normalize_date_value
 from .registry import get_connector
@@ -45,31 +48,67 @@ def _normalize_order_rows(rows):
 
 def _resolve_order_employee_ids(organization, rows, integration=None, owner_index=None):
     """Map CRM owner ids from deals to Incentra employee_id before order import."""
+    section = _section_config(integration, "orders") if integration else {}
+    skip_archived = section.get("skip_archived_owners", True)
+    remap = section.get("archived_owner_remap") or {}
+
     resolved = []
+    skipped = []
     for row in rows:
         item = dict(row)
-        if not str(item.get("employee_id", "")).strip():
-            crm_owner_id = (
-                item.get("crm_owner_id")
-                or item.get("hubspot_owner_id")
-                or item.get("crm_user_id")
-            )
-            employee_id = resolve_crm_owner_to_employee_id(
+        if str(item.get("employee_id", "")).strip():
+            resolved.append(item)
+            continue
+
+        crm_owner_id = (
+            item.get("crm_owner_id")
+            or item.get("hubspot_owner_id")
+            or item.get("crm_user_id")
+        )
+        owner_id = normalize_hubspot_id(crm_owner_id)
+        remap_target = remap.get(str(crm_owner_id)) or remap.get(owner_id)
+        if remap_target:
+            employee_id = resolve_remap_target(
                 organization,
-                crm_owner_id,
+                remap_target,
                 integration=integration,
                 owner_index=owner_index,
-                auto_import=integration is not None and integration.provider == "hubspot",
             )
-            if not employee_id:
-                hint = resolve_error_hint(crm_owner_id, integration, owner_index)
-                raise ValueError(
-                    f"No Incentra employee mapped for CRM owner id {crm_owner_id}."
-                    f"{hint}"
-                )
-            item["employee_id"] = employee_id
+            if employee_id:
+                item["employee_id"] = employee_id
+                resolved.append(item)
+                continue
+
+        owner_meta = _lookup_owner_meta(owner_id, integration, owner_index)
+        if owner_meta and owner_meta.get("archived") and skip_archived:
+            skipped.append({
+                "order_id": item.get("order_id") or item.get("id"),
+                "crm_owner_id": owner_id,
+                "owner_email": owner_meta.get("email"),
+                "reason": (
+                    "Deal owner removed/archived in HubSpot; skipped. "
+                    "Reassign in HubSpot or set archived_owner_remap."
+                ),
+            })
+            continue
+
+        employee_id = resolve_crm_owner_to_employee_id(
+            organization,
+            crm_owner_id,
+            integration=integration,
+            owner_index=owner_index,
+            auto_import=False,
+            match_archived_owners=False,
+        )
+        if not employee_id:
+            hint = resolve_error_hint(crm_owner_id, integration, owner_index)
+            raise ValueError(
+                f"No Incentra employee mapped for CRM owner id {crm_owner_id}."
+                f"{hint}"
+            )
+        item["employee_id"] = employee_id
         resolved.append(item)
-    return resolved
+    return resolved, skipped
 
 
 def run_pull_sync(integration, sync_type, triggered_by=None, limit=None):
@@ -118,13 +157,16 @@ def run_pull_sync(integration, sync_type, triggered_by=None, limit=None):
             )
             if owner_index:
                 repair_hubspot_profile_mappings(org, owner_index)
-            mapped = _resolve_order_employee_ids(
+            mapped, skipped_orders = _resolve_order_employee_ids(
                 org,
                 mapped,
                 integration=integration,
                 owner_index=owner_index,
             )
             result = process_orders_rows(org, _normalize_order_rows(mapped))
+            if skipped_orders:
+                result["skipped_orders"] = skipped_orders
+                result["skipped"] = len(skipped_orders)
             integration.last_order_sync_at = timezone.now()
             integration.save(update_fields=["last_order_sync_at", "updated_at"])
         else:

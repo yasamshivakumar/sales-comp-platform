@@ -114,6 +114,8 @@ DEFAULT_CONFIG = {
         },
         "orders": {
             "deal_stages": ["closedwon"],
+            "skip_archived_owners": True,
+            "archived_owner_remap": {},
             "field_map": {
                 "order_id": "id",
                 "sales_amount": "amount",

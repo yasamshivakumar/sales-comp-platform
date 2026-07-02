@@ -163,14 +163,19 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
       if (actionPath === "sync/full") {
         const users = res.data.users?.result;
         const orders = res.data.orders?.result;
+        const skipped = orders?.skipped ?? orders?.skipped_orders?.length ?? 0;
         setMessage(
           `Full sync done. Users: ${users?.success ?? 0} ok. Orders: ${orders?.success ?? 0} ok, ` +
-            `${orders?.commissions_created ?? 0} commissions created.`
+            `${orders?.commissions_created ?? 0} commissions created` +
+            (skipped ? `, ${skipped} skipped (removed HubSpot owners).` : ".")
         );
       } else {
+        const result = res.data.result;
+        const skipped = result?.skipped ?? result?.skipped_orders?.length ?? 0;
         setMessage(
           actionPath.includes("sync")
-            ? `Sync done: ${res.data.result?.success ?? 0} succeeded, ${res.data.result?.failed ?? 0} failed.`
+            ? `Sync done: ${result?.success ?? 0} succeeded, ${result?.failed ?? 0} failed` +
+              (skipped ? `, ${skipped} skipped (removed HubSpot owners).` : ".")
             : res.data.message || "OK"
         );
       }
@@ -517,8 +522,19 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
                       <td>{log.records_fetched}</td>
                       <td>
                         {log.result?.success != null
-                          ? `${log.result.success} ok / ${log.result.failed} failed`
+                          ? `${log.result.success} ok / ${log.result.failed} failed` +
+                            (log.result.skipped ? ` / ${log.result.skipped} skipped` : "")
                           : log.error_message || "—"}
+                        {log.result?.skipped_orders?.length > 0 && (
+                          <div style={{ marginTop: "0.35rem", fontSize: "0.85rem", color: "#64748b" }}>
+                            {log.result.skipped_orders.map((item, idx) => (
+                              <div key={`${log.id}-skip-${idx}`}>
+                                Order {item.order_id || "—"}: {item.reason}
+                                {item.owner_email ? ` (${item.owner_email})` : ""}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         {log.result?.errors?.length > 0 && (
                           <div style={{ marginTop: "0.35rem", fontSize: "0.85rem", color: "#b45309" }}>
                             {log.result.errors.map((item, idx) => (
