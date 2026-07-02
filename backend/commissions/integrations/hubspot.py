@@ -75,10 +75,14 @@ class HubSpotConnector(BaseConnector):
         for owner in owners:
             first = (owner.get("firstName") or "").strip()
             last = (owner.get("lastName") or "").strip()
-            full_name = f"{first} {last}".strip() or owner.get("email") or str(owner.get("id", ""))
+            owner_id = str(owner.get("id", "")).strip()
+            email = (owner.get("email") or "").strip()
+            if not email and owner_id:
+                email = f"hubspot-owner-{owner_id}@crm.import"
+            full_name = f"{first} {last}".strip() or email or owner_id
             normalized.append({
-                "id": str(owner.get("id", "")),
-                "email": owner.get("email") or "",
+                "id": owner_id,
+                "email": email,
                 "firstName": first,
                 "lastName": last,
                 "full_name": full_name,

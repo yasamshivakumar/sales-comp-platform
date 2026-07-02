@@ -88,15 +88,22 @@ def process_users_rows(organization, rows, *, allow_updates=True):
             )
 
             profile_lookup = {}
-            if crm_user_id_val and organization:
-                profile_lookup = {
-                    "organization": organization,
-                    "crm_user_id": crm_user_id_val,
-                }
+            existing_by_email = None
+            if organization and email:
+                existing_by_email = UserProfile.objects.filter(
+                    organization=organization,
+                    email__iexact=email,
+                ).first()
+            if organization:
+                profile_lookup["organization"] = organization
+                if existing_by_email:
+                    profile_lookup["email"] = email
+                elif crm_user_id_val:
+                    profile_lookup["crm_user_id"] = crm_user_id_val
+                else:
+                    profile_lookup["email"] = email
             else:
                 profile_lookup = {"email": email}
-                if organization:
-                    profile_lookup["organization"] = organization
 
             territory_id = row.get("territory") or row.get("territory_id")
             defaults = {

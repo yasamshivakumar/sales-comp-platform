@@ -407,6 +407,16 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
                         {log.result?.success != null
                           ? `${log.result.success} ok / ${log.result.failed} failed`
                           : log.error_message || "—"}
+                        {log.result?.errors?.length > 0 && (
+                          <div style={{ marginTop: "0.35rem", fontSize: "0.85rem", color: "#b45309" }}>
+                            {log.result.errors.map((item, idx) => (
+                              <div key={`${log.id}-err-${idx}`}>
+                                Row {item.row}
+                                {item.email ? ` (${item.email})` : ""}: {item.error}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
