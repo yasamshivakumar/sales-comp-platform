@@ -145,7 +145,7 @@ function AppRoutes() {
           }
         />
 
-        <Route path="/integrations" element={<Navigate to="/dashboard?tab=connect" replace />} />
+        <Route path="/integrations" element={<Navigate to="/dashboard?integrations=1" replace />} />
       </Routes>
     </BrowserRouter>
   );

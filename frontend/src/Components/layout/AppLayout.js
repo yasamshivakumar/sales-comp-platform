@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import {
   AppBar,
   Avatar,
@@ -16,9 +16,11 @@ import {
   Stack,
   Toolbar,
   Typography,
+  Tooltip,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
+import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
 import SpaceDashboardOutlinedIcon from "@mui/icons-material/SpaceDashboardOutlined";
 import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalanceWalletOutlined";
@@ -41,6 +43,7 @@ import { useTheme as useAppTheme } from "../../ThemeContext";
 import { enterprise } from "../../theme/muiTheme";
 import AuthTextField from "../AuthTextField";
 import ChangePassword from "../ChangePassword";
+import Integrations from "../../Enterprise/Integrations";
 import { useToast } from "../Toast";
 import "../enterprise.css";
 
@@ -230,7 +233,7 @@ function NavList({ items, location, onNavigate }) {
   );
 }
 
-function AppTopBar({ pageTitle, displayName, initials, profile, onEditProfile }) {
+function AppTopBar({ pageTitle, displayName, initials, profile, onEditProfile, showConnect, onOpenConnect }) {
   const roleLabel = profile?.role || "Workspace user";
   const organizationLabel = profile?.organization_name || profile?.organization_slug || "";
 
@@ -254,69 +257,91 @@ function AppTopBar({ pageTitle, displayName, initials, profile, onEditProfile })
       <Typography variant="subtitle2" color="text.secondary" sx={{ letterSpacing: "0.04em" }}>
         INCENTRA / {pageTitle?.toUpperCase()}
       </Typography>
-      <Box
-        component="button"
-        type="button"
-        onClick={onEditProfile}
-        aria-label="Edit profile details"
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: 1.25,
-          minWidth: 0,
-          px: 1.25,
-          py: 0.65,
-          borderRadius: 999,
-          border: "1px solid",
-          borderColor: "divider",
-          bgcolor: "background.default",
-          boxShadow: "0 8px 24px rgba(15, 23, 42, 0.06)",
-          cursor: "pointer",
-          font: "inherit",
-          textAlign: "inherit",
-          "&:hover": {
-            borderColor: "primary.main",
-            transform: "none",
-          },
-          "&:focus-visible": {
-            outline: "2px solid",
-            outlineColor: "primary.main",
-            outlineOffset: 2,
-          },
-        }}
-      >
-        <Box sx={{ minWidth: 0, textAlign: "right" }}>
-          <Typography
-            variant="body2"
-            color="text.primary"
-            fontWeight={800}
-            noWrap
-            sx={{ maxWidth: 180, lineHeight: 1.15 }}
-          >
-            {displayName}
-          </Typography>
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            noWrap
-            sx={{ display: "block", maxWidth: 180, lineHeight: 1.15 }}
-          >
-            {organizationLabel ? `${roleLabel} · ${organizationLabel}` : roleLabel}
-          </Typography>
-        </Box>
-        <Avatar
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        {showConnect && (
+          <Tooltip title="Connect CRM">
+            <IconButton
+              onClick={onOpenConnect}
+              aria-label="Connect CRM"
+              sx={{
+                border: "1px solid",
+                borderColor: "divider",
+                bgcolor: "background.default",
+                boxShadow: "0 8px 24px rgba(15, 23, 42, 0.06)",
+                "&:hover": {
+                  borderColor: "primary.main",
+                  bgcolor: "action.hover",
+                },
+              }}
+            >
+              <HubOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
+        <Box
+          component="button"
+          type="button"
+          onClick={onEditProfile}
+          aria-label="Edit profile details"
           sx={{
-            width: 36,
-            height: 36,
-            fontSize: 12,
-            fontWeight: 800,
-            bgcolor: "primary.main",
-            color: "primary.contrastText",
-            boxShadow: "0 6px 16px rgba(25, 118, 210, 0.28)",
+            display: "flex",
+            alignItems: "center",
+            gap: 1.25,
+            minWidth: 0,
+            px: 1.25,
+            py: 0.65,
+            borderRadius: 999,
+            border: "1px solid",
+            borderColor: "divider",
+            bgcolor: "background.default",
+            boxShadow: "0 8px 24px rgba(15, 23, 42, 0.06)",
+            cursor: "pointer",
+            font: "inherit",
+            textAlign: "inherit",
+            "&:hover": {
+              borderColor: "primary.main",
+              transform: "none",
+            },
+            "&:focus-visible": {
+              outline: "2px solid",
+              outlineColor: "primary.main",
+              outlineOffset: 2,
+            },
           }}
         >
-          {initials}
-        </Avatar>
+          <Box sx={{ minWidth: 0, textAlign: "right" }}>
+            <Typography
+              variant="body2"
+              color="text.primary"
+              fontWeight={800}
+              noWrap
+              sx={{ maxWidth: 180, lineHeight: 1.15 }}
+            >
+              {displayName}
+            </Typography>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              noWrap
+              sx={{ display: "block", maxWidth: 180, lineHeight: 1.15 }}
+            >
+              {organizationLabel ? `${roleLabel} · ${organizationLabel}` : roleLabel}
+            </Typography>
+          </Box>
+          <Avatar
+            sx={{
+              width: 36,
+              height: 36,
+              fontSize: 12,
+              fontWeight: 800,
+              bgcolor: "primary.main",
+              color: "primary.contrastText",
+              boxShadow: "0 6px 16px rgba(25, 118, 210, 0.28)",
+            }}
+          >
+            {initials}
+          </Avatar>
+        </Box>
       </Box>
     </Box>
   );
@@ -324,7 +349,6 @@ function AppTopBar({ pageTitle, displayName, initials, profile, onEditProfile })
 
 function AppLayout({ children }) {
   const location = useLocation();
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -334,6 +358,7 @@ function AppLayout({ children }) {
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [profile, setProfile] = useState(null);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
+  const [connectDialogOpen, setConnectDialogOpen] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileForm, setProfileForm] = useState({
     name: "",
@@ -355,10 +380,15 @@ function AppLayout({ children }) {
   }, [profile]);
 
   useEffect(() => {
-    if (searchParams.get("integrations") === "1") {
-      navigate("/dashboard?tab=connect", { replace: true });
+    if (searchParams.get("integrations") === "1" && profile?.is_admin) {
+      setConnectDialogOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete("integrations");
+      setSearchParams(next, { replace: true });
     }
-  }, [searchParams, navigate]);
+  }, [searchParams, setSearchParams, profile?.is_admin]);
+
+  const canManageIntegrations = Boolean(profile?.is_admin);
 
   const menuItems = getMenuItems(profile);
   const displayName = profile?.name || getAuthSessionValue("name") || "User";
@@ -523,6 +553,24 @@ function AppLayout({ children }) {
           <Typography variant="h6" sx={{ ml: 1, fontWeight: 800, flexGrow: 1 }}>
             Incentra
           </Typography>
+          {canManageIntegrations && (
+            <Tooltip title="Connect CRM">
+              <IconButton
+                onClick={() => setConnectDialogOpen(true)}
+                aria-label="Connect CRM"
+                sx={{
+                  color: "#fff",
+                  border: "1px solid rgba(255,255,255,0.22)",
+                  mr: 0.5,
+                  "&:hover": {
+                    bgcolor: "rgba(255,255,255,0.08)",
+                  },
+                }}
+              >
+                <HubOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
           <IconButton
             onClick={openProfileDialog}
             aria-label="Edit profile details"
@@ -601,6 +649,8 @@ function AppLayout({ children }) {
           initials={initials}
           profile={profile}
           onEditProfile={openProfileDialog}
+          showConnect={canManageIntegrations}
+          onOpenConnect={() => setConnectDialogOpen(true)}
         />
         <Box
           className="container-fluid"
@@ -670,6 +720,28 @@ function AppLayout({ children }) {
             {profileSaving ? "Saving..." : "Save"}
           </Button>
         </DialogActions>
+      </Dialog>
+      <Dialog
+        open={connectDialogOpen}
+        onClose={() => setConnectDialogOpen(false)}
+        fullWidth
+        maxWidth="lg"
+        scroll="paper"
+        aria-labelledby="integrations-dialog-title"
+      >
+        <DialogContent sx={{ p: { xs: 2, sm: 3 } }}>
+          <Integrations
+            embedded
+            inline
+            onClose={() => setConnectDialogOpen(false)}
+            onOrdersSynced={(data) => {
+              const count = data?.result?.success ?? 0;
+              if (count > 0) {
+                success(`Synced ${count} order(s) from CRM — check Orders for results.`);
+              }
+            }}
+          />
+        </DialogContent>
       </Dialog>
     </Box>
   );
