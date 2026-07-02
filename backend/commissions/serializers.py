@@ -99,25 +99,39 @@ class CommissionSerializer(serializers.ModelSerializer):
         return order.order_date if order else None
 
     def get_employee_id(self, obj):
-        # Try to get employee_id from UserProfile if available
         order = getattr(obj.sale, "order", None) if obj.sale_id else None
+        if order and order.employee_id:
+            return order.employee_id
         qs = UserProfile.objects.filter(email__iexact=obj.employee.email)
         org_id = getattr(obj, "organization_id", None) or getattr(order, "organization_id", None)
         if org_id:
-            qs = qs.filter(organization_id=org_id)
-        user_profile = qs.first()
-        if user_profile:
-            return user_profile.employee_id
-        # Fallback: return a derived ID from employee email if no profile
-        return obj.employee.email.split('@')[0]
+            profile = qs.filter(organization_id=org_id).first()
+            if not profile:
+                profile = qs.filter(organization__isnull=True).first()
+        else:
+            profile = qs.first()
+        if profile:
+            return profile.employee_id
+        return obj.employee.email.split("@")[0]
 
     def get_currency(self, obj):
+        from .business_groups import currency_for_business_group
         from .currencies import normalize_currency
 
+        plan = getattr(obj, "compensation_plan", None)
+        if plan and str(plan.business_group or "").strip():
+            return currency_for_business_group(plan.business_group)
+
         order = getattr(obj.sale, "order", None) if obj.sale_id else None
-        return normalize_currency(
-            getattr(obj, "currency", None) or getattr(order, "currency", None)
-        )
+        if order:
+            from .services import derive_order_currency
+
+            return derive_order_currency(order)
+
+        stored = normalize_currency(getattr(obj, "currency", None), default="")
+        if stored:
+            return stored
+        return normalize_currency(getattr(order, "currency", None) if order else None)
 
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:

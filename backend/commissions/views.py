@@ -54,6 +54,7 @@ from .permissions import (
     require_finance_or_admin,
     user_is_admin,
     user_is_finance,
+    user_is_manager,
     user_can_view_finance_data,
     get_request_user_profile,
 )
@@ -90,74 +91,59 @@ class SaleViewSet(viewsets.ModelViewSet):
 class CommissionViewSet(viewsets.ModelViewSet):
     serializer_class = CommissionSerializer
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
-        """
-        Filter commissions based on user role:
-        - Admin: Can see all commissions
-        - Regular employee: Can only see their own commissions
-        """
-        user = self.request.user
-        
-        try:
-            user_profile = UserProfile.objects.get(email=user.email)
-            is_admin = user_profile.role.lower() in ['admin', 'administrator']
-            
-            if is_admin:
-                queryset = Commission.objects.select_related(
-                    "employee",
-                    "sale",
-                    "sale__order",
-                    "compensation_plan",
-                    "approved_by",
-                ).all()
-                queryset = filter_queryset_by_organization(
-                    queryset,
-                    getattr(self.request, "organization", None),
-                    field="sale__order__organization",
+        from django.db.models import Q
+
+        from .enterprise_views import _commission_base_queryset, commission_date_q
+        from .list_scope import commission_employee_search_q
+        from .user_scope import profile_commission_q
+
+        queryset = _commission_base_queryset(self.request)
+        profile = get_request_user_profile(self.request)
+
+        if not (
+            user_can_view_finance_data(self.request)
+            or user_is_manager(self.request)
+        ):
+            if profile:
+                queryset = queryset.filter(
+                    profile_commission_q(profile, self.request.user.email)
                 )
             else:
-                # Employee can only see their own commissions
-                # Build possible email patterns for this employee
-                possible_emails = [
-                    user.email,  # Login email
-                ]
-                
-                # Add employee_id@company.com format
-                if user_profile.employee_id:
-                    possible_emails.append(f"{user_profile.employee_id}@gmail.com")
-                
-                # Add name-based search
-                from django.db.models import Q
-                query = Q()
-                for email in possible_emails:
-                    query |= Q(employee__email=email)
-                
-                # Also search by employee name
-                if user_profile.name:
-                    query |= Q(employee__name__icontains=user_profile.name)
-                if user_profile.first_name and user_profile.last_name:
-                    full_name = f"{user_profile.first_name} {user_profile.last_name}"
-                    query |= Q(employee__name__icontains=full_name)
-                
-                queryset = Commission.objects.filter(query).select_related(
-                    "employee",
-                    "sale",
-                    "sale__order",
-                    "compensation_plan",
+                queryset = queryset.filter(
+                    employee__email__iexact=self.request.user.email
                 )
-        except UserProfile.DoesNotExist:
-            queryset = Commission.objects.filter(
-                employee__email=user.email
-            ).select_related("employee", "sale", "sale__order")
+
+        org = getattr(self.request, "organization", None)
+        if org:
+            queryset = queryset.filter(
+                Q(organization=org) | Q(sale__order__organization=org)
+            ).distinct()
 
         status_filter = self.request.query_params.get("status")
-        if status_filter in (
-            Commission.STATUS_CALCULATED,
-            Commission.STATUS_APPROVED,
-        ):
+        if status_filter in {choice[0] for choice in Commission.STATUS_CHOICES}:
             queryset = queryset.filter(status=status_filter)
-        return queryset
+
+        start_date = parse_date(self.request.query_params.get("start_date") or "")
+        end_date = parse_date(self.request.query_params.get("end_date") or "")
+        if start_date and end_date:
+            queryset = queryset.filter(commission_date_q(start_date, end_date))
+
+        search = (self.request.query_params.get("q") or "").strip()
+        if search:
+            queryset = queryset.filter(
+                commission_employee_search_q(search, organization=org)
+            )
+
+        limit = self.request.query_params.get("limit")
+        if limit:
+            try:
+                queryset = queryset[: int(limit)]
+            except (TypeError, ValueError):
+                pass
+
+        return queryset.order_by("-calculated_at", "-id")
 
 
 # ====================================================
