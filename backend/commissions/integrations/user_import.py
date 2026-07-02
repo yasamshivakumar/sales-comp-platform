@@ -47,13 +47,21 @@ def process_users_rows(organization, rows, *, allow_updates=True):
             role_val = str(row.get("role", "Sales Rep")).strip() or "Sales Rep"
             employee_id_val = str(row.get("employee_id", "")).strip()
             crm_user_id_val = str(row.get("crm_user_id", "")).strip()
+            crm_alt_user_id_val = str(row.get("crm_alt_user_id", "")).strip()
             name_val = str(row.get("name", "")).strip()
 
-            if crm_user_id_val and organization:
-                existing_by_crm = UserProfile.objects.filter(
-                    organization=organization,
-                    crm_user_id=crm_user_id_val,
-                ).first()
+            if organization and (crm_user_id_val or crm_alt_user_id_val):
+                existing_by_crm = None
+                if crm_user_id_val:
+                    existing_by_crm = UserProfile.objects.filter(
+                        organization=organization,
+                        crm_user_id=crm_user_id_val,
+                    ).first()
+                if not existing_by_crm and crm_alt_user_id_val:
+                    existing_by_crm = UserProfile.objects.filter(
+                        organization=organization,
+                        crm_alt_user_id=crm_alt_user_id_val,
+                    ).first()
                 if not existing_by_crm:
                     existing_by_crm = UserProfile.objects.filter(
                         organization=organization,
@@ -118,6 +126,7 @@ def process_users_rows(organization, rows, *, allow_updates=True):
                 "prefix": str(row.get("prefix", "")).strip(),
                 "employee_id": employee_id_val,
                 "crm_user_id": crm_user_id_val,
+                "crm_alt_user_id": crm_alt_user_id_val,
                 "hire_date": hire_date,
                 "personal_target": personal_target,
                 "personal_currency": personal_currency,

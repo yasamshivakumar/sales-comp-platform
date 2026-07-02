@@ -639,6 +639,12 @@ class UserProfile(models.Model):
         db_index=True,
         help_text="External CRM owner/user ID (e.g. HubSpot owner id).",
     )
+    crm_alt_user_id = models.CharField(
+        max_length=100,
+        blank=True,
+        db_index=True,
+        help_text="Secondary CRM user id (e.g. HubSpot userId vs owner id on deals).",
+    )
 
     personal_target = models.DecimalField(
         max_digits=12,

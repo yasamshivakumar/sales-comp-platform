@@ -108,6 +108,7 @@ DEFAULT_CONFIG = {
                 "first_name": "firstName",
                 "last_name": "lastName",
                 "crm_user_id": "id",
+                "crm_alt_user_id": "userId",
                 "role": "=Sales Rep",
             },
         },

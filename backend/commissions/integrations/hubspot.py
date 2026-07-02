@@ -69,25 +69,40 @@ class HubSpotConnector(BaseConnector):
                 break
         return records
 
+    def _normalize_owner(self, owner):
+        first = (owner.get("firstName") or "").strip()
+        last = (owner.get("lastName") or "").strip()
+        owner_id = str(owner.get("id", "")).strip()
+        user_id = str(owner.get("userId") or owner.get("userIdIncludingInactive") or "").strip()
+        email = (owner.get("email") or "").strip()
+        if not email and owner_id:
+            email = f"hubspot-owner-{owner_id}@crm.import"
+        full_name = f"{first} {last}".strip() or email or owner_id
+        return {
+            "id": owner_id,
+            "userId": user_id,
+            "email": email,
+            "firstName": first,
+            "lastName": last,
+            "full_name": full_name,
+        }
+
+    def fetch_owner(self, owner_id):
+        """Fetch a single owner by HubSpot owner id (used on deals)."""
+        if not owner_id:
+            return None
+        try:
+            payload = http_get_json(
+                f"{HUBSPOT_API}/crm/v3/owners/{owner_id}",
+                headers=self._headers(),
+            )
+            return self._normalize_owner(payload) if payload else None
+        except ConnectorError:
+            return None
+
     def _fetch_owners(self, limit=None):
         owners = self._paginate_get("/crm/v3/owners", limit=limit)
-        normalized = []
-        for owner in owners:
-            first = (owner.get("firstName") or "").strip()
-            last = (owner.get("lastName") or "").strip()
-            owner_id = str(owner.get("id", "")).strip()
-            email = (owner.get("email") or "").strip()
-            if not email and owner_id:
-                email = f"hubspot-owner-{owner_id}@crm.import"
-            full_name = f"{first} {last}".strip() or email or owner_id
-            normalized.append({
-                "id": owner_id,
-                "email": email,
-                "firstName": first,
-                "lastName": last,
-                "full_name": full_name,
-            })
-        return normalized
+        return [self._normalize_owner(owner) for owner in owners]
 
     def _fetch_deals(self, limit=None):
         section = self.config.get("orders") or {}

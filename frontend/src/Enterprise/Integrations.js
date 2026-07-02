@@ -199,6 +199,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
           name: row.name,
           email: row.email,
           crm_user_id: row.crm_user_id,
+          crm_alt_user_id: row.crm_alt_user_id,
           employee_id: "",
           status: "fetched",
         }));
@@ -422,6 +423,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
                     <tr>
                       <th>Name</th>
                       <th>Email</th>
+                      <th>CRM owner ID</th>
                       <th>CRM user ID</th>
                       <th>Employee ID</th>
                       <th>Role</th>
@@ -433,6 +435,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
                         <td>{user.name || `${user.first_name || ""} ${user.last_name || ""}`.trim() || "—"}</td>
                         <td>{user.email}</td>
                         <td><code>{user.crm_user_id || "—"}</code></td>
+                        <td><code>{user.crm_alt_user_id || "—"}</code></td>
                         <td><code>{user.employee_id || "—"}</code></td>
                         <td>{user.role || "—"}</td>
                       </tr>
@@ -455,6 +458,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
                         <th>#</th>
                         <th>Name</th>
                         <th>Email</th>
+                        <th>CRM owner ID</th>
                         <th>CRM user ID</th>
                         <th>Employee ID</th>
                         <th>Status</th>
@@ -467,6 +471,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
                           <td>{row.name || "—"}</td>
                           <td>{row.email || "—"}</td>
                           <td><code>{row.crm_user_id || "—"}</code></td>
+                          <td><code>{row.crm_alt_user_id || "—"}</code></td>
                           <td><code>{row.employee_id || "—"}</code></td>
                           <td>
                             {row.status === "failed" ? (

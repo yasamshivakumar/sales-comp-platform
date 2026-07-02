@@ -38,7 +38,7 @@ def _normalize_order_rows(rows):
     return normalized
 
 
-def _resolve_order_employee_ids(organization, rows):
+def _resolve_order_employee_ids(organization, rows, integration=None):
     """Map CRM owner ids from deals to Incentra employee_id before order import."""
     resolved = []
     for row in rows:
@@ -49,11 +49,16 @@ def _resolve_order_employee_ids(organization, rows):
                 or item.get("hubspot_owner_id")
                 or item.get("crm_user_id")
             )
-            employee_id = resolve_crm_owner_to_employee_id(organization, crm_owner_id)
+            employee_id = resolve_crm_owner_to_employee_id(
+                organization,
+                crm_owner_id,
+                integration=integration,
+            )
             if not employee_id:
                 raise ValueError(
                     f"No Incentra employee mapped for CRM owner id {crm_owner_id}. "
-                    "Run user sync first."
+                    "Run user sync first, or check that the deal owner exists in HubSpot "
+                    "and matches an employee email in Incentra."
                 )
             item["employee_id"] = employee_id
         resolved.append(item)
@@ -86,6 +91,7 @@ def run_pull_sync(integration, sync_type, triggered_by=None, limit=None):
                     "email": row.get("email"),
                     "name": row.get("name"),
                     "crm_user_id": row.get("crm_user_id"),
+                    "crm_alt_user_id": row.get("crm_alt_user_id"),
                     "first_name": row.get("first_name"),
                     "last_name": row.get("last_name"),
                 }
@@ -94,7 +100,7 @@ def run_pull_sync(integration, sync_type, triggered_by=None, limit=None):
             integration.last_user_sync_at = timezone.now()
             integration.save(update_fields=["last_user_sync_at", "updated_at"])
         elif sync_type == IntegrationSyncLog.SYNC_ORDERS:
-            mapped = _resolve_order_employee_ids(org, mapped)
+            mapped = _resolve_order_employee_ids(org, mapped, integration=integration)
             result = process_orders_rows(org, _normalize_order_rows(mapped))
             integration.last_order_sync_at = timezone.now()
             integration.save(update_fields=["last_order_sync_at", "updated_at"])
