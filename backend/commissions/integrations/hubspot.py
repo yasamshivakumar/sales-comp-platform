@@ -1,10 +1,12 @@
 """HubSpot CRM connector: owners (users) and deals (orders)."""
 
+import logging
 import urllib.parse
 
 from .base import BaseConnector, ConnectorError, http_get_json, http_post_json
 
 HUBSPOT_API = "https://api.hubapi.com"
+logger = logging.getLogger("commissions")
 
 
 class HubSpotConnector(BaseConnector):
@@ -89,19 +91,36 @@ class HubSpotConnector(BaseConnector):
 
     def fetch_owner(self, owner_id):
         """Fetch a single owner by HubSpot owner id (used on deals)."""
+        owner_id = str(owner_id or "").strip()
         if not owner_id:
             return None
-        try:
-            payload = http_get_json(
-                f"{HUBSPOT_API}/crm/v3/owners/{owner_id}",
-                headers=self._headers(),
-            )
-            return self._normalize_owner(payload) if payload else None
-        except ConnectorError:
-            return None
+        for candidate in (owner_id, owner_id.split(".", 1)[0]):
+            try:
+                payload = http_get_json(
+                    f"{HUBSPOT_API}/crm/v3/owners/{candidate}",
+                    headers=self._headers(),
+                )
+                if payload:
+                    return self._normalize_owner(payload)
+            except ConnectorError as exc:
+                logger.warning("HubSpot fetch_owner(%s) failed: %s", candidate, exc)
+        return None
 
     def _fetch_owners(self, limit=None):
-        owners = self._paginate_get("/crm/v3/owners", limit=limit)
+        active = self._paginate_get("/crm/v3/owners", limit=limit)
+        archived = self._paginate_get(
+            "/crm/v3/owners",
+            params={"archived": "true"},
+            limit=limit,
+        )
+        seen = set()
+        owners = []
+        for owner in active + archived:
+            owner_key = str(owner.get("id", "")).strip()
+            if not owner_key or owner_key in seen:
+                continue
+            seen.add(owner_key)
+            owners.append(owner)
         return [self._normalize_owner(owner) for owner in owners]
 
     def _fetch_deals(self, limit=None):

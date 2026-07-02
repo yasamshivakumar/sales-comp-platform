@@ -2,6 +2,8 @@
 
 import logging
 
+from django.db.models import Q
+
 from ..models import UserProfile
 
 logger = logging.getLogger("commissions")
@@ -25,6 +27,16 @@ def allocate_employee_id(organization):
     return f"{prefix}{max_num + 1:05d}"
 
 
+def normalize_hubspot_id(value):
+    """Normalize HubSpot numeric ids that may arrive as strings or floats."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if "." in text:
+        text = text.split(".", 1)[0]
+    return text
+
+
 def build_hubspot_owner_index(integration):
     """Map HubSpot owner id and userId to owner metadata for deal resolution."""
     if not integration or integration.provider != "hubspot":
@@ -40,8 +52,8 @@ def build_hubspot_owner_index(integration):
 
     index = {}
     for owner in owners:
-        owner_id = str(owner.get("id") or "").strip()
-        user_id = str(owner.get("userId") or "").strip()
+        owner_id = normalize_hubspot_id(owner.get("id"))
+        user_id = normalize_hubspot_id(owner.get("userId"))
         if owner_id:
             index[owner_id] = owner
         if user_id:
@@ -49,14 +61,42 @@ def build_hubspot_owner_index(integration):
     return index
 
 
-def _find_profile(organization, **filters):
-    """Prefer org-scoped profiles, then fall back to legacy rows without organization."""
-    qs = UserProfile.objects.filter(**filters)
+def repair_hubspot_profile_mappings(organization, owner_index):
+    """Align stored CRM ids on profiles with HubSpot owner id / userId pairs."""
+    if not owner_index:
+        return
+
+    profiles = UserProfile.objects.all()
     if organization:
-        profile = qs.filter(organization=organization).first()
-        if profile:
-            return profile
-    return qs.first()
+        profiles = profiles.filter(Q(organization=organization) | Q(organization__isnull=True))
+
+    for profile in profiles.iterator():
+        stored_ids = {
+            normalize_hubspot_id(profile.crm_user_id),
+            normalize_hubspot_id(profile.crm_alt_user_id),
+        }
+        stored_ids.discard("")
+        for stored in stored_ids:
+            meta = owner_index.get(stored)
+            if not meta:
+                continue
+            _apply_hubspot_owner_ids(
+                profile,
+                normalize_hubspot_id(meta.get("id")),
+                normalize_hubspot_id(meta.get("userId")),
+            )
+
+
+def _org_profile_queryset(organization):
+    qs = UserProfile.objects.all()
+    if organization:
+        return qs.filter(Q(organization=organization) | Q(organization__isnull=True))
+    return qs
+
+
+def _find_profile(organization, **filters):
+    """Find profiles in the integration org, including legacy rows without organization."""
+    return _org_profile_queryset(organization).filter(**filters).first()
 
 
 def _apply_hubspot_owner_ids(profile, hubspot_owner_id, hubspot_user_id):
@@ -76,32 +116,92 @@ def _profile_employee_id(profile):
     return None
 
 
-def _resolve_from_owner_meta(organization, owner_meta):
+def _owner_row_from_meta(owner_meta):
+    owner_id = normalize_hubspot_id(owner_meta.get("id"))
+    user_id = normalize_hubspot_id(owner_meta.get("userId"))
+    email = str(owner_meta.get("email") or "").strip().lower()
+    if not email and owner_id:
+        email = f"hubspot-owner-{owner_id}@crm.import"
+    return {
+        "email": email,
+        "name": owner_meta.get("full_name") or email,
+        "first_name": owner_meta.get("firstName", ""),
+        "last_name": owner_meta.get("lastName", ""),
+        "crm_user_id": owner_id,
+        "crm_alt_user_id": user_id,
+        "role": "Sales Rep",
+    }
+
+
+def _import_hubspot_owner_row(organization, owner_meta):
+    from .user_import import process_users_rows
+
+    row = _owner_row_from_meta(owner_meta)
+    return process_users_rows(organization, [row])
+
+
+def _resolve_from_owner_meta(organization, owner_meta, *, auto_import=False):
     """Match an Incentra profile from HubSpot owner metadata."""
     if not owner_meta:
         return None
 
-    hubspot_owner_id = str(owner_meta.get("id") or "").strip()
-    hubspot_user_id = str(owner_meta.get("userId") or "").strip()
+    hubspot_owner_id = normalize_hubspot_id(owner_meta.get("id"))
+    hubspot_user_id = normalize_hubspot_id(owner_meta.get("userId"))
     email = str(owner_meta.get("email") or "").strip().lower()
+    full_name = str(owner_meta.get("full_name") or "").strip()
+    first_name = str(owner_meta.get("firstName") or "").strip()
+    last_name = str(owner_meta.get("lastName") or "").strip()
 
     profile = None
-    if hubspot_user_id:
-        profile = _find_profile(organization, crm_user_id=hubspot_user_id)
+    for lookup_id in (hubspot_user_id, hubspot_owner_id):
+        if not lookup_id:
+            continue
+        profile = _find_profile(organization, crm_user_id=lookup_id)
         if not profile:
-            profile = _find_profile(organization, crm_alt_user_id=hubspot_user_id)
-
-    if not profile and hubspot_owner_id:
-        profile = _find_profile(organization, crm_user_id=hubspot_owner_id)
-        if not profile:
-            profile = _find_profile(organization, crm_alt_user_id=hubspot_owner_id)
+            profile = _find_profile(organization, crm_alt_user_id=lookup_id)
+        if profile:
+            break
 
     if not profile and email:
         profile = _find_profile(organization, email__iexact=email)
 
+    if not profile and full_name:
+        profile = _find_profile(organization, name__iexact=full_name)
+
+    if not profile and first_name and last_name:
+        profile = _org_profile_queryset(organization).filter(
+            first_name__iexact=first_name,
+            last_name__iexact=last_name,
+        ).first()
+
+    if not profile and auto_import:
+        result = _import_hubspot_owner_row(organization, owner_meta)
+        if result.get("success"):
+            profile = _find_profile(organization, crm_user_id=hubspot_owner_id)
+            if not profile and email:
+                profile = _find_profile(organization, email__iexact=email)
+
     if profile:
+        if organization and not profile.organization_id:
+            profile.organization = organization
+            profile.save(update_fields=["organization"])
         _apply_hubspot_owner_ids(profile, hubspot_owner_id, hubspot_user_id)
         return _profile_employee_id(profile)
+    return None
+
+
+def _lookup_owner_meta(owner_id, integration, owner_index):
+    owner_meta = (owner_index or {}).get(owner_id) if owner_index else None
+    if owner_meta:
+        return owner_meta
+    if integration and integration.provider == "hubspot":
+        from .registry import get_connector
+
+        connector = get_connector(integration)
+        if hasattr(connector, "fetch_owner"):
+            owner_meta = connector.fetch_owner(owner_id)
+            if owner_meta:
+                return owner_meta
     return None
 
 
@@ -110,9 +210,11 @@ def resolve_crm_owner_to_employee_id(
     crm_owner_id,
     integration=None,
     owner_index=None,
+    *,
+    auto_import=False,
 ):
     """Map a CRM owner/user id to the Incentra employee_id."""
-    owner_id = str(crm_owner_id or "").strip()
+    owner_id = normalize_hubspot_id(crm_owner_id)
     if not owner_id:
         return None
 
@@ -123,12 +225,33 @@ def resolve_crm_owner_to_employee_id(
     if employee_id:
         return employee_id
 
-    owner_meta = (owner_index or {}).get(owner_id) if owner_index else None
-    if not owner_meta and integration and integration.provider == "hubspot":
-        from .registry import get_connector
+    owner_meta = _lookup_owner_meta(owner_id, integration, owner_index)
+    employee_id = _resolve_from_owner_meta(
+        organization,
+        owner_meta,
+        auto_import=False,
+    )
+    if employee_id:
+        return employee_id
 
-        connector = get_connector(integration)
-        if hasattr(connector, "fetch_owner"):
-            owner_meta = connector.fetch_owner(owner_id)
+    if auto_import and owner_meta:
+        return _resolve_from_owner_meta(
+            organization,
+            owner_meta,
+            auto_import=True,
+        )
 
-    return _resolve_from_owner_meta(organization, owner_meta)
+    return None
+
+
+def resolve_error_hint(owner_id, integration, owner_index):
+    """Build a short diagnostic hint for unresolved HubSpot owner ids."""
+    meta = _lookup_owner_meta(owner_id, integration, owner_index)
+    if not meta:
+        return " HubSpot owner was not found in the owners list."
+    email = meta.get("email") or ""
+    user_id = normalize_hubspot_id(meta.get("userId"))
+    return (
+        f" HubSpot owner email={email or 'n/a'}, userId={user_id or 'n/a'}. "
+        "Run Sync users or ensure the owner email matches an Incentra employee."
+    )

@@ -8,7 +8,12 @@ from django.utils import timezone
 from ..imports import process_orders_rows
 from ..models import ExternalIntegration, IntegrationSyncLog
 from .base import ConnectorError
-from .employee_ids import build_hubspot_owner_index, resolve_crm_owner_to_employee_id
+from .employee_ids import (
+    build_hubspot_owner_index,
+    repair_hubspot_profile_mappings,
+    resolve_crm_owner_to_employee_id,
+    resolve_error_hint,
+)
 from .mapper import map_records, normalize_date_value
 from .registry import get_connector
 from .user_import import process_users_rows
@@ -54,12 +59,13 @@ def _resolve_order_employee_ids(organization, rows, integration=None, owner_inde
                 crm_owner_id,
                 integration=integration,
                 owner_index=owner_index,
+                auto_import=integration is not None and integration.provider == "hubspot",
             )
             if not employee_id:
+                hint = resolve_error_hint(crm_owner_id, integration, owner_index)
                 raise ValueError(
-                    f"No Incentra employee mapped for CRM owner id {crm_owner_id}. "
-                    "Run user sync first, or check that the deal owner exists in HubSpot "
-                    "and matches an employee email in Incentra."
+                    f"No Incentra employee mapped for CRM owner id {crm_owner_id}."
+                    f"{hint}"
                 )
             item["employee_id"] = employee_id
         resolved.append(item)
@@ -85,6 +91,10 @@ def run_pull_sync(integration, sync_type, triggered_by=None, limit=None):
         log.records_fetched = len(mapped)
 
         org = integration.organization
+        if not org:
+            from ..tenants import get_default_organization
+
+            org = get_default_organization()
         if sync_type == IntegrationSyncLog.SYNC_USERS:
             result = process_users_rows(org, mapped)
             result["fetched"] = [
@@ -106,6 +116,8 @@ def run_pull_sync(integration, sync_type, triggered_by=None, limit=None):
                 if integration.provider == "hubspot"
                 else None
             )
+            if owner_index:
+                repair_hubspot_profile_mappings(org, owner_index)
             mapped = _resolve_order_employee_ids(
                 org,
                 mapped,
