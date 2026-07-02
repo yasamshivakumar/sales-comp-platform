@@ -191,82 +191,107 @@ function Commissions() {
       />
 
       <div className="panel commissions-toolbar">
-        <div className="commissions-toolbar__section commissions-toolbar__filters">
-          <span className="commissions-toolbar__label">Filters</span>
-          <SearchBar
-            className="commissions-filter-search"
-            placeholder="Search rep, order, plan…"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <select
-            className="input commissions-filter-status"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            aria-label="Commission status"
-          >
-            <option value="all">All statuses</option>
-            <option value="calculated">Calculated</option>
-            <option value="manager_approved">Manager approved</option>
-            <option value="approved">Finance approved</option>
-            <option value="paid">Paid</option>
-          </select>
-          <div className="commissions-filter-dates">
-            <DatePickerField
-              label="From"
-              value={startDate}
-              onChange={setStartDate}
-              maxDate={endDate || undefined}
-              fullWidth={false}
-              size="small"
-              slotProps={{ textField: { className: "input commissions-filter-date-field" } }}
-            />
-            <DatePickerField
-              label="To"
-              value={endDate}
-              onChange={setEndDate}
-              minDate={startDate || undefined}
-              fullWidth={false}
-              size="small"
-              slotProps={{ textField: { className: "input commissions-filter-date-field" } }}
-            />
+        <div className="commissions-toolbar__block">
+          <h3 className="commissions-toolbar__heading">Filters</h3>
+          <div className="commissions-toolbar__grid commissions-toolbar__grid--filters">
+            <div className="commissions-toolbar__field commissions-toolbar__field--search">
+              <label className="commissions-toolbar__field-label">Search</label>
+              <SearchBar
+                className="commissions-filter-search"
+                placeholder="Rep, order, plan…"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+
+            <div className="commissions-toolbar__field">
+              <label className="commissions-toolbar__field-label" htmlFor="commissions-status">
+                Status
+              </label>
+              <select
+                id="commissions-status"
+                className="input commissions-filter-status"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="all">All statuses</option>
+                <option value="calculated">Calculated</option>
+                <option value="manager_approved">Manager approved</option>
+                <option value="approved">Finance approved</option>
+                <option value="paid">Paid</option>
+              </select>
+            </div>
+
+            <div className="commissions-toolbar__field">
+              <DatePickerField
+                id="commissions-start-date"
+                label="From"
+                value={startDate}
+                onChange={setStartDate}
+                maxDate={endDate || undefined}
+                fullWidth
+                size="small"
+                className="commissions-filter-date"
+              />
+            </div>
+
+            <div className="commissions-toolbar__field">
+              <DatePickerField
+                id="commissions-end-date"
+                label="To"
+                value={endDate}
+                onChange={setEndDate}
+                minDate={startDate || undefined}
+                fullWidth
+                size="small"
+                className="commissions-filter-date"
+              />
+            </div>
+
+            <div className="commissions-toolbar__field commissions-toolbar__field--button">
+              <span className="commissions-toolbar__field-label commissions-toolbar__field-label--spacer">
+                &nbsp;
+              </span>
+              <button type="button" className="btn-primary commissions-toolbar__btn" onClick={fetchCommissions} disabled={loading}>
+                {loading ? "Loading…" : "Refresh"}
+              </button>
+            </div>
           </div>
-          <button type="button" className="btn-primary" onClick={fetchCommissions} disabled={loading}>
-            {loading ? "Loading…" : "Refresh"}
-          </button>
         </div>
 
         {canManagePayroll && (
-          <div className="commissions-toolbar__section commissions-toolbar__actions">
-            <span className="commissions-toolbar__label">Actions</span>
-            {isAdmin && (
-              <>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={handleApproveCalculated}
-                  disabled={actionLoading}
-                >
-                  Approve calculated
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={handleRecalculate}
-                  disabled={actionLoading}
-                >
-                  Recalculate period
-                </button>
-              </>
-            )}
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={handlePayrollExport}
-              disabled={actionLoading}
-            >
-              Export payroll CSV
-            </button>
+          <div className="commissions-toolbar__block commissions-toolbar__block--actions">
+            <h3 className="commissions-toolbar__heading">Actions</h3>
+            <div className="commissions-toolbar__grid commissions-toolbar__grid--actions">
+              {isAdmin && (
+                <>
+                  <button
+                    type="button"
+                    className="btn-secondary commissions-toolbar__btn"
+                    onClick={handleApproveCalculated}
+                    disabled={actionLoading}
+                  >
+                    Approve calculated
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary commissions-toolbar__btn"
+                    onClick={handleRecalculate}
+                    disabled={actionLoading}
+                  >
+                    Recalculate period
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                className="btn-secondary commissions-toolbar__btn"
+                onClick={handlePayrollExport}
+                disabled={actionLoading}
+              >
+                Export payroll CSV
+              </button>
+            </div>
           </div>
         )}
 

@@ -344,10 +344,10 @@ table tbody tr:hover {
 
 .commissions-filter-date.compact-date-field.MuiFormControl-root,
 .commissions-toolbar .compact-date-field.MuiFormControl-root.commissions-filter-date {
-  width: 112px;
-  min-width: 112px;
-  max-width: 112px;
-  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  flex: 1 1 auto;
 }
 
 .form-field .compact-date-field.MuiFormControl-root,
