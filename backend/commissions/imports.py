@@ -12,7 +12,7 @@ from .services import (
     commission_skip_reason_for_status,
     explain_plan_resolution_failure,
     resolve_compensation_plan,
-    _get_user_profile_for_order,
+    _profile_for_employee,
 )
 
 from django.conf import settings
@@ -109,15 +109,9 @@ def process_orders_rows(organization, rows):
             if "currency" in order_model_fields:
                 raw_currency = str(row.get("currency", "")).strip()
                 raw_group = str(row.get("business_group", "")).strip()
-                profile = None
-                if not raw_currency:
-                    from .models import UserProfile
-
-                    profile = UserProfile.objects.filter(
-                        employee_id__iexact=employee_id,
-                        organization=organization,
-                    ).first()
-                    raw_group = raw_group or (profile.business_group if profile else "")
+                profile = _profile_for_employee(employee_id, organization)
+                if not raw_group and profile:
+                    raw_group = profile.business_group or ""
                 defaults["currency"] = (
                     normalize_currency(raw_currency)
                     if raw_currency
@@ -126,6 +120,13 @@ def process_orders_rows(organization, rows):
                         profile.personal_currency if profile else None,
                     )
                 )
+                if (
+                    "business_group" in order_model_fields
+                    and not raw_group
+                    and profile
+                    and profile.business_group
+                ):
+                    defaults.setdefault("business_group", profile.business_group)
             if "needs_recalculation" in order_model_fields:
                 defaults["needs_recalculation"] = False
 

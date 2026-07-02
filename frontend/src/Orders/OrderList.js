@@ -140,7 +140,9 @@ function OrderList({ refreshKey = 0 }) {
           );
         } else {
           warning(
-            `Order ${order.order_id} marked Success — no commission yet (check User Setup + compensation plan)`
+            updated.commission_skip_reason
+              ? `Order ${order.order_id} marked Success — ${updated.commission_skip_reason}`
+              : `Order ${order.order_id} marked Success — no commission yet (check User Setup + compensation plan)`
           );
         }
       } else {

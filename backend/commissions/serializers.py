@@ -412,6 +412,7 @@ class CompensationPlanSerializer(serializers.ModelSerializer):
 class OrderSerializer(serializers.ModelSerializer):
     has_commission = serializers.SerializerMethodField()
     commission_amount = serializers.SerializerMethodField()
+    commission_skip_reason = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -445,10 +446,12 @@ class OrderSerializer(serializers.ModelSerializer):
         from .plan_periods import month_bounds
 
         period_start, _period_end = month_bounds(obj.order_date.year, obj.order_date.month)
-        profile = UserProfile.objects.filter(
-            employee_id=obj.employee_id,
-            organization=getattr(obj, "organization", None),
-        ).first()
+        from .services import _profile_for_employee
+
+        profile = _profile_for_employee(
+            obj.employee_id,
+            getattr(obj, "organization", None),
+        )
         emails = [f"{obj.employee_id}@company.com"]
         if profile and profile.email:
             emails.append(profile.email)
@@ -470,6 +473,20 @@ class OrderSerializer(serializers.ModelSerializer):
         if not commission:
             return None
         return commission.commission_amount
+
+    def get_commission_skip_reason(self, obj):
+        if self.get_has_commission(obj):
+            return None
+        from .imports import commission_skip_reason
+
+        return commission_skip_reason(obj)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        from .services import derive_order_currency
+
+        data["currency"] = derive_order_currency(instance)
+        return data
 
     def validate(self, attrs):
         from .currencies import normalize_currency

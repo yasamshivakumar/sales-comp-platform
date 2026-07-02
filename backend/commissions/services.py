@@ -43,14 +43,56 @@ def commission_skip_reason_for_status(order) -> str | None:
     )
 
 
+def _profile_for_employee(employee_id, organization=None):
+    if not employee_id:
+        return None
+    qs = UserProfile.objects.filter(employee_id__iexact=employee_id)
+    if organization is not None:
+        profile = qs.filter(organization=organization).first()
+        if profile:
+            return profile
+        return qs.filter(organization__isnull=True).first()
+    return qs.filter(organization__isnull=True).first() or qs.first()
+
+
 def _get_user_profile_for_order(order):
     if not order.employee_id:
         return None
-    qs = UserProfile.objects.filter(employee_id=order.employee_id)
-    org_id = getattr(order, "organization_id", None)
-    if org_id:
-        qs = qs.filter(organization_id=org_id)
-    return qs.first()
+    return _profile_for_employee(
+        order.employee_id,
+        getattr(order, "organization", None),
+    )
+
+
+def derive_order_currency(order, profile=None):
+    """Best currency for an order: compensation plan business group, then profile, then order."""
+    from .business_groups import currency_for_business_group
+
+    profile = profile or _get_user_profile_for_order(order)
+    plan, _source = resolve_compensation_plan(order)
+    if plan and str(plan.business_group or "").strip():
+        return currency_for_business_group(plan.business_group)
+    if profile and str(profile.business_group or "").strip():
+        return currency_for_business_group(
+            profile.business_group,
+            profile.personal_currency,
+        )
+    if profile and str(profile.personal_currency or "").strip():
+        return normalize_currency(profile.personal_currency)
+    order_group = str(getattr(order, "business_group", None) or "").strip()
+    if order_group:
+        return currency_for_business_group(order_group)
+    return normalize_currency(getattr(order, "currency", None))
+
+
+def sync_order_currency(order, profile=None, save=True):
+    currency = derive_order_currency(order, profile=profile)
+    current = normalize_currency(getattr(order, "currency", None))
+    if currency != current:
+        order.currency = currency
+        if save:
+            order.save(update_fields=["currency"])
+    return currency
 
 
 def _plan_queryset_for_order(order):
@@ -520,6 +562,8 @@ def calculate_commission_for_order(order, replace_existing=True, force=False):
     replace_existing: If True, delete existing commissions for this employee/month first.
     force: Allow replacing approved commissions (admin bulk recalc).
     """
+    sync_order_currency(order, save=True)
+
     if replace_existing:
         if not force and _aggregate_has_locked_commissions(order):
             logger.warning(

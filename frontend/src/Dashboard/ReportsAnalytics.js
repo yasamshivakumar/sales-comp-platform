@@ -140,7 +140,13 @@ function KpiStrip({ summary, sales, advanced, compact = false, fallbackCurrency 
         icon="💰"
         label={`Total commission (${commissionCurrency})`}
         value={commissionTotal}
-        hint={`${summary?.total_count ?? 0} payout records`}
+        hint={
+          summary?.payout_record_count != null
+            ? `${summary.payout_record_count} payout record${
+                summary.payout_record_count === 1 ? "" : "s"
+              } (includes manager splits)`
+            : `${summary?.total_count ?? 0} payout records`
+        }
       />
       <KpiCard
         variant="blue"

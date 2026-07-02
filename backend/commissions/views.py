@@ -1544,53 +1544,75 @@ def commission_summary_report(request):
     Shows total commissions, top earners, metrics
     Admin: All employees, Employee: Own only
     """
-    from django.db.models import Sum, Count, Q, Avg
-    from datetime import datetime, timedelta
-    
-    user = request.user
-    try:
-        user_profile = UserProfile.objects.get(email=user.email)
-        is_admin = user_profile.role.lower() in ['admin', 'administrator']
-    except:
-        is_admin = False
-    
-    # Get date range
-    start_date = request.query_params.get('start_date')
-    end_date = request.query_params.get('end_date')
-    
-    if start_date and end_date:
-        commissions = Commission.objects.filter(
-            sale__order__order_date__range=[start_date, end_date]
+    from django.db.models import Sum, Count, Avg
+    from .currencies import active_currency_totals, normalize_currency
+    from .enterprise_views import (
+        _apply_commission_filters,
+        _commission_base_queryset,
+        with_commission_currency,
+    )
+    from .user_scope import profile_commission_q
+
+    queryset = _commission_base_queryset(request)
+    profile = get_request_user_profile(request)
+    if not (user_can_view_finance_data(request) or user_is_admin(request)):
+        if profile:
+            queryset = queryset.filter(profile_commission_q(profile, request.user.email))
+        else:
+            queryset = queryset.none()
+
+    queryset, start_date, end_date = _apply_commission_filters(queryset, request)
+    queryset = with_commission_currency(queryset)
+
+    totals_rows = list(
+        queryset.values("report_currency").annotate(
+            total=Sum("commission_amount"),
+            count=Count("id"),
         )
-    else:
-        commissions = Commission.objects.all()
-    
-    # Filter by role
-    if not is_admin:
-        possible_emails = [user.email]
-        if user_profile.employee_id:
-            possible_emails.append(f"{user_profile.employee_id}@company.com")
-        commissions = commissions.filter(employee__email__in=possible_emails)
-    
-    # Calculate metrics
-    total_commission = commissions.aggregate(Sum('commission_amount'))['commission_amount__sum'] or 0
-    total_count = commissions.count()
-    avg_commission = commissions.aggregate(Avg('commission_amount'))['commission_amount__avg'] or 0
-    
-    # Top earners (only for admin)
+    )
+    commission_totals = [
+        {
+            "currency": normalize_currency(row["report_currency"]),
+            "total": float(row["total"] or 0),
+            "count": row["count"],
+        }
+        for row in totals_rows
+    ]
+    totals_by_currency = active_currency_totals(commission_totals)
+    total_commission = sum(item["total"] for item in totals_by_currency)
+
+    payout_record_count = queryset.count()
+    active_reps_count = (
+        queryset.filter(sale__order__employee_id__isnull=False)
+        .values("sale__order__employee_id")
+        .distinct()
+        .count()
+    )
+    if active_reps_count == 0:
+        active_reps_count = queryset.values("employee_id").distinct().count()
+
+    avg_commission = queryset.aggregate(Avg("commission_amount"))["commission_amount__avg"] or 0
+
     top_earners = []
-    if is_admin:
-        top_earners = Commission.objects.values('employee__name', 'employee__email').annotate(
-            total=Sum('commission_amount'),
-            count=Count('id')
-        ).order_by('-total')[:5]
-    
+    if user_is_admin(request) or user_can_view_finance_data(request):
+        top_earners = list(
+            queryset.values("employee__name", "employee__email").annotate(
+                total=Sum("commission_amount"),
+                count=Count("id"),
+            ).order_by("-total")[:5]
+        )
+
     return Response({
-        'total_commission': float(total_commission),
-        'total_count': total_count,
-        'avg_commission': float(avg_commission),
-        'top_earners': list(top_earners),
-        'is_admin': is_admin,
+        "total_commission": float(total_commission),
+        "total_count": payout_record_count,
+        "payout_record_count": payout_record_count,
+        "active_reps_count": active_reps_count,
+        "avg_commission": float(avg_commission),
+        "top_earners": top_earners,
+        "totals_by_currency": totals_by_currency,
+        "is_admin": user_is_admin(request),
+        "start_date": str(start_date) if start_date else None,
+        "end_date": str(end_date) if end_date else None,
     })
 
 
@@ -1602,38 +1624,73 @@ def sales_performance_report(request):
     Shows sales by employee, achievement metrics
     """
     from django.db.models import Sum, Count
-    
-    user = request.user
-    try:
-        user_profile = UserProfile.objects.get(email=user.email)
-        is_admin = user_profile.role.lower() in ['admin', 'administrator']
-    except:
-        is_admin = False
-    
-    # Get orders and sales
-    orders = Order.objects.all()
-    
+    from .business_groups import apply_business_group_to_orders, resolve_dashboard_business_group
+    from .currencies import active_currency_totals, normalize_currency
+
+    profile = get_request_user_profile(request)
+    is_admin = user_is_admin(request) or user_can_view_finance_data(request)
+
+    orders = filter_queryset_by_organization(
+        Order.objects.all(),
+        getattr(request, "organization", None),
+    )
+
+    start_date = parse_date(request.query_params.get("start_date") or "")
+    end_date = parse_date(request.query_params.get("end_date") or "")
+    if start_date and end_date:
+        orders = orders.filter(order_date__range=[start_date, end_date])
+
     if not is_admin:
         possible_employee_ids = []
-        if user_profile.employee_id:
-            possible_employee_ids.append(user_profile.employee_id)
+        if profile and profile.employee_id:
+            possible_employee_ids.append(profile.employee_id)
         orders = orders.filter(employee_id__in=possible_employee_ids)
-    
-    # Aggregate sales data
-    sales_data = orders.values('employee_id', 'position_name').annotate(
-        total_sales=Sum('sales_amount'),
-        order_count=Count('id'),
-        avg_order=Sum('sales_amount')
-    ).order_by('-total_sales')
-    
-    # Calculate totals
-    total_sales = orders.aggregate(Sum('sales_amount'))['sales_amount__sum'] or 0
+
+    can_view_all_groups = user_is_admin(request) or user_is_finance(request)
+    effective_group, _, _ = resolve_dashboard_business_group(
+        request, profile, can_view_all_groups
+    )
+    orders = apply_business_group_to_orders(
+        orders,
+        effective_group,
+        organization=getattr(request, "organization", None),
+    )
+
+    sales_data = list(
+        orders.values("employee_id", "position_name").annotate(
+            total_sales=Sum("sales_amount"),
+            order_count=Count("id"),
+            avg_order=Sum("sales_amount"),
+        ).order_by("-total_sales")
+    )
+
+    currency_rows = list(
+        orders.values("currency").annotate(
+            total=Sum("sales_amount"),
+            count=Count("id"),
+        )
+    )
+    totals_by_currency = active_currency_totals(
+        [
+            {
+                "currency": normalize_currency(row["currency"]),
+                "total": float(row["total"] or 0),
+                "count": row["count"],
+            }
+            for row in currency_rows
+        ]
+    )
+    total_sales = sum(item["total"] for item in totals_by_currency)
     total_orders = orders.count()
-    
+
     return Response({
-        'total_sales': float(total_sales),
-        'total_orders': total_orders,
-        'sales_data': list(sales_data),
+        "total_sales": float(total_sales),
+        "total_orders": total_orders,
+        "sales_data": sales_data,
+        "totals_by_currency": totals_by_currency,
+        "is_admin": is_admin,
+        "start_date": str(start_date) if start_date else None,
+        "end_date": str(end_date) if end_date else None,
     })
 
 
