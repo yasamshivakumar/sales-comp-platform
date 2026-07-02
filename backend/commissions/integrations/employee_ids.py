@@ -174,7 +174,7 @@ def _resolve_from_owner_meta(organization, owner_meta, *, auto_import=False):
             last_name__iexact=last_name,
         ).first()
 
-    if not profile and auto_import:
+    if not profile and auto_import and not owner_meta.get("archived"):
         result = _import_hubspot_owner_row(organization, owner_meta)
         if result.get("success"):
             profile = _find_profile(organization, crm_user_id=hubspot_owner_id)
@@ -199,7 +199,7 @@ def _lookup_owner_meta(owner_id, integration, owner_index):
 
         connector = get_connector(integration)
         if hasattr(connector, "fetch_owner"):
-            owner_meta = connector.fetch_owner(owner_id)
+            owner_meta = connector.fetch_owner(owner_id, for_resolution=True)
             if owner_meta:
                 return owner_meta
     return None
@@ -248,10 +248,15 @@ def resolve_error_hint(owner_id, integration, owner_index):
     """Build a short diagnostic hint for unresolved HubSpot owner ids."""
     meta = _lookup_owner_meta(owner_id, integration, owner_index)
     if not meta:
-        return " HubSpot owner was not found in the owners list."
+        return (
+            " HubSpot owner was not found (active or archived). "
+            "Ensure the deal owner email matches an Incentra employee, "
+            "or reassign the deal in HubSpot to an active owner."
+        )
     email = meta.get("email") or ""
     user_id = normalize_hubspot_id(meta.get("userId"))
+    archived_note = " (archived in HubSpot)" if meta.get("archived") else ""
     return (
-        f" HubSpot owner email={email or 'n/a'}, userId={user_id or 'n/a'}. "
-        "Run Sync users or ensure the owner email matches an Incentra employee."
+        f" HubSpot owner email={email or 'n/a'}, userId={user_id or 'n/a'}{archived_note}. "
+        "Ensure that email exists on an Incentra employee with an employee id."
     )

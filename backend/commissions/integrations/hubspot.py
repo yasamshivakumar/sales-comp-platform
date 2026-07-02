@@ -71,11 +71,13 @@ class HubSpotConnector(BaseConnector):
                 break
         return records
 
-    def _normalize_owner(self, owner):
+    def _normalize_owner(self, owner, *, include_inactive_user_id=False):
         first = (owner.get("firstName") or "").strip()
         last = (owner.get("lastName") or "").strip()
         owner_id = str(owner.get("id", "")).strip()
         user_id = str(owner.get("userId") or "").strip()
+        if not user_id and include_inactive_user_id:
+            user_id = str(owner.get("userIdIncludingInactive") or "").strip()
         email = (owner.get("email") or "").strip()
         if not email and owner_id:
             email = f"hubspot-owner-{owner_id}@crm.import"
@@ -98,24 +100,47 @@ class HubSpotConnector(BaseConnector):
             return False
         return True
 
-    def fetch_owner(self, owner_id):
-        """Fetch a single owner by HubSpot owner id (used on deals)."""
+    def _fetch_archived_owner_by_id(self, owner_id):
+        archived = self._paginate_get(
+            "/crm/v3/owners",
+            params={"archived": "true"},
+        )
+        for owner in archived:
+            if str(owner.get("id", "")).strip() == owner_id:
+                return self._normalize_owner(owner, include_inactive_user_id=True)
+        return None
+
+    def fetch_owner(self, owner_id, *, for_resolution=False):
+        """
+        Fetch a single owner by HubSpot owner id.
+
+        User sync uses active owners only. Deal resolution may look up archived
+        owners so historical deals still map to existing Incentra employees.
+        """
         owner_id = str(owner_id or "").strip()
         if not owner_id:
             return None
-        for candidate in (owner_id, owner_id.split(".", 1)[0]):
-            try:
-                payload = http_get_json(
-                    f"{HUBSPOT_API}/crm/v3/owners/{candidate}",
-                    headers=self._headers(),
-                )
-                if payload:
-                    normalized = self._normalize_owner(payload)
-                    if normalized.get("archived"):
-                        return None
+        candidates = {owner_id, owner_id.split(".", 1)[0]}
+        for candidate in candidates:
+            for url in (
+                f"{HUBSPOT_API}/crm/v3/owners/{candidate}",
+                f"{HUBSPOT_API}/crm/v3/owners/{candidate}?archived=true",
+            ):
+                try:
+                    payload = http_get_json(url, headers=self._headers())
+                    if not payload:
+                        continue
+                    normalized = self._normalize_owner(
+                        payload,
+                        include_inactive_user_id=for_resolution,
+                    )
+                    if normalized.get("archived") and not for_resolution:
+                        continue
                     return normalized
-            except ConnectorError as exc:
-                logger.warning("HubSpot fetch_owner(%s) failed: %s", candidate, exc)
+                except ConnectorError as exc:
+                    logger.warning("HubSpot fetch_owner(%s) failed: %s", url, exc)
+        if for_resolution:
+            return self._fetch_archived_owner_by_id(owner_id)
         return None
 
     def _fetch_owners(self, limit=None):
