@@ -117,6 +117,8 @@ def test_integration_connection(request, integration_id):
     if not integration:
         return Response({"error": "Integration not found"}, status=404)
     result = test_integration(integration)
+    if not result["ok"]:
+        result["error"] = result.get("message") or "Connection failed"
     return Response(result, status=200 if result["ok"] else 400)
 
 

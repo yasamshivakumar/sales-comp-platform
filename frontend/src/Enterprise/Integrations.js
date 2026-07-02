@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import api from "../api";
+import api, { getApiErrorMessage } from "../api";
 import PageHeader from "../Components/PageHeader";
 import "../Components/enterprise.css";
 
@@ -88,6 +88,10 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
     e.preventDefault();
     setMessage("");
     try {
+      if (form.provider === "hubspot" && !form.credentials.access_token?.trim()) {
+        setMessage("HubSpot private app access token is required.");
+        return;
+      }
       let config = defaultConfig[form.provider] || {};
       if (form.configText.trim()) {
         config = JSON.parse(form.configText);
@@ -103,8 +107,19 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
       setForm({ name: "", provider: form.provider, is_active: true, credentials: {}, configText: "" });
       loadAll();
     } catch (err) {
-      setMessage(err.response?.data?.error || err.message || "Create failed.");
+      setMessage(getApiErrorMessage(err, "Create failed."));
     }
+  };
+
+  const saveCredentialsIfNeeded = async () => {
+    if (!selectedId) return;
+    const hasCredentials = Object.keys(form.credentials).some((k) => form.credentials[k]?.trim());
+    if (!hasCredentials) return;
+    const payload = { credentials: form.credentials };
+    if (form.configText.trim()) {
+      payload.config = JSON.parse(form.configText);
+    }
+    await api.patch(`integrations/${selectedId}/`, payload);
   };
 
   const handleUpdate = async () => {
@@ -125,7 +140,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
       setMessage("Integration updated.");
       loadAll();
     } catch (err) {
-      setMessage(err.response?.data?.error || "Update failed.");
+      setMessage(getApiErrorMessage(err, "Update failed."));
     }
   };
 
@@ -133,7 +148,10 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
     if (!selectedId) return;
     setMessage("");
     try {
-      const res = await api.post(`integrations/${selectedId}/${action}/`);
+      await saveCredentialsIfNeeded();
+      const res = await api.post(`integrations/${selectedId}/${action}/`, {}, {
+        timeout: action.includes("sync") ? 120000 : 30000,
+      });
       if (action === "sync/full/") {
         const users = res.data.users?.result;
         const orders = res.data.orders?.result;
@@ -154,7 +172,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
         onOrdersSynced(res.data);
       }
     } catch (err) {
-      setMessage(err.response?.data?.error || err.response?.data?.message || "Action failed.");
+      setMessage(getApiErrorMessage(err, "Action failed."));
     }
   };
 
@@ -306,6 +324,33 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
       {selected && (
         <div className="panel" style={{ marginTop: "1rem" }}>
           <h3 className="panel__title">Manage: {selected.name}</h3>
+          {selected.provider === "hubspot" && (
+            <p className="integrations-panel__subtitle" style={{ marginBottom: "0.75rem" }}>
+              Paste your HubSpot private app token below, then Test or Full sync (saved automatically before sync).
+            </p>
+          )}
+
+          {selected.provider !== "webhook" && (CREDENTIAL_FIELDS[selected.provider] || []).length > 0 && (
+            <div className="enterprise-form-row">
+              {CREDENTIAL_FIELDS[selected.provider].map((field) => (
+                <label key={field.key}>
+                  {field.label}
+                  <input
+                    className="input"
+                    type={field.type || "text"}
+                    placeholder={field.placeholder || "Paste to update saved credentials"}
+                    value={form.credentials[field.key] || ""}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        credentials: { ...form.credentials, [field.key]: e.target.value },
+                      })
+                    }
+                  />
+                </label>
+              ))}
+            </div>
+          )}
 
           {selected.provider === "webhook" && selected.webhook_urls && (
             <div className="banner" style={{ marginBottom: "1rem" }}>

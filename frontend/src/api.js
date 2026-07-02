@@ -158,6 +158,7 @@ export function getApiErrorMessage(err, fallback = "Request failed") {
     return data;
   }
   if (data?.error) return data.error;
+  if (data?.message) return data.message;
   if (data?.detail) return data.detail;
   if (typeof data === "object" && data) {
     const flat = Object.values(data).flat().join(", ");
