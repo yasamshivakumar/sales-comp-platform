@@ -3,6 +3,8 @@
 import logging
 from datetime import datetime
 
+from django.db.models import Q
+
 from ..business_groups import currency_for_business_group
 from ..currencies import normalize_currency
 from ..models import HierarchyRelationship, Territory, UserProfile
@@ -23,6 +25,33 @@ def _parse_hire_date(value):
         except ValueError:
             continue
     raise ValueError(f"Invalid hire_date format: {text}")
+
+
+def _org_profile_filter(organization):
+    if organization:
+        return Q(organization=organization) | Q(organization__isnull=True)
+    return Q()
+
+
+def _find_existing_profile(organization, email, crm_user_id="", crm_alt_user_id=""):
+    """Find an existing profile by email or CRM ids within the org scope."""
+    org_filter = _org_profile_filter(organization)
+    if email:
+        profile = UserProfile.objects.filter(org_filter, email__iexact=email).first()
+        if profile:
+            return profile
+    if crm_user_id:
+        profile = UserProfile.objects.filter(org_filter, crm_user_id=crm_user_id).first()
+        if profile:
+            return profile
+    if crm_alt_user_id:
+        profile = UserProfile.objects.filter(
+            org_filter,
+            crm_alt_user_id=crm_alt_user_id,
+        ).first()
+        if profile:
+            return profile
+    return None
 
 
 def process_users_rows(organization, rows, *, allow_updates=True):
@@ -51,22 +80,12 @@ def process_users_rows(organization, rows, *, allow_updates=True):
             name_val = str(row.get("name", "")).strip()
 
             if organization and (crm_user_id_val or crm_alt_user_id_val):
-                existing_by_crm = None
-                if crm_user_id_val:
-                    existing_by_crm = UserProfile.objects.filter(
-                        organization=organization,
-                        crm_user_id=crm_user_id_val,
-                    ).first()
-                if not existing_by_crm and crm_alt_user_id_val:
-                    existing_by_crm = UserProfile.objects.filter(
-                        organization=organization,
-                        crm_alt_user_id=crm_alt_user_id_val,
-                    ).first()
-                if not existing_by_crm:
-                    existing_by_crm = UserProfile.objects.filter(
-                        organization=organization,
-                        email__iexact=email,
-                    ).first()
+                existing_by_crm = _find_existing_profile(
+                    organization,
+                    email,
+                    crm_user_id_val,
+                    crm_alt_user_id_val,
+                )
                 if existing_by_crm and not employee_id_val:
                     employee_id_val = existing_by_crm.employee_id
 
@@ -96,23 +115,12 @@ def process_users_rows(organization, rows, *, allow_updates=True):
                 else currency_for_business_group(business_group)
             )
 
-            profile_lookup = {}
-            existing_by_email = None
-            if organization and email:
-                existing_by_email = UserProfile.objects.filter(
-                    organization=organization,
-                    email__iexact=email,
-                ).first()
-            if organization:
-                profile_lookup["organization"] = organization
-                if existing_by_email:
-                    profile_lookup["email"] = email
-                elif crm_user_id_val:
-                    profile_lookup["crm_user_id"] = crm_user_id_val
-                else:
-                    profile_lookup["email"] = email
-            else:
-                profile_lookup = {"email": email}
+            existing_profile = _find_existing_profile(
+                organization,
+                email,
+                crm_user_id_val,
+                crm_alt_user_id_val,
+            )
 
             territory_id = row.get("territory") or row.get("territory_id")
             defaults = {
@@ -153,7 +161,18 @@ def process_users_rows(organization, rows, *, allow_updates=True):
                     "Login email is already used in another organization."
                 )
 
-            if allow_updates:
+            if allow_updates and existing_profile:
+                for key, value in defaults.items():
+                    setattr(existing_profile, key, value)
+                if organization and not existing_profile.organization_id:
+                    existing_profile.organization = organization
+                existing_profile.save()
+                profile = existing_profile
+                created = False
+            elif allow_updates:
+                profile_lookup = {"email": email}
+                if organization:
+                    profile_lookup["organization"] = organization
                 profile, created = UserProfile.objects.update_or_create(
                     **profile_lookup,
                     defaults=defaults,

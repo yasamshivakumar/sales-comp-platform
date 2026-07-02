@@ -75,7 +75,7 @@ class HubSpotConnector(BaseConnector):
         first = (owner.get("firstName") or "").strip()
         last = (owner.get("lastName") or "").strip()
         owner_id = str(owner.get("id", "")).strip()
-        user_id = str(owner.get("userId") or owner.get("userIdIncludingInactive") or "").strip()
+        user_id = str(owner.get("userId") or "").strip()
         email = (owner.get("email") or "").strip()
         if not email and owner_id:
             email = f"hubspot-owner-{owner_id}@crm.import"
@@ -87,7 +87,16 @@ class HubSpotConnector(BaseConnector):
             "firstName": first,
             "lastName": last,
             "full_name": full_name,
+            "archived": bool(owner.get("archived")),
         }
+
+    def _is_active_owner(self, owner):
+        if owner.get("archived") is True:
+            return False
+        # Deactivated HubSpot users keep an owner id but lose userId.
+        if owner.get("userId") is None and owner.get("userIdIncludingInactive"):
+            return False
+        return True
 
     def fetch_owner(self, owner_id):
         """Fetch a single owner by HubSpot owner id (used on deals)."""
@@ -101,27 +110,23 @@ class HubSpotConnector(BaseConnector):
                     headers=self._headers(),
                 )
                 if payload:
-                    return self._normalize_owner(payload)
+                    normalized = self._normalize_owner(payload)
+                    if normalized.get("archived"):
+                        return None
+                    return normalized
             except ConnectorError as exc:
                 logger.warning("HubSpot fetch_owner(%s) failed: %s", candidate, exc)
         return None
 
     def _fetch_owners(self, limit=None):
-        active = self._paginate_get("/crm/v3/owners", limit=limit)
-        archived = self._paginate_get(
-            "/crm/v3/owners",
-            params={"archived": "true"},
-            limit=limit,
-        )
-        seen = set()
+        """Pull active HubSpot owners only (excludes archived/deactivated users)."""
+        raw = self._paginate_get("/crm/v3/owners", limit=limit)
         owners = []
-        for owner in active + archived:
-            owner_key = str(owner.get("id", "")).strip()
-            if not owner_key or owner_key in seen:
+        for owner in raw:
+            if not self._is_active_owner(owner):
                 continue
-            seen.add(owner_key)
-            owners.append(owner)
-        return [self._normalize_owner(owner) for owner in owners]
+            owners.append(self._normalize_owner(owner))
+        return owners
 
     def _fetch_deals(self, limit=None):
         section = self.config.get("orders") or {}
