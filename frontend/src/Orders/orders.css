@@ -95,19 +95,6 @@
   min-height: 420px;
 }
 
-.orders-connect {
-  padding: 20px 24px 24px;
-}
-
-.orders-connect .integrations-panel__head {
-  border-bottom-color: var(--x-border-light);
-}
-
-.orders-connect .panel {
-  border-color: var(--x-border-light);
-  border-radius: 8px;
-}
-
 .orders-panel {
   padding: 20px 24px 24px;
 }

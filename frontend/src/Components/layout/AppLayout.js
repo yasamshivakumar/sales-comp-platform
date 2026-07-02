@@ -356,7 +356,7 @@ function AppLayout({ children }) {
 
   useEffect(() => {
     if (searchParams.get("integrations") === "1") {
-      navigate("/orders?tab=connect", { replace: true });
+      navigate("/dashboard?tab=connect", { replace: true });
     }
   }, [searchParams, navigate]);
 

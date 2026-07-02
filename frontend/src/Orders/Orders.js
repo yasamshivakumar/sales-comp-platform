@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useToast } from "../Components/Toast";
 import PageHeader from "../Components/PageHeader";
-import Integrations from "../Enterprise/Integrations";
 import OrderForm from "./OrderForm";
 import OrderUpload from "./OrderUpload";
 import OrderList from "./OrderList";
@@ -10,13 +9,12 @@ import "./orders.css";
 
 const TABS = [
   { id: "queue", label: "Order queue" },
-  { id: "connect", label: "Connect" },
   { id: "create", label: "Create order" },
   { id: "import", label: "Import CSV" },
 ];
 
 function Orders() {
-  const { info, success } = useToast();
+  const { info } = useToast();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState("queue");
   const [listRefreshKey, setListRefreshKey] = useState(0);
@@ -36,14 +34,6 @@ function Orders() {
 
   const handleOrderCreated = () => {
     setListRefreshKey((key) => key + 1);
-  };
-
-  const handleOrdersSynced = (data) => {
-    setListRefreshKey((key) => key + 1);
-    const count = data?.result?.success ?? 0;
-    if (count > 0) {
-      success(`Synced ${count} order(s) from CRM — check Order queue for results.`);
-    }
   };
 
   return (
@@ -69,11 +59,6 @@ function Orders() {
 
       <div className="orders-workspace">
         {activeTab === "queue" && <OrderList refreshKey={listRefreshKey} />}
-        {activeTab === "connect" && (
-          <div className="orders-connect">
-            <Integrations embedded inline onOrdersSynced={handleOrdersSynced} />
-          </div>
-        )}
         {activeTab === "create" && <OrderForm onOrderCreated={handleOrderCreated} />}
         {activeTab === "import" && <OrderUpload onUploadSuccess={handleUploadSuccess} />}
       </div>
