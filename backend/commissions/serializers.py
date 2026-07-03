@@ -505,6 +505,7 @@ class OrderSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         from .currencies import normalize_currency
         from .field_rules import validate_order_fields
+        from .services import _profile_for_employee, normalize_order_region_fields
 
         org = _request_organization(self)
         _validate_tenant_owned(attrs.get("territory"), org, "territory")
@@ -512,9 +513,18 @@ class OrderSerializer(serializers.ModelSerializer):
         if hasattr(raw, "dict"):
             raw = raw.dict()
         merged = {**raw, **attrs}
+        instance = getattr(self, "instance", None)
+        if instance:
+            for field in ("business_group", "currency", "employee_id", "order_date", "position_name"):
+                if field not in merged or merged.get(field) in (None, ""):
+                    merged[field] = getattr(instance, field, None)
         validate_order_fields(merged, partial=self.partial)
-        if "currency" in merged:
+        profile = _profile_for_employee(merged.get("employee_id"), org)
+        merged = normalize_order_region_fields(merged, profile=profile)
+        if merged.get("currency"):
             attrs["currency"] = normalize_currency(merged.get("currency"))
+        if merged.get("business_group"):
+            attrs["business_group"] = merged.get("business_group")
         return attrs
 
     def validate_sales_amount(self, value):

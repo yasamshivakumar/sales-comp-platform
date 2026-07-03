@@ -12,6 +12,7 @@ BUSINESS_GROUPS = [
 ]
 
 _BUSINESS_GROUP_BY_VALUE = {item["value"]: item for item in BUSINESS_GROUPS}
+_CURRENCY_TO_BUSINESS_GROUP = {item["currency"]: item["value"] for item in BUSINESS_GROUPS}
 
 _ALIASES = {
     "india": "India",
@@ -55,6 +56,14 @@ def currency_for_business_group(business_group, personal_currency=None):
     if item:
         return item["currency"]
     return normalize_currency(personal_currency, DEFAULT_CURRENCY)
+
+
+def business_group_for_currency(currency_code):
+    """Map ISO currency to a known business group (USD → USA, INR → India, …)."""
+    code = normalize_currency(currency_code, default="")
+    if not code:
+        return ""
+    return _CURRENCY_TO_BUSINESS_GROUP.get(code, "")
 
 
 def list_business_groups_for_org(org=None):
@@ -107,43 +116,128 @@ def resolve_dashboard_business_group(request, user_profile, can_view_all_groups)
     return selected, False, available
 
 
-def commission_business_group_q(business_group, organization=None):
+def _other_group_currencies(group):
+    normalized = normalize_business_group(group, default="")
+    return [
+        item["currency"]
+        for item in BUSINESS_GROUPS
+        if item["value"] != normalized
+    ]
+
+
+def _blank_business_group_q(prefix=""):
+    if prefix:
+        return Q(**{f"{prefix}__business_group": ""}) | Q(
+            **{f"{prefix}__business_group__isnull": True}
+        )
+    return Q(business_group="") | Q(business_group__isnull=True)
+
+
+def _profile_employee_ids_for_group(group, organization=None):
     from .models import UserProfile
 
-    group = normalize_business_group(business_group, default="")
-    if not group:
-        return Q()
-
-    profiles = UserProfile.objects.filter(
-        business_group__iexact=group
-    )
+    profiles = UserProfile.objects.filter(business_group__iexact=group)
     if organization is not None:
         profiles = profiles.filter(organization=organization)
-    employee_ids = profiles.exclude(employee_id="").values_list("employee_id", flat=True)
-    emails = profiles.exclude(email="").values_list("email", flat=True)
+    return list(profiles.exclude(employee_id="").values_list("employee_id", flat=True))
 
-    return (
-        Q(sale__order__business_group__iexact=group)
-        | Q(sale__order__employee_id__in=employee_ids)
-        | Q(employee__email__in=emails)
+
+def _profile_emails_for_group(group, organization=None):
+    from .models import UserProfile
+
+    profiles = UserProfile.objects.filter(business_group__iexact=group)
+    if organization is not None:
+        profiles = profiles.filter(organization=organization)
+    return list(profiles.exclude(email="").values_list("email", flat=True))
+
+
+def _implicit_business_group_q(group, group_currency, employee_ids, prefix=""):
+    """
+    Match rows without an explicit business_group.
+
+    Prefer order/commission currency; fall back to employee profile only when
+    currency is blank or matches the group's currency (not another region).
+    """
+    if not group_currency and not employee_ids:
+        return Q(pk__in=[])
+
+    blank = _blank_business_group_q(prefix)
+    currency_field = f"{prefix}__currency" if prefix else "currency"
+    employee_field = f"{prefix}__employee_id" if prefix else "employee_id"
+
+    match = Q(pk__in=[])
+    if group_currency:
+        match |= Q(**{f"{currency_field}__iexact": group_currency})
+
+    if employee_ids:
+        employee_q = Q(**{f"{employee_field}__in": employee_ids})
+        for other_currency in _other_group_currencies(group):
+            employee_q &= ~Q(**{f"{currency_field}__iexact": other_currency})
+        employee_q &= (
+            Q(**{f"{currency_field}": ""})
+            | Q(**{f"{currency_field}__isnull": True})
+            | Q(**{f"{currency_field}__iexact": group_currency})
+        )
+        match |= employee_q
+
+    return blank & match
+
+
+def _commission_row_group_q(group, group_currency, emails):
+    """Monthly aggregate commissions (sale.order is null) — use currency + profile."""
+    from .models import Commission
+
+    monthly = Q(calculation_scope=Commission.SCOPE_EMPLOYEE_MONTH) | Q(
+        sale__order__isnull=True
     )
+
+    match = Q(pk__in=[])
+    if group_currency:
+        match |= Q(currency__iexact=group_currency)
+
+    if emails:
+        email_q = Q(employee__email__in=emails)
+        for other_currency in _other_group_currencies(group):
+            email_q &= ~Q(currency__iexact=other_currency)
+        email_q &= Q(currency="") | Q(currency__iexact=group_currency)
+        match |= email_q
+
+    return monthly & match
 
 
 def order_business_group_q(business_group, organization=None):
-    from .models import UserProfile
-
     group = normalize_business_group(business_group, default="")
     if not group:
         return Q()
 
-    profiles = UserProfile.objects.filter(
-        business_group__iexact=group
-    )
-    if organization is not None:
-        profiles = profiles.filter(organization=organization)
-    employee_ids = profiles.exclude(employee_id="").values_list("employee_id", flat=True)
+    group_currency = currency_for_business_group(group, None)
+    employee_ids = _profile_employee_ids_for_group(group, organization)
 
-    return Q(business_group__iexact=group) | Q(employee_id__in=employee_ids)
+    explicit = Q(business_group__iexact=group)
+    implicit = _implicit_business_group_q(group, group_currency, employee_ids)
+    return explicit | implicit
+
+
+def commission_business_group_q(business_group, organization=None):
+    group = normalize_business_group(business_group, default="")
+    if not group:
+        return Q()
+
+    group_currency = currency_for_business_group(group, None)
+    employee_ids = _profile_employee_ids_for_group(group, organization)
+    emails = _profile_emails_for_group(group, organization)
+
+    order_linked = Q(sale__order__isnull=False)
+    order_explicit = order_linked & Q(sale__order__business_group__iexact=group)
+    order_implicit = order_linked & _implicit_business_group_q(
+        group,
+        group_currency,
+        employee_ids,
+        prefix="sale__order",
+    )
+    commission_row = _commission_row_group_q(group, group_currency, emails)
+
+    return order_explicit | order_implicit | commission_row
 
 
 def apply_business_group_to_commissions(queryset, business_group, organization=None):

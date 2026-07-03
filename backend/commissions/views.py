@@ -1487,52 +1487,99 @@ def period_analytics_report(request):
     Period-wise Analytics Report
     Monthly, Quarterly, Annual metrics
     """
-    from django.db.models import Sum, Count
-    from datetime import datetime, timedelta
+    from datetime import date, timedelta
+
     from dateutil.relativedelta import relativedelta
-    
-    user = request.user
-    try:
-        user_profile = UserProfile.objects.get(email=user.email)
-        is_admin = user_profile.role.lower() in ['admin', 'administrator']
-    except:
-        is_admin = False
-    
-    period = request.query_params.get('period', 'monthly')  # monthly, quarterly, annual
-    
-    commissions = Commission.objects.all()
-    
-    if not is_admin:
-        possible_emails = [user.email]
-        if user_profile.employee_id:
-            possible_emails.append(f"{user_profile.employee_id}@company.com")
-        commissions = commissions.filter(employee__email__in=possible_emails)
-    
-    # Group by period
+    from django.db.models import Count, Sum
+
+    from .currencies import active_currency_totals, normalize_currency
+    from .enterprise_views import (
+        _apply_commission_filters,
+        _commission_base_queryset,
+        _commissions_for_user,
+        commission_date_q,
+        with_commission_currency,
+    )
+
+    queryset = _commission_base_queryset(request)
+    if not (user_can_view_finance_data(request) or user_is_admin(request)):
+        queryset = _commissions_for_user(request)
+
+    queryset, start_date, end_date = _apply_commission_filters(queryset, request)
+    queryset = with_commission_currency(queryset)
+
+    period = request.query_params.get("period", "monthly")
+    if not end_date:
+        end_date = date.today()
+    if not start_date:
+        start_date = end_date - timedelta(days=365)
+
     period_data = []
-    
-    if period == 'monthly':
-        # Last 12 months
-        for i in range(12, 0, -1):
-            month_start = datetime.now() - relativedelta(months=i)
-            month_end = month_start + relativedelta(months=1)
-            
-            month_commission = commissions.filter(
-                calculated_at__gte=month_start,
-                calculated_at__lt=month_end
-            ).aggregate(total=Sum('commission_amount'), count=Count('id'))
-            
-            period_data.append({
-                'period': month_start.strftime('%B %Y'),
-                'total': float(month_commission['total'] or 0),
-                'count': month_commission['count'] or 0,
-            })
-    
-    return Response({
-        'period': period,
-        'data': period_data,
-        'is_admin': is_admin,
-    })
+    cursor = start_date.replace(day=1)
+
+    while cursor <= end_date:
+        if period == "quarterly":
+            quarter = (cursor.month - 1) // 3
+            bucket_start = date(cursor.year, quarter * 3 + 1, 1)
+            bucket_end = bucket_start + relativedelta(months=3) - timedelta(days=1)
+            label = f"Q{quarter + 1} {cursor.year}"
+            cursor = bucket_start + relativedelta(months=3)
+        elif period == "annual":
+            bucket_start = date(cursor.year, 1, 1)
+            bucket_end = date(cursor.year, 12, 31)
+            label = str(cursor.year)
+            cursor = date(cursor.year + 1, 1, 1)
+        else:
+            bucket_start = cursor
+            bucket_end = (cursor + relativedelta(months=1)) - timedelta(days=1)
+            label = cursor.strftime("%B %Y")
+            cursor = cursor + relativedelta(months=1)
+
+        if bucket_end < start_date or bucket_start > end_date:
+            continue
+
+        scoped = queryset.filter(commission_date_q(bucket_start, bucket_end))
+        totals_rows = scoped.values("report_currency").annotate(
+            total=Sum("commission_amount"),
+            count=Count("id"),
+        )
+        bucket_total = sum(float(row["total"] or 0) for row in totals_rows)
+        bucket_count = sum(row["count"] for row in totals_rows)
+        period_data.append(
+            {
+                "period": label,
+                "total": bucket_total,
+                "count": bucket_count,
+            }
+        )
+
+    totals_rows = list(
+        queryset.values("report_currency").annotate(
+            total=Sum("commission_amount"),
+            count=Count("id"),
+        )
+    )
+    totals_by_currency = active_currency_totals(
+        [
+            {
+                "currency": normalize_currency(row["report_currency"]),
+                "total": float(row["total"] or 0),
+                "count": row["count"],
+            }
+            for row in totals_rows
+        ]
+    )
+
+    return Response(
+        {
+            "period": period,
+            "data": period_data,
+            "totals_by_currency": totals_by_currency,
+            "is_admin": user_is_admin(request),
+            "start_date": str(start_date),
+            "end_date": str(end_date),
+        }
+    )
 
 
 # =====================================================

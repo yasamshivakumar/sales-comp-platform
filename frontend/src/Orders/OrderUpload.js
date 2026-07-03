@@ -211,7 +211,8 @@ function OrderUpload({ onUploadSuccess }) {
             <li>position_name</li>
             <li>service_name</li>
             <li>order_status (Booked until closed; use Success to generate commission)</li>
-            <li>currency (USD, INR, AUD, EUR; derived from business group/profile if blank)</li>
+            <li>currency (USD, INR, AUD, EUR — sets business group automatically when blank)</li>
+            <li>business_group (optional — India, USA, Australia, Europe)</li>
           </ul>
         </aside>
       </div>

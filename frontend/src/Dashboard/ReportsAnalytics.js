@@ -340,6 +340,10 @@ function ReportsAnalytics({ compact = false }) {
   const loadDashboard = useCallback(async () => {
     setLoadingInitial(true);
     setError("");
+    setSummary(null);
+    setSales(null);
+    setPeriodData(null);
+    setAdvanced(null);
     const params = new URLSearchParams();
     if (startDate) params.append("start_date", startDate);
     if (endDate) params.append("end_date", endDate);

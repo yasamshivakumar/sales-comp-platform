@@ -119,6 +119,16 @@ class OrderSyncTests(TestCase):
         self.assertEqual(order.crm_owner_id, "crm-owner-99")
         self.assertEqual(order.order_date, date(2025, 3, 1))
 
+    def test_usd_import_sets_usa_business_group_even_for_india_rep(self):
+        self.rep.business_group = "India"
+        self.rep.personal_currency = "INR"
+        self.rep.save(update_fields=["business_group", "personal_currency"])
+        row = self._order_row("CRM-USD-BG", "2025-03-01")
+        import_order_row(self.org, row, crm_provider="hubspot")
+        order = Order.objects.get(order_id="CRM-USD-BG")
+        self.assertEqual(order.currency, "USD")
+        self.assertEqual(order.business_group, "USA")
+
     def test_updated_crm_order_changes_amount_and_recalculates(self):
         row = self._order_row("CRM-UPD-1", "2025-03-05", "1000.00")
         process_orders_rows(self.org, [row], crm_provider="hubspot")

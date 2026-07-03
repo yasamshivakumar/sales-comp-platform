@@ -64,9 +64,42 @@ def _get_user_profile_for_order(order):
     )
 
 
+def derive_order_business_group(order, profile=None):
+    """Resolve business group: explicit field → currency → plan → employee profile."""
+    from .business_groups import (
+        business_group_for_currency,
+        normalize_business_group,
+    )
+
+    explicit = str(getattr(order, "business_group", None) or "").strip()
+    if explicit:
+        return normalize_business_group(explicit, default="")
+
+    currency = str(getattr(order, "currency", None) or "").strip()
+    if currency:
+        from_currency = business_group_for_currency(currency)
+        if from_currency:
+            return from_currency
+
+    profile = profile or _get_user_profile_for_order(order)
+    plan, _source = resolve_compensation_plan(order)
+    if plan and str(plan.business_group or "").strip():
+        return normalize_business_group(plan.business_group, default="")
+    if profile and str(profile.business_group or "").strip():
+        return normalize_business_group(profile.business_group, default="")
+    return ""
+
+
 def derive_order_currency(order, profile=None):
-    """Best currency for an order: compensation plan business group, then profile, then order."""
+    """Best currency for an order — respects explicit order.currency before profile."""
     from .business_groups import currency_for_business_group
+
+    if str(getattr(order, "currency", None) or "").strip():
+        return normalize_currency(getattr(order, "currency", None))
+
+    explicit_group = str(getattr(order, "business_group", None) or "").strip()
+    if explicit_group:
+        return currency_for_business_group(explicit_group)
 
     profile = profile or _get_user_profile_for_order(order)
     plan, _source = resolve_compensation_plan(order)
@@ -79,20 +112,64 @@ def derive_order_currency(order, profile=None):
         )
     if profile and str(profile.personal_currency or "").strip():
         return normalize_currency(profile.personal_currency)
-    order_group = str(getattr(order, "business_group", None) or "").strip()
-    if order_group:
-        return currency_for_business_group(order_group)
     return normalize_currency(getattr(order, "currency", None))
 
 
-def sync_order_currency(order, profile=None, save=True):
+def normalize_order_region_fields(data, profile=None):
+    """
+    Align business_group and currency on an order payload dict.
+
+    Priority when business_group is blank:
+      1. Map from explicit currency (USD → USA)
+      2. Employee / plan profile (handled by derive_* on a temp object)
+    """
+    from .business_groups import normalize_business_group
+
+    class _OrderStub:
+        pass
+
+    stub = _OrderStub()
+    stub.business_group = str(data.get("business_group") or "").strip()
+    stub.currency = str(data.get("currency") or "").strip()
+    stub.employee_id = data.get("employee_id")
+    stub.order_date = data.get("order_date")
+    stub.position_name = data.get("position_name")
+    stub.organization_id = data.get("organization_id")
+    stub.organization = data.get("organization")
+
+    group = derive_order_business_group(stub, profile=profile)
+    currency = derive_order_currency(stub, profile=profile)
+
+    if group:
+        data["business_group"] = normalize_business_group(group, default="")
+    if currency:
+        data["currency"] = currency
+    return data
+
+
+def sync_order_region(order, profile=None, save=True):
+    """Persist aligned business_group and currency on an order."""
+    profile = profile or _get_user_profile_for_order(order)
     currency = derive_order_currency(order, profile=profile)
-    current = normalize_currency(getattr(order, "currency", None))
-    if currency != current:
+    business_group = derive_order_business_group(order, profile=profile)
+
+    update_fields = []
+    if currency and normalize_currency(getattr(order, "currency", None)) != currency:
         order.currency = currency
-        if save:
-            order.save(update_fields=["currency"])
-    return currency
+        update_fields.append("currency")
+    if business_group and str(getattr(order, "business_group", None) or "").strip() != business_group:
+        order.business_group = business_group
+        update_fields.append("business_group")
+
+    if save and update_fields:
+        order.save(update_fields=update_fields)
+    return {"currency": currency, "business_group": business_group}
+
+
+def sync_order_currency(order, profile=None, save=True):
+    """Backward-compatible alias — also sets business_group when missing."""
+    result = sync_order_region(order, profile=profile, save=save)
+    return result["currency"]
 
 
 def _plan_queryset_for_order(order):
@@ -562,7 +639,7 @@ def calculate_commission_for_order(order, replace_existing=True, force=False):
     replace_existing: If True, delete existing commissions for this employee/month first.
     force: Allow replacing approved commissions (admin bulk recalc).
     """
-    sync_order_currency(order, save=True)
+    sync_order_region(order, save=True)
 
     if replace_existing:
         if not force and _aggregate_has_locked_commissions(order):

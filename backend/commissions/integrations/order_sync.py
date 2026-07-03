@@ -19,7 +19,6 @@ from ..services import (
     resolve_compensation_plan,
     _profile_for_employee,
 )
-from ..business_groups import currency_for_business_group
 from ..currencies import normalize_currency
 from .employee_ids import normalize_crm_id
 
@@ -100,27 +99,6 @@ def build_order_defaults(organization, row):
         defaults["order_status"] = (
             str(row.get("order_status", "Booked")).strip() or "Booked"
         )
-    if "currency" in order_model_fields:
-        raw_currency = str(row.get("currency", "")).strip()
-        raw_group = str(row.get("business_group", "")).strip()
-        profile = _profile_for_employee(employee_id, organization)
-        if not raw_group and profile:
-            raw_group = profile.business_group or ""
-        defaults["currency"] = (
-            normalize_currency(raw_currency)
-            if raw_currency
-            else currency_for_business_group(
-                raw_group,
-                profile.personal_currency if profile else None,
-            )
-        )
-        if (
-            "business_group" in order_model_fields
-            and not raw_group
-            and profile
-            and profile.business_group
-        ):
-            defaults.setdefault("business_group", profile.business_group)
     if "needs_recalculation" in order_model_fields:
         defaults["needs_recalculation"] = False
 
@@ -128,9 +106,18 @@ def build_order_defaults(organization, row):
         if field_name in row and field_name in order_model_fields:
             defaults[field_name] = str(row.get(field_name, "")).strip()
 
-    for field_name in ("region", "customer_segment", "business_group"):
+    for field_name in ("region", "customer_segment", "business_group", "currency"):
         if field_name in row and field_name in order_model_fields:
-            defaults[field_name] = str(row.get(field_name, "")).strip()
+            value = str(row.get(field_name, "")).strip()
+            if field_name == "currency" and value:
+                defaults[field_name] = normalize_currency(value)
+            elif value:
+                defaults[field_name] = value
+
+    profile = _profile_for_employee(employee_id, organization)
+    from ..services import normalize_order_region_fields
+
+    normalize_order_region_fields(defaults, profile=profile)
 
     territory_id = row.get("territory") or row.get("territory_id")
     if territory_id and "territory" in order_model_fields:
