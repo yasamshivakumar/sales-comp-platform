@@ -40,7 +40,7 @@ function orderStatusPill(status) {
   return <StatusPill status="open" label={status || "Pending"} compact />;
 }
 
-function SuccessToggle({ checked, disabled, loading, onChange }) {
+function SuccessToggle({ disabled, loading, onChange }) {
   return (
     <label
       className={`orders-success-toggle${disabled || loading ? " orders-success-toggle--disabled" : ""}`}
@@ -48,15 +48,15 @@ function SuccessToggle({ checked, disabled, loading, onChange }) {
       <input
         type="checkbox"
         className="orders-success-toggle__input"
-        checked={checked}
+        checked={false}
         disabled={disabled || loading}
-        onChange={(event) => onChange(event.target.checked)}
-        aria-label={checked ? "Mark order as Booked" : "Mark order as Success"}
+        onChange={() => onChange(true)}
+        aria-label="Mark order as Success"
       />
       <span className="orders-success-toggle__track" aria-hidden="true">
         <span className="orders-success-toggle__thumb" />
       </span>
-      <span className="orders-success-toggle__label">{checked ? "Success" : "Booked"}</span>
+      <span className="orders-success-toggle__label">Booked</span>
     </label>
   );
 }
@@ -119,34 +119,32 @@ function OrderList({ refreshKey = 0 }) {
     }
   };
 
-  const toggleSuccess = async (order, markSuccess) => {
-    const nextStatus = markSuccess ? "Success" : "Booked";
+  const toggleSuccess = async (order) => {
     setUpdatingId(order.id);
     try {
       const response = await api.patch(`orders/${order.id}/`, {
-        order_status: nextStatus,
+        order_status: "Success",
       });
       const updated = response.data;
-      setOrders((current) =>
-        current.map((row) => (row.id === order.id ? { ...row, ...updated } : row))
-      );
-      if (markSuccess) {
-        if (updated.has_commission) {
-          success(
-            `Order ${order.order_id} marked Success — commission ${formatMoney(
-              updated.commission_amount,
-              updated.currency || order.currency
-            )} calculated`
-          );
-        } else {
-          warning(
-            updated.commission_skip_reason
-              ? `Order ${order.order_id} marked Success — ${updated.commission_skip_reason}`
-              : `Order ${order.order_id} marked Success — no commission yet (check User Setup + compensation plan)`
-          );
+      setOrders((current) => {
+        if (statusFilter === "booked") {
+          return current.filter((row) => row.id !== order.id);
         }
+        return current.map((row) => (row.id === order.id ? { ...row, ...updated } : row));
+      });
+      if (updated.has_commission) {
+        success(
+          `Order ${order.order_id} marked Success — commission ${formatMoney(
+            updated.commission_amount,
+            updated.currency || order.currency
+          )} calculated`
+        );
       } else {
-        success(`Order ${order.order_id} moved back to Booked — commission removed`);
+        warning(
+          updated.commission_skip_reason
+            ? `Order ${order.order_id} marked Success — ${updated.commission_skip_reason}`
+            : `Order ${order.order_id} marked Success — no commission yet (check User Setup + compensation plan)`
+        );
       }
     } catch (err) {
       error(err.response?.data?.detail || `Failed to update order ${order.order_id}`);
@@ -155,10 +153,10 @@ function OrderList({ refreshKey = 0 }) {
     }
   };
 
-  const canToggle = (order) => {
+  const canMarkSuccess = (order) => {
     if (!isAdmin) return false;
     const status = normalizeStatus(order.order_status);
-    return status === "booked" || status === "success" || status === "pending";
+    return status === "booked" || status === "pending";
   };
 
   const emptyMessage = () => {
@@ -186,7 +184,7 @@ function OrderList({ refreshKey = 0 }) {
           <h2 className="orders-panel__title">Order queue</h2>
           <p className="orders-panel__desc">
             Booked orders appear here until an admin marks them Success. Commission is calculated
-            automatically when you turn Success on.
+            automatically when you mark Success — this cannot be undone from the queue.
           </p>
         </div>
         {!loading && (
@@ -292,8 +290,7 @@ function OrderList({ refreshKey = 0 }) {
               </tr>
             ) : (
               orders.map((order) => {
-                const isSuccess = normalizeStatus(order.order_status) === "success";
-                const toggleEnabled = canToggle(order);
+                const showSuccessToggle = canMarkSuccess(order);
                 return (
                   <tr key={order.id}>
                     <td className="orders-list-id">{order.order_id}</td>
@@ -317,12 +314,11 @@ function OrderList({ refreshKey = 0 }) {
                     </td>
                     {isAdmin ? (
                       <td className="orders-list-toggle-cell">
-                        {toggleEnabled ? (
+                        {showSuccessToggle ? (
                           <SuccessToggle
-                            checked={isSuccess}
                             loading={updatingId === order.id}
                             disabled={normalizeStatus(order.order_status) === "cancelled"}
-                            onChange={(checked) => toggleSuccess(order, checked)}
+                            onChange={() => toggleSuccess(order)}
                           />
                         ) : (
                           <span className="orders-list-muted">—</span>
