@@ -9,7 +9,7 @@ function MarketingHome() {
     <>
       <section className="marketing-hero" id="home">
         <div className="marketing-hero__inner">
-          <p className="marketing-kicker">Sales compensation platform</p>
+          <p className="marketing-kicker marketing-kicker--light">Sales compensation platform</p>
           <h1>Plans, orders, commissions, and payroll — in one place</h1>
           <p className="marketing-hero__lead">
             Incentra is a multi-tenant SaaS platform for compensation plan setup, order

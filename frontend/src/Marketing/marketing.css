@@ -43,33 +43,43 @@
   color: var(--mkt-navy);
 }
 
-.marketing-site p {
-  color: var(--mkt-muted);
-}
-
 .marketing-site .marketing-kicker {
   color: var(--mkt-blue);
 }
 
-.marketing-hero,
-.marketing-hero h1,
-.marketing-hero h2,
-.marketing-hero h3,
-.marketing-page-hero,
-.marketing-page-hero h1,
-.marketing-page-hero h2,
-.marketing-band--unified,
-.marketing-band--unified h2,
-.marketing-cta-band,
-.marketing-cta-band h2 {
+/* Light sections only — don't override hero / dark bands */
+.marketing-site .marketing-section p,
+.marketing-site .marketing-persona p,
+.marketing-site .marketing-demo-section p,
+.marketing-site .marketing-pillar p,
+.marketing-site .marketing-card-link p,
+.marketing-site .marketing-advantage-card p,
+.marketing-site .marketing-pillar-card p {
+  color: var(--mkt-muted);
+}
+
+.marketing-site .marketing-hero h1,
+.marketing-site .marketing-page-hero h1,
+.marketing-site .marketing-band--unified h2,
+.marketing-site .marketing-cta-band h2 {
   color: #fff;
 }
 
-.marketing-hero__lead,
-.marketing-page-hero__lead,
-.marketing-band--unified .marketing-band__lead,
-.marketing-cta-band p {
-  color: rgba(255, 255, 255, 0.84);
+.marketing-site .marketing-hero .marketing-kicker,
+.marketing-site .marketing-page-hero .marketing-kicker,
+.marketing-site .marketing-band--unified .marketing-kicker,
+.marketing-site .marketing-kicker--light {
+  color: #7cb8f0;
+}
+
+.marketing-site .marketing-hero p,
+.marketing-site .marketing-hero__lead,
+.marketing-site .marketing-page-hero p,
+.marketing-site .marketing-page-hero__lead,
+.marketing-site .marketing-band--unified p,
+.marketing-site .marketing-band--unified .marketing-band__lead,
+.marketing-site .marketing-cta-band p {
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .marketing-band--light h2,
@@ -423,7 +433,7 @@
   max-width: 780px;
   font-size: clamp(16px, 1.8vw, 18px);
   line-height: 1.65;
-  color: rgba(255, 255, 255, 0.84);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .marketing-hero__actions {
