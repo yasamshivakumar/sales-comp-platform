@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Login from "./Login";
 import InviteAccept from "./InviteAccept";
-import MarketingSite from "./Marketing/MarketingSite";
+import MarketingLayout from "./Marketing/MarketingLayout";
 import Dashboard from "./Dashboard/Dashboard";
 
 import AppLayout from "./Components/layout/AppLayout";
@@ -31,7 +31,10 @@ function AppRoutes() {
     <BrowserRouter>
       <Routes>
         <Route path="/signup" element={<Navigate to="/login" replace />} />
-        <Route path="/" element={<MarketingSite />} />
+        <Route path="/" element={<MarketingLayout />} />
+        <Route path="/product/*" element={<Navigate to="/" replace />} />
+        <Route path="/teams/*" element={<Navigate to="/" replace />} />
+        <Route path="/demo" element={<Navigate to="/" replace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/invite/:token" element={<InviteAccept />} />
 

@@ -1,0 +1,44 @@
+import { SOLUTIONS_BY_FUNCTION } from "../marketingData";
+import { useMarketingNav } from "../marketingNavContext";
+import MarketingCta from "./MarketingCta";
+
+function MarketingTeamsIndex() {
+  const { showTeam } = useMarketingNav();
+
+  return (
+    <>
+      <section className="marketing-page-hero">
+        <div className="marketing-page-hero__inner">
+          <p className="marketing-kicker">Teams</p>
+          <h1>How each team uses Incentra</h1>
+          <p className="marketing-page-hero__lead">
+            Finance, compensation, RevOps, and sales each get a focused workflow inside the
+            same platform. Pick your team to see what matters most.
+          </p>
+        </div>
+      </section>
+
+      <section className="marketing-section marketing-section--wash">
+        <div className="marketing-card-grid marketing-card-grid--teams">
+          {SOLUTIONS_BY_FUNCTION.map((team) => (
+            <button
+              key={team.slug}
+              type="button"
+              className="marketing-card-link"
+              onClick={() => showTeam(team.slug)}
+            >
+              <span className="marketing-card-link__label">{team.label}</span>
+              <h3>{team.title}</h3>
+              <p>{team.body}</p>
+              <span className="marketing-card-link__arrow">View for {team.label} →</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <MarketingCta />
+    </>
+  );
+}
+
+export default MarketingTeamsIndex;
