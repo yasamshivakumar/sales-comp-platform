@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { PRODUCT_AREAS, SOLUTIONS_BY_FUNCTION, getProductArea, getTeamSolution } from "./marketingData";
 import { MarketingNavContext } from "./marketingNavContext";
@@ -12,47 +12,70 @@ import "./marketing.css";
 
 function MarketingLayout() {
   const [view, setView] = useState({ type: "home" });
+  const [openMenu, setOpenMenu] = useState(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  const scrollToTop = () => {
+  const navigate = useCallback((nextView) => {
+    setView(nextView);
+    setOpenMenu(null);
+    setMobileNavOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const toggleMenu = (menu, event) => {
+    event?.stopPropagation();
+    setOpenMenu((current) => (current === menu ? null : menu));
   };
+
+  const handleMenuAction = (action) => (event) => {
+    event.stopPropagation();
+    action();
+  };
+
+  const closeMenus = useCallback(() => {
+    setOpenMenu(null);
+    setMobileNavOpen(false);
+  }, []);
 
   const nav = useMemo(
     () => ({
       view,
-      goHome: () => {
-        setView({ type: "home" });
-        scrollToTop();
-      },
-      showProducts: () => {
-        setView({ type: "products" });
-        scrollToTop();
-      },
-      showProduct: (slug) => {
-        setView({ type: "product", slug });
-        scrollToTop();
-      },
-      showTeams: () => {
-        setView({ type: "teams" });
-        scrollToTop();
-      },
-      showTeam: (slug) => {
-        setView({ type: "team", slug });
-        scrollToTop();
-      },
-      showDemo: () => {
-        setView({ type: "demo" });
-        scrollToTop();
-      },
+      goHome: () => navigate({ type: "home" }),
+      showProducts: () => navigate({ type: "products" }),
+      showProduct: (slug) => navigate({ type: "product", slug }),
+      showTeams: () => navigate({ type: "teams" }),
+      showTeam: (slug) => navigate({ type: "team", slug }),
+      showDemo: () => navigate({ type: "demo" }),
       isProductActive: view.type === "products" || view.type === "product",
       isTeamActive: view.type === "teams" || view.type === "team",
     }),
-    [view]
+    [view, navigate]
   );
 
   useEffect(() => {
     document.title = "Incentra — Sales compensation platform";
   }, [view]);
+
+  useEffect(() => {
+    if (!openMenu && !mobileNavOpen) return undefined;
+
+    const handleClickOutside = (event) => {
+      if (!event.target.closest(".marketing-nav")) {
+        closeMenus();
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === "Escape") closeMenus();
+    };
+
+    document.addEventListener("click", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("click", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [openMenu, mobileNavOpen, closeMenus]);
 
   let content = <MarketingHome />;
   if (view.type === "products") {
@@ -82,28 +105,43 @@ function MarketingLayout() {
           Skip to main content
         </a>
 
-        <header className="marketing-nav">
+        <header className={`marketing-nav${mobileNavOpen ? " marketing-nav--open" : ""}`}>
           <button type="button" className="marketing-brand" aria-label="Incentra home" onClick={nav.goHome}>
             <img src="/incentra-icon.svg" alt="" className="marketing-brand__logo" />
             <span className="marketing-brand__name">Incentra</span>
           </button>
-          <nav className="marketing-nav__links" aria-label="Marketing navigation">
+          <button
+            type="button"
+            className="marketing-nav__toggle"
+            aria-expanded={mobileNavOpen}
+            aria-controls="marketing-nav-menu"
+            onClick={() => {
+              setMobileNavOpen((open) => !open);
+              setOpenMenu(null);
+            }}
+          >
+            {mobileNavOpen ? "Close" : "Menu"}
+          </button>
+          <nav className="marketing-nav__links" id="marketing-nav-menu" aria-label="Marketing navigation">
             <div
-              className={`marketing-nav__dropdown${nav.isProductActive ? " marketing-nav__dropdown--active" : ""}`}
+              className={`marketing-nav__dropdown${nav.isProductActive ? " marketing-nav__dropdown--active" : ""}${openMenu === "product" ? " marketing-nav__dropdown--open" : ""}`}
             >
-              <button type="button" className="marketing-nav__dropdown-trigger">
+              <button
+                type="button"
+                className="marketing-nav__dropdown-trigger"
+                aria-expanded={openMenu === "product"}
+                aria-haspopup="menu"
+                onClick={(event) => toggleMenu("product", event)}
+              >
                 Product
               </button>
               <div className="marketing-nav__menu" role="menu">
-                <button type="button" role="menuitem" onClick={nav.showProducts}>
-                  All modules
-                </button>
                 {PRODUCT_AREAS.map((area) => (
                   <button
                     key={area.slug}
                     type="button"
                     role="menuitem"
-                    onClick={() => nav.showProduct(area.slug)}
+                    onClick={handleMenuAction(() => nav.showProduct(area.slug))}
                   >
                     {area.label}
                   </button>
@@ -111,28 +149,31 @@ function MarketingLayout() {
               </div>
             </div>
             <div
-              className={`marketing-nav__dropdown${nav.isTeamActive ? " marketing-nav__dropdown--active" : ""}`}
+              className={`marketing-nav__dropdown${nav.isTeamActive ? " marketing-nav__dropdown--active" : ""}${openMenu === "teams" ? " marketing-nav__dropdown--open" : ""}`}
             >
-              <button type="button" className="marketing-nav__dropdown-trigger">
+              <button
+                type="button"
+                className="marketing-nav__dropdown-trigger"
+                aria-expanded={openMenu === "teams"}
+                aria-haspopup="menu"
+                onClick={(event) => toggleMenu("teams", event)}
+              >
                 Teams
               </button>
               <div className="marketing-nav__menu" role="menu">
-                <button type="button" role="menuitem" onClick={nav.showTeams}>
-                  All teams
-                </button>
                 {SOLUTIONS_BY_FUNCTION.map((team) => (
                   <button
                     key={team.slug}
                     type="button"
                     role="menuitem"
-                    onClick={() => nav.showTeam(team.slug)}
+                    onClick={handleMenuAction(() => nav.showTeam(team.slug))}
                   >
                     {team.label}
                   </button>
                 ))}
               </div>
             </div>
-            <Link to="/login" className="marketing-nav__login">
+            <Link to="/login" className="marketing-nav__login" onClick={closeMenus}>
               Sign in
             </Link>
             <button type="button" className="marketing-nav__cta" onClick={nav.showDemo}>

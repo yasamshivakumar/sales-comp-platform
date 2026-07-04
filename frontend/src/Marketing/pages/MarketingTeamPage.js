@@ -1,5 +1,6 @@
 import { getTeamSolution, SOLUTIONS_BY_FUNCTION } from "../marketingData";
 import { useMarketingNav } from "../marketingNavContext";
+import { TeamPersonaVisual } from "../MarketingVisuals";
 import MarketingCta from "./MarketingCta";
 
 function MarketingTeamPage({ slug }) {
@@ -35,7 +36,7 @@ function MarketingTeamPage({ slug }) {
             </button>
           ))}
         </div>
-        <div className="marketing-persona" role="tabpanel">
+        <div className="marketing-persona marketing-persona--split" role="tabpanel">
           <div className="marketing-persona__copy">
             <h3>{team.title}</h3>
             <p>{team.body}</p>
@@ -45,6 +46,7 @@ function MarketingTeamPage({ slug }) {
               ))}
             </ul>
           </div>
+          <TeamPersonaVisual label={team.label} bullets={team.bullets} />
         </div>
       </section>
 

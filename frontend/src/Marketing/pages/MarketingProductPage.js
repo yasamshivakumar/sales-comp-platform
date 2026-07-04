@@ -1,5 +1,6 @@
 import { getProductArea, PRODUCT_AREAS } from "../marketingData";
 import { useMarketingNav } from "../marketingNavContext";
+import { ModulePreviewVisual } from "../MarketingVisuals";
 import MarketingCta from "./MarketingCta";
 
 function MarketingProductPage({ slug }) {
@@ -15,10 +16,13 @@ function MarketingProductPage({ slug }) {
   return (
     <>
       <section className="marketing-page-hero">
-        <div className="marketing-page-hero__inner">
-          <p className="marketing-kicker">Product · {area.label}</p>
-          <h1>{area.headline}</h1>
-          <p className="marketing-page-hero__lead">{area.summary}</p>
+        <div className="marketing-page-hero__inner marketing-page-hero__inner--split">
+          <div>
+            <p className="marketing-kicker">Product · {area.label}</p>
+            <h1>{area.headline}</h1>
+            <p className="marketing-page-hero__lead">{area.summary}</p>
+          </div>
+          <ModulePreviewVisual slug={slug} label={area.label} />
         </div>
       </section>
 
