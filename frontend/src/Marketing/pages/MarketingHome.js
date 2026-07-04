@@ -66,7 +66,7 @@ function MarketingHome() {
         </div>
       </section>
 
-      <section className="marketing-section">
+      <section className="marketing-section marketing-section--wash">
         <div className="marketing-section__head marketing-section__head--center">
           <p className="marketing-kicker">Teams</p>
           <h2>Built for every stakeholder</h2>

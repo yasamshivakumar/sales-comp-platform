@@ -28,6 +28,57 @@
     linear-gradient(180deg, #f8fafc 0%, #eef3f9 45%, #e8eef6 100%);
   background-attachment: fixed;
   color: var(--mkt-text);
+  /* Keep marketing readable when app dark mode is enabled */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+}
+
+.marketing-site h1,
+.marketing-site h2,
+.marketing-site h3,
+.marketing-site h4,
+.marketing-site h5,
+.marketing-site h6 {
+  color: var(--mkt-navy);
+}
+
+.marketing-site p {
+  color: var(--mkt-muted);
+}
+
+.marketing-site .marketing-kicker {
+  color: var(--mkt-blue);
+}
+
+.marketing-hero,
+.marketing-hero h1,
+.marketing-hero h2,
+.marketing-hero h3,
+.marketing-page-hero,
+.marketing-page-hero h1,
+.marketing-page-hero h2,
+.marketing-band--unified,
+.marketing-band--unified h2,
+.marketing-cta-band,
+.marketing-cta-band h2 {
+  color: #fff;
+}
+
+.marketing-hero__lead,
+.marketing-page-hero__lead,
+.marketing-band--unified .marketing-band__lead,
+.marketing-cta-band p {
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.marketing-band--light h2,
+.marketing-band--light p {
+  color: var(--mkt-navy);
+}
+
+.marketing-band--light .marketing-band__lead--dark {
+  color: var(--mkt-muted);
 }
 
 .marketing-skip {
@@ -648,6 +699,11 @@
   font-size: clamp(24px, 3vw, 34px);
   font-weight: 700;
   letter-spacing: -0.02em;
+  color: var(--mkt-navy);
+}
+
+.marketing-section__head .marketing-kicker {
+  color: var(--mkt-blue);
 }
 
 .marketing-section__head--center {
