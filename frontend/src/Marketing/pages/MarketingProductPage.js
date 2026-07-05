@@ -20,9 +20,6 @@ function MarketingProductPage({ slug }) {
           <div className="marketing-page-hero__copy-block">
             <div className="marketing-hero-badges">
               <span className="marketing-hero-badge">Live module</span>
-              <span className="marketing-hero-badge marketing-hero-badge--soft">
-                {area.items.length} capabilities
-              </span>
             </div>
             <p className="marketing-kicker">Product · {area.label}</p>
             <h1>{area.headline}</h1>
@@ -40,11 +37,8 @@ function MarketingProductPage({ slug }) {
             <p>Everything below is available in Incentra today — not on a roadmap slide.</p>
           </div>
           <div className="marketing-feature-grid">
-            {area.items.map((item, index) => (
+            {area.items.map((item) => (
               <article className="marketing-feature-card" key={item.name}>
-                <span className="marketing-feature-card__num">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
                 <h3>{item.name}</h3>
                 <p>{item.description}</p>
               </article>
@@ -66,7 +60,7 @@ function MarketingProductPage({ slug }) {
             <button
               key={item.slug}
               type="button"
-              className={`marketing-card-link marketing-card-link--rich marketing-card-link--${item.slug}`}
+              className={`marketing-card-link marketing-card-link--solid marketing-card-link--rich marketing-card-link--${item.slug}`}
               onClick={() => showProduct(item.slug)}
             >
               <span className="marketing-card-link__label">{item.label}</span>

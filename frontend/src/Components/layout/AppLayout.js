@@ -281,6 +281,7 @@ function AppTopBar({ pageTitle, displayName, initials, profile, onEditProfile, s
         <Box
           component="button"
           type="button"
+          className="app-profile-chip"
           onClick={onEditProfile}
           aria-label="Edit profile details"
           sx={{
@@ -294,10 +295,17 @@ function AppTopBar({ pageTitle, displayName, initials, profile, onEditProfile, s
             border: "1px solid",
             borderColor: "divider",
             bgcolor: "background.default",
-            boxShadow: "0 8px 24px rgba(15, 23, 42, 0.06)",
+            color: "text.primary",
+            boxShadow: (theme) =>
+              theme.palette.mode === "dark"
+                ? "0 8px 24px rgba(0, 0, 0, 0.35)"
+                : "0 8px 24px rgba(15, 23, 42, 0.06)",
             cursor: "pointer",
             font: "inherit",
             textAlign: "inherit",
+            "& .MuiTypography-root": {
+              color: "inherit",
+            },
             "&:hover": {
               borderColor: "primary.main",
               transform: "none",
@@ -312,18 +320,22 @@ function AppTopBar({ pageTitle, displayName, initials, profile, onEditProfile, s
           <Box sx={{ minWidth: 0, textAlign: "right" }}>
             <Typography
               variant="body2"
-              color="text.primary"
               fontWeight={800}
               noWrap
-              sx={{ maxWidth: 180, lineHeight: 1.15 }}
+              sx={{ maxWidth: 180, lineHeight: 1.15, color: "inherit" }}
             >
               {displayName}
             </Typography>
             <Typography
               variant="caption"
-              color="text.secondary"
               noWrap
-              sx={{ display: "block", maxWidth: 180, lineHeight: 1.15 }}
+              sx={{
+                display: "block",
+                maxWidth: 180,
+                lineHeight: 1.15,
+                color: "text.secondary",
+                opacity: 0.92,
+              }}
             >
               {organizationLabel ? `${roleLabel} · ${organizationLabel}` : roleLabel}
             </Typography>
@@ -588,10 +600,18 @@ function AppLayout({ children }) {
             }}
           >
             <Box sx={{ minWidth: 0, textAlign: "right", display: { xs: "none", sm: "block" } }}>
-              <Typography variant="caption" noWrap sx={{ display: "block", lineHeight: 1.1, fontWeight: 800 }}>
+              <Typography
+                variant="caption"
+                noWrap
+                sx={{ display: "block", lineHeight: 1.1, fontWeight: 800, color: "inherit" }}
+              >
                 {displayName}
               </Typography>
-              <Typography variant="caption" noWrap sx={{ display: "block", lineHeight: 1.1, opacity: 0.72 }}>
+              <Typography
+                variant="caption"
+                noWrap
+                sx={{ display: "block", lineHeight: 1.1, color: "inherit", opacity: 0.82 }}
+              >
                 {profile?.organization_name || profile?.organization_slug || profile?.role || "Profile"}
               </Typography>
             </Box>
@@ -676,9 +696,15 @@ function AppLayout({ children }) {
         onClose={() => !profileSaving && setProfileDialogOpen(false)}
         fullWidth
         maxWidth="xs"
+        PaperProps={{
+          sx: {
+            bgcolor: "background.paper",
+            backgroundImage: "none",
+          },
+        }}
       >
         <DialogTitle>Edit profile details</DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ color: "text.primary" }}>
           <Stack spacing={2} sx={{ pt: 1 }}>
             <AuthTextField
               label="Company"

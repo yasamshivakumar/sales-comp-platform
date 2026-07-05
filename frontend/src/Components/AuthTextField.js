@@ -10,8 +10,7 @@ function AuthTextField({ label, id, sx, InputProps, slotProps, className, ...pro
         htmlFor={fieldId}
         variant="body2"
         fontWeight={600}
-        color="text.secondary"
-        sx={{ display: "block", mb: 0.75 }}
+        sx={{ display: "block", mb: 0.75, color: "text.secondary" }}
       >
         {label}
       </Typography>

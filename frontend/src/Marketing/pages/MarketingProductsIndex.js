@@ -10,7 +10,7 @@ function MarketingProductsIndex() {
       <section className="marketing-page-hero marketing-page-hero--rich marketing-page-hero--catalog">
         <div className="marketing-page-hero__inner marketing-page-hero__inner--wide">
           <div className="marketing-hero-badges">
-            <span className="marketing-hero-badge">5 live modules</span>
+            <span className="marketing-hero-badge">Live modules</span>
             <span className="marketing-hero-badge marketing-hero-badge--soft">Shipped today</span>
           </div>
           <p className="marketing-kicker">Product</p>
@@ -32,15 +32,12 @@ function MarketingProductsIndex() {
             <button
               key={area.slug}
               type="button"
-              className={`marketing-card-link marketing-card-link--rich marketing-card-link--${area.slug}`}
+              className={`marketing-card-link marketing-card-link--solid marketing-card-link--rich marketing-card-link--${area.slug}`}
               onClick={() => showProduct(area.slug)}
             >
               <span className="marketing-card-link__label">{area.label}</span>
               <h3>{area.headline}</h3>
               <p>{area.summary}</p>
-              <span className="marketing-card-link__meta">
-                {area.items.length} capabilities
-              </span>
               <span className="marketing-card-link__arrow">Learn more →</span>
             </button>
           ))}

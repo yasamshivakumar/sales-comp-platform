@@ -20,15 +20,15 @@ export function HeroDashboardVisual() {
             <div className="marketing-hero-visual__kpis">
               <div className="marketing-hero-visual__kpi">
                 <span>Plans</span>
-                <strong>12</strong>
+                <strong>Active</strong>
               </div>
               <div className="marketing-hero-visual__kpi">
                 <span>Orders</span>
-                <strong>847</strong>
+                <strong>Queued</strong>
               </div>
               <div className="marketing-hero-visual__kpi marketing-hero-visual__kpi--accent">
                 <span>Commissions</span>
-                <strong>₹24.6L</strong>
+                <strong>Approved</strong>
               </div>
             </div>
             <div className="marketing-hero-visual__chart">
@@ -75,12 +75,14 @@ export function PlatformDiagram() {
 function ModulePreviewPlans() {
   return (
     <div className="marketing-module-preview__panel">
-      <div className="marketing-module-preview__row marketing-module-preview__row--head">
-        <span>Tier</span><span>Rate</span><span>Amount</span>
-      </div>
-      <div className="marketing-module-preview__row"><span>0 – 50K</span><span>8%</span><span>—</span></div>
-      <div className="marketing-module-preview__row marketing-module-preview__row--active"><span>50K – 100K</span><span>10%</span><span>—</span></div>
-      <div className="marketing-module-preview__row"><span>100K+</span><span>Flat</span><span>₹12,000</span></div>
+      {["Rate tiers by quota band", "Flat rate tables", "SC lookup tables"].map((label, i) => (
+        <div
+          key={label}
+          className={`marketing-module-preview__list-item${i === 0 ? " marketing-module-preview__list-item--active" : ""}`}
+        >
+          <span>{label}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -111,10 +113,18 @@ function ModulePreviewCommissions() {
   return (
     <div className="marketing-module-preview__panel">
       <div className="marketing-module-preview__row marketing-module-preview__row--head">
-        <span>Rep</span><span>Status</span><span>Amount</span>
+        <span>Rep</span><span>Status</span><span>Stage</span>
       </div>
-      <div className="marketing-module-preview__row"><span>Priya S.</span><span className="marketing-module-preview__badge">Approved</span><span>₹42,500</span></div>
-      <div className="marketing-module-preview__row"><span>James M.</span><span className="marketing-module-preview__badge marketing-module-preview__badge--pending">Calculated</span><span>₹18,200</span></div>
+      <div className="marketing-module-preview__row">
+        <span>Priya S.</span>
+        <span className="marketing-module-preview__badge">Approved</span>
+        <span>Payroll</span>
+      </div>
+      <div className="marketing-module-preview__row">
+        <span>James M.</span>
+        <span className="marketing-module-preview__badge marketing-module-preview__badge--pending">Calculated</span>
+        <span>Review</span>
+      </div>
     </div>
   );
 }
@@ -123,12 +133,12 @@ function ModulePreviewDashboard() {
   return (
     <div className="marketing-module-preview__panel marketing-module-preview__panel--chart">
       <div className="marketing-module-preview__mini-kpis">
-        <div><span>Sales</span><strong>₹1.2Cr</strong></div>
-        <div><strong>94%</strong><span>Quota</span></div>
+        <div><span>Sales</span><strong>Period view</strong></div>
+        <div><strong>Quota</strong><span>Attainment</span></div>
       </div>
       <div className="marketing-module-preview__mini-chart">
-        {[40, 65, 50, 80, 58].map((h, i) => (
-          <span key={i} style={{ height: `${h}%` }} />
+        {[40, 65, 50, 80, 58].map((h) => (
+          <span key={h} style={{ height: `${h}%` }} />
         ))}
       </div>
     </div>

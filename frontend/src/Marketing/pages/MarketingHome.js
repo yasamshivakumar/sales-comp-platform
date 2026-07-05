@@ -64,7 +64,7 @@ function MarketingHome() {
             <button
               key={area.slug}
               type="button"
-              className={`marketing-card-link marketing-card-link--${area.slug}`}
+              className={`marketing-card-link marketing-card-link--solid marketing-card-link--${area.slug}`}
               onClick={() => showProduct(area.slug)}
             >
               <span className="marketing-card-link__label">{area.label}</span>
@@ -86,7 +86,7 @@ function MarketingHome() {
             <button
               key={team.slug}
               type="button"
-              className="marketing-card-link"
+              className={`marketing-card-link marketing-card-link--solid marketing-card-link--team-${team.slug}`}
               onClick={() => showTeam(team.slug)}
             >
               <span className="marketing-card-link__label">{team.label}</span>

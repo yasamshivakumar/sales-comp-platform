@@ -32,7 +32,7 @@ function MarketingTeamsIndex() {
             <button
               key={team.slug}
               type="button"
-              className={`marketing-card-link marketing-card-link--rich marketing-card-link--team-${team.slug}`}
+              className={`marketing-card-link marketing-card-link--solid marketing-card-link--rich marketing-card-link--team-${team.slug}`}
               onClick={() => showTeam(team.slug)}
             >
               <span className="marketing-card-link__label">{team.label}</span>

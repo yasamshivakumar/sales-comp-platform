@@ -267,6 +267,39 @@ table tbody tr:hover {
   -webkit-text-fill-color: #f8fafc !important;
 }
 
+[data-theme="dark"] .auth-text-field .MuiOutlinedInput-input.Mui-disabled,
+[data-theme="dark"] .auth-text-field .MuiInputBase-input.Mui-disabled {
+  color: rgba(248, 250, 252, 0.58) !important;
+  -webkit-text-fill-color: rgba(248, 250, 252, 0.58) !important;
+}
+
+[data-theme="dark"] .auth-text-field .MuiFormHelperText-root {
+  color: #94a3b8 !important;
+}
+
+/* Top bar profile chip — keep name/role readable in dark mode */
+[data-theme="dark"] .app-profile-chip {
+  color: #f3f4f6 !important;
+}
+
+[data-theme="dark"] .app-profile-chip .MuiTypography-caption {
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .MuiOutlinedInput-root .MuiOutlinedInput-input:not(.Mui-disabled) {
+  color: #f3f4f6 !important;
+  -webkit-text-fill-color: #f3f4f6 !important;
+}
+
+[data-theme="dark"] .MuiOutlinedInput-root.Mui-disabled .MuiOutlinedInput-input {
+  color: rgba(243, 244, 246, 0.55) !important;
+  -webkit-text-fill-color: rgba(243, 244, 246, 0.55) !important;
+}
+
+[data-theme="dark"] .MuiDialogContent-root .auth-text-field label {
+  color: #cbd5e1 !important;
+}
+
 .auth-text-field input:-webkit-autofill,
 .auth-text-field input:-webkit-autofill:hover,
 .auth-text-field input:-webkit-autofill:focus {

@@ -145,12 +145,34 @@ export function buildMuiTheme(mode = "light") {
           },
         },
       },
+      MuiOutlinedInput: {
+        styleOverrides: {
+          root: {
+            "&.Mui-disabled": {
+              "& .MuiOutlinedInput-notchedOutline": {
+                borderColor: isDark ? alpha("#fff", 0.12) : undefined,
+              },
+            },
+          },
+          input: {
+            color: isDark ? "#f3f4f6" : "#0f172a",
+            WebkitTextFillColor: isDark ? "#f3f4f6" : undefined,
+            "&.Mui-disabled": {
+              color: isDark ? alpha("#f3f4f6", 0.55) : undefined,
+              WebkitTextFillColor: isDark ? alpha("#f3f4f6", 0.55) : undefined,
+            },
+          },
+        },
+      },
       MuiInputLabel: {
         styleOverrides: {
           root: {
             color: isDark ? "#9ca3af" : "#475569",
             "&.Mui-focused": {
               color: isDark ? enterprise.accentLight : enterprise.accent,
+            },
+            "&.Mui-disabled": {
+              color: isDark ? alpha("#9ca3af", 0.72) : undefined,
             },
           },
         },
