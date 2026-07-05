@@ -71,8 +71,8 @@ function OrderList({ refreshKey = 0 }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
 
-  const loadOrders = useCallback(async () => {
-    setLoading(true);
+  const loadOrders = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const params = {};
       const query = appliedSearch.trim();
@@ -95,7 +95,7 @@ function OrderList({ refreshKey = 0 }) {
       error(err.response?.data?.detail || "Failed to load orders");
       setOrders([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [statusFilter, appliedSearch, error]);
 
@@ -126,6 +126,7 @@ function OrderList({ refreshKey = 0 }) {
         order_status: "Success",
       });
       const updated = response.data;
+      // Drop from Booked queue immediately; Success/All tabs update the row in place.
       setOrders((current) => {
         if (statusFilter === "booked") {
           return current.filter((row) => row.id !== order.id);
@@ -146,6 +147,8 @@ function OrderList({ refreshKey = 0 }) {
             : `Order ${order.order_id} marked Success — no commission yet (check User Setup + compensation plan)`
         );
       }
+      // Re-fetch so the queue matches server-side order_status filtering.
+      await loadOrders({ silent: true });
     } catch (err) {
       error(err.response?.data?.detail || `Failed to update order ${order.order_id}`);
     } finally {

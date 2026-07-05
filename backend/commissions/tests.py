@@ -1623,6 +1623,22 @@ class OrderStatusCommissionTests(TestCase):
         self.assertTrue(body["has_commission"])
         self.assertEqual(float(body["commission_amount"]), 1000.0)
 
+        booked = client.get(
+            "/api/orders/?order_status=Booked",
+            HTTP_AUTHORIZATION=f"Token {token.key}",
+        )
+        self.assertEqual(booked.status_code, 200)
+        booked_ids = {row["id"] for row in booked.json()}
+        self.assertNotIn(order.id, booked_ids)
+
+        success_list = client.get(
+            "/api/orders/?order_status=Success",
+            HTTP_AUTHORIZATION=f"Token {token.key}",
+        )
+        self.assertEqual(success_list.status_code, 200)
+        success_ids = {row["id"] for row in success_list.json()}
+        self.assertIn(order.id, success_ids)
+
     def test_recalculate_api_treats_string_false_as_false(self):
         admin_user = User.objects.create_user(
             username="recalc-admin@test.com",

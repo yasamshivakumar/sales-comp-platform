@@ -824,44 +824,18 @@ def _orders_queryset_for_request(request):
 
 class OrderListCreateView(generics.ListCreateAPIView):
     """
-    GET  /api/orders/   -> List all uploaded orders (filtered by role)
+    GET  /api/orders/   -> List orders (role-scoped; supports order_status and q)
     POST /api/orders/   -> Create a single order manually
-    
+
     Access Control:
     - Admin: Can see all orders, can create/update/delete orders
     - Regular employee: Can only see their own orders, cannot create/modify
     """
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
-    
-    def get_queryset(self):
-        """
-        Filter orders based on user role:
-        - Admin: Can see all orders
-        - Regular employee: Can only see their own orders
-        """
-        user = self.request.user
-        queryset = filter_queryset_by_organization(
-            Order.objects.all().order_by("-order_date"),
-            getattr(self.request, "organization", None),
-        )
 
-        try:
-            user_profile = UserProfile.objects.get(email=user.email)
-            is_admin = user_profile.role.lower() in ['admin', 'administrator']
-            
-            if is_admin:
-                # Admin can see all orders
-                return queryset
-            else:
-                # Employee can only see their own orders
-                if user_profile.employee_id:
-                    return queryset.filter(employee_id=user_profile.employee_id)
-                else:
-                    return queryset.filter(employee_email=user.email)
-        except UserProfile.DoesNotExist:
-            # Fallback: show nothing if profile doesn't exist
-            return queryset.none()
+    def get_queryset(self):
+        return _orders_queryset_for_request(self.request)
 
     def perform_create(self, serializer):
         order = serializer.save(
