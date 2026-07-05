@@ -1,3 +1,68 @@
+export function HeroEnterpriseVisual() {
+  return (
+    <div className="mkt-hero-visual" aria-hidden="true">
+      <div className="mkt-hero-visual__float mkt-hero-visual__float--tl">
+        <span className="mkt-hero-visual__float-label">This month</span>
+        <strong>$284K</strong>
+        <small>+12% vs prior</small>
+      </div>
+      <div className="mkt-hero-visual__float mkt-hero-visual__float--br">
+        <span className="mkt-hero-visual__float-label">Status</span>
+        <strong>Approved</strong>
+        <small>Ready for payroll</small>
+      </div>
+      <div className="mkt-hero-visual__frame">
+        <div className="mkt-hero-visual__chrome">
+          <span />
+          <span />
+          <span />
+          <span className="mkt-hero-visual__title">Incentra workspace</span>
+        </div>
+        <div className="mkt-hero-visual__body">
+          <div className="mkt-hero-visual__sidebar">
+            <span className="mkt-hero-visual__nav mkt-hero-visual__nav--active" />
+            <span className="mkt-hero-visual__nav" />
+            <span className="mkt-hero-visual__nav" />
+            <span className="mkt-hero-visual__nav" />
+          </div>
+          <div className="mkt-hero-visual__main">
+            <div className="mkt-hero-visual__kpis">
+              <div className="mkt-hero-visual__kpi">
+                <span>Plans</span>
+                <strong>Active</strong>
+              </div>
+              <div className="mkt-hero-visual__kpi">
+                <span>Orders</span>
+                <strong>Queued</strong>
+              </div>
+              <div className="mkt-hero-visual__kpi mkt-hero-visual__kpi--accent">
+                <span>Commissions</span>
+                <strong>Approved</strong>
+              </div>
+            </div>
+            <div className="mkt-hero-visual__chart">
+              <div className="mkt-hero-visual__bar" style={{ height: "42%" }} />
+              <div className="mkt-hero-visual__bar" style={{ height: "68%" }} />
+              <div className="mkt-hero-visual__bar" style={{ height: "55%" }} />
+              <div className="mkt-hero-visual__bar mkt-hero-visual__bar--peak" style={{ height: "88%" }} />
+              <div className="mkt-hero-visual__bar" style={{ height: "61%" }} />
+            </div>
+            <div className="mkt-hero-visual__pipeline">
+              <span className="mkt-hero-visual__step mkt-hero-visual__step--done">Success</span>
+              <span className="mkt-hero-visual__arrow">→</span>
+              <span className="mkt-hero-visual__step mkt-hero-visual__step--done">Calculated</span>
+              <span className="mkt-hero-visual__arrow">→</span>
+              <span className="mkt-hero-visual__step mkt-hero-visual__step--active">Approved</span>
+              <span className="mkt-hero-visual__arrow">→</span>
+              <span className="mkt-hero-visual__step">Payroll CSV</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function HeroDashboardVisual() {
   return (
     <div className="marketing-hero-visual" aria-hidden="true">

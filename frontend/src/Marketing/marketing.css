@@ -1,58 +1,84 @@
 /* Incentra marketing — enterprise solutions page */
 
 .marketing-site {
-  /* Match Incentra app enterprise palette (muiTheme.js) */
-  --mkt-navy: #032d60;
-  --mkt-navy-deep: #001639;
-  --mkt-blue: #0176d3;
-  --mkt-blue-mid: #014486;
-  --mkt-blue-light: #1b96ff;
-  --mkt-blue-soft: #eef4fb;
-  --mkt-indigo-wash: #f4f6f9;
-  --mkt-sky-wash: #eef4fb;
-  --mkt-slate-wash: #f4f6f9;
-  --mkt-text: #181818;
-  --mkt-muted: #444444;
-  --mkt-border: #dddbda;
+  /* ==========================================
+     ENTERPRISE COLOR PALETTE
+     ========================================== */
+  --mkt-navy: #0f172a;
+  --mkt-navy-deep: #020617;
+
+  --mkt-brand-dark: #0b1220;
+  --mkt-brand-dark-mid: #172554;
+
+  --mkt-blue: #2563eb;
+  --mkt-blue-mid: #1d4ed8;
+  --mkt-blue-light: #60a5fa;
+  --mkt-blue-soft: #eff6ff;
+
+  --mkt-indigo-wash: #f8fafc;
+  --mkt-sky-wash: #f1f5f9;
+  --mkt-slate-wash: #f8fafc;
+
+  --mkt-text: #111827;
+  --mkt-muted: #6b7280;
+
+  --mkt-border: #e5e7eb;
   --mkt-surface: #ffffff;
-  --mkt-bg: #f4f6f9;
+  --mkt-bg: #f8fafc;
+
   --mkt-radius: 4px;
   --mkt-radius-lg: 6px;
   --mkt-max: 1200px;
 
-  /* Per-module colors — visible solid fills */
-  --mkt-module-plans: #0176d2;
-  --mkt-module-plans-bg: #cce8fa;
-  --mkt-module-participants: #4338ca;
-  --mkt-module-participants-bg: #c7d2fe;
-  --mkt-module-crm-sync: #0d9488;
-  --mkt-module-crm-sync-bg: #99f6e4;
-  --mkt-module-commissions: #7c3aed;
-  --mkt-module-commissions-bg: #c4b5fd;
-  --mkt-module-dashboard: #0369a1;
-  --mkt-module-dashboard-bg: #7dd3fc;
+  /* Product modules */
+  --mkt-module-plans: #2563eb;
+  --mkt-module-plans-bg: #eff6ff;
+  --mkt-module-plans-edge: #bfdbfe;
+
+  --mkt-module-participants: #7c3aed;
+  --mkt-module-participants-bg: #f5f3ff;
+  --mkt-module-participants-edge: #ddd6fe;
+
+  --mkt-module-crm-sync: #0891b2;
+  --mkt-module-crm-sync-bg: #ecfeff;
+  --mkt-module-crm-sync-edge: #a5f3fc;
+
+  --mkt-module-commissions: #0f766e;
+  --mkt-module-commissions-bg: #ecfdf5;
+  --mkt-module-commissions-edge: #a7f3d0;
+
+  --mkt-module-dashboard: #ea580c;
+  --mkt-module-dashboard-bg: #fff7ed;
+  --mkt-module-dashboard-edge: #fed7aa;
 
   /* Team colors */
-  --mkt-team-finance: #059669;
-  --mkt-team-finance-bg: #a7f3d0;
+  --mkt-team-finance: #15803d;
+  --mkt-team-finance-bg: #f0fdf4;
+  --mkt-team-finance-edge: #bbf7d0;
+
   --mkt-team-compensation: #7c3aed;
-  --mkt-team-compensation-bg: #c4b5fd;
-  --mkt-team-revops: #0891b2;
-  --mkt-team-revops-bg: #a5f3fc;
-  --mkt-team-sales: #ea580c;
-  --mkt-team-sales-bg: #fed7aa;
+  --mkt-team-compensation-bg: #f5f3ff;
+  --mkt-team-compensation-edge: #ddd6fe;
+
+  --mkt-team-revops: #0f766e;
+  --mkt-team-revops-bg: #ecfdf5;
+  --mkt-team-revops-edge: #a7f3d0;
+
+  --mkt-team-sales: #dc2626;
+  --mkt-team-sales-bg: #fef2f2;
+  --mkt-team-sales-edge: #fecaca;
 
   min-height: 100vh;
   background-color: var(--mkt-bg);
   color: var(--mkt-text);
   color-scheme: light;
   /* Keep marketing readable when app dark mode is enabled */
-  --text-primary: #181818;
-  --text-secondary: #444444;
-  --text-muted: #64748b;
-  --bg-dark: #f4f6f9;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --bg-dark: #f8fafc;
   --bg-white: #ffffff;
-  --border-color: #dddbda;
+  --border-color: #e5e7eb;
   font-family: "Inter", "Segoe UI", "Roboto", "Helvetica", "Arial", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -82,10 +108,10 @@
 .marketing-pillar__head--center::after {
   content: "";
   display: block;
-  width: 48px;
-  height: 3px;
-  margin: 16px auto 0;
-  background: var(--mkt-blue);
+  width: 40px;
+  height: 2px;
+  margin: 14px auto 0;
+  background: var(--mkt-navy);
 }
 .marketing-site .marketing-section p,
 .marketing-site .marketing-persona p,
@@ -127,7 +153,7 @@
 
 /* Top utility bar */
 .marketing-topbar {
-  background: var(--mkt-navy-deep);
+  background-color: var(--mkt-brand-dark);
   color: rgba(255, 255, 255, 0.75);
   font-size: 12px;
 }
@@ -270,7 +296,7 @@
 }
 
 .marketing-nav__cta:hover {
-  background: #0161b3;
+  background: var(--mkt-blue-mid);
   color: #fff !important;
 }
 
@@ -387,7 +413,7 @@
 }
 
 .marketing-kicker--light {
-  color: #7cb8f0;
+  color: var(--mkt-blue-light);
 }
 
 /* Buttons */
@@ -407,13 +433,13 @@
 }
 
 .marketing-btn--primary {
-  background: linear-gradient(180deg, #1b96ff 0%, #0176d3 100%);
+  background: linear-gradient(180deg, var(--mkt-blue-light) 0%, var(--mkt-blue) 100%);
   color: #fff;
-  border: 1px solid #0176d3;
+  border: 1px solid var(--mkt-blue);
 }
 
 .marketing-btn--primary:hover {
-  background: linear-gradient(180deg, #0176d3 0%, #014486 100%);
+  background: linear-gradient(180deg, var(--mkt-blue) 0%, var(--mkt-blue-mid) 100%);
   color: #fff;
 }
 
@@ -482,7 +508,7 @@
 .marketing-hero {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(165deg, #032d60 0%, #001639 52%, #00122e 100%);
+  background-color: var(--mkt-brand-dark);
   color: #ffffff;
   padding: clamp(56px, 8vw, 96px) clamp(16px, 3vw, 40px);
   border-bottom: 3px solid var(--mkt-blue);
@@ -496,7 +522,7 @@
   width: 360px;
   height: 360px;
   border-radius: 50%;
-  background: rgba(1, 118, 211, 0.14);
+  background: rgba(1, 118, 211, 0.08);
   pointer-events: none;
 }
 
@@ -515,7 +541,7 @@
 }
 
 .marketing-hero .marketing-kicker {
-  color: #7cb8f0;
+  color: var(--mkt-blue-light);
 }
 
 .marketing-hero__lead {
@@ -624,48 +650,42 @@
 .marketing-card-link {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  padding: 22px;
-  border-radius: var(--mkt-radius-lg);
+  padding: 24px;
+  border-radius: var(--mkt-radius);
   background: #ffffff;
-  border: 1px solid rgba(3, 45, 96, 0.08);
-  border-top: 3px solid var(--mkt-blue);
-  box-shadow: 0 4px 16px rgba(3, 45, 96, 0.06);
+  border: 1px solid var(--mkt-border);
+  box-shadow: 0 1px 3px rgba(3, 45, 96, 0.04);
   text-decoration: none;
   text-align: left;
   color: inherit;
   cursor: pointer;
   font: inherit;
-  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.marketing-card-link--plans { border-top-color: var(--mkt-module-plans); }
-.marketing-card-link--participants { border-top-color: var(--mkt-module-participants); }
-.marketing-card-link--crm-sync { border-top-color: var(--mkt-module-crm-sync); }
-.marketing-card-link--commissions { border-top-color: var(--mkt-module-commissions); }
-.marketing-card-link--dashboard { border-top-color: var(--mkt-module-dashboard); }
-
-/* Module cards — visible solid color per area */
+/* Module & team cards — tinted surface + accent edge */
 .marketing-card-link--solid {
-  border-left: none;
-  border-top: 4px solid var(--mkt-blue);
-  border-radius: var(--mkt-radius);
-  box-shadow: 0 2px 12px rgba(3, 45, 96, 0.08);
+  border-top: none;
+  border-left: 4px solid var(--mkt-blue);
+  background: #ffffff;
 }
 
 .marketing-card-link--solid .marketing-card-link__label {
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: 3px;
+  background: var(--mkt-blue);
   color: #ffffff;
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.1em;
 }
 
 .marketing-card-link--solid.marketing-card-link--plans {
   background: var(--mkt-module-plans-bg);
-  border-top-color: var(--mkt-module-plans);
+  border-left-color: var(--mkt-module-plans);
+  border-color: var(--mkt-module-plans-edge);
 }
 .marketing-card-link--solid.marketing-card-link--plans .marketing-card-link__label {
   background: var(--mkt-module-plans);
@@ -673,7 +693,8 @@
 
 .marketing-card-link--solid.marketing-card-link--participants {
   background: var(--mkt-module-participants-bg);
-  border-top-color: var(--mkt-module-participants);
+  border-left-color: var(--mkt-module-participants);
+  border-color: var(--mkt-module-participants-edge);
 }
 .marketing-card-link--solid.marketing-card-link--participants .marketing-card-link__label {
   background: var(--mkt-module-participants);
@@ -681,7 +702,8 @@
 
 .marketing-card-link--solid.marketing-card-link--crm-sync {
   background: var(--mkt-module-crm-sync-bg);
-  border-top-color: var(--mkt-module-crm-sync);
+  border-left-color: var(--mkt-module-crm-sync);
+  border-color: var(--mkt-module-crm-sync-edge);
 }
 .marketing-card-link--solid.marketing-card-link--crm-sync .marketing-card-link__label {
   background: var(--mkt-module-crm-sync);
@@ -689,7 +711,8 @@
 
 .marketing-card-link--solid.marketing-card-link--commissions {
   background: var(--mkt-module-commissions-bg);
-  border-top-color: var(--mkt-module-commissions);
+  border-left-color: var(--mkt-module-commissions);
+  border-color: var(--mkt-module-commissions-edge);
 }
 .marketing-card-link--solid.marketing-card-link--commissions .marketing-card-link__label {
   background: var(--mkt-module-commissions);
@@ -697,7 +720,8 @@
 
 .marketing-card-link--solid.marketing-card-link--dashboard {
   background: var(--mkt-module-dashboard-bg);
-  border-top-color: var(--mkt-module-dashboard);
+  border-left-color: var(--mkt-module-dashboard);
+  border-color: var(--mkt-module-dashboard-edge);
 }
 .marketing-card-link--solid.marketing-card-link--dashboard .marketing-card-link__label {
   background: var(--mkt-module-dashboard);
@@ -705,7 +729,8 @@
 
 .marketing-card-link--solid.marketing-card-link--team-finance {
   background: var(--mkt-team-finance-bg);
-  border-top-color: var(--mkt-team-finance);
+  border-left-color: var(--mkt-team-finance);
+  border-color: var(--mkt-team-finance-edge);
 }
 .marketing-card-link--solid.marketing-card-link--team-finance .marketing-card-link__label {
   background: var(--mkt-team-finance);
@@ -713,7 +738,8 @@
 
 .marketing-card-link--solid.marketing-card-link--team-compensation {
   background: var(--mkt-team-compensation-bg);
-  border-top-color: var(--mkt-team-compensation);
+  border-left-color: var(--mkt-team-compensation);
+  border-color: var(--mkt-team-compensation-edge);
 }
 .marketing-card-link--solid.marketing-card-link--team-compensation .marketing-card-link__label {
   background: var(--mkt-team-compensation);
@@ -721,7 +747,8 @@
 
 .marketing-card-link--solid.marketing-card-link--team-revops {
   background: var(--mkt-team-revops-bg);
-  border-top-color: var(--mkt-team-revops);
+  border-left-color: var(--mkt-team-revops);
+  border-color: var(--mkt-team-revops-edge);
 }
 .marketing-card-link--solid.marketing-card-link--team-revops .marketing-card-link__label {
   background: var(--mkt-team-revops);
@@ -729,23 +756,22 @@
 
 .marketing-card-link--solid.marketing-card-link--team-sales {
   background: var(--mkt-team-sales-bg);
-  border-top-color: var(--mkt-team-sales);
+  border-left-color: var(--mkt-team-sales);
+  border-color: var(--mkt-team-sales-edge);
 }
 .marketing-card-link--solid.marketing-card-link--team-sales .marketing-card-link__label {
   background: var(--mkt-team-sales);
 }
 
 .marketing-card-link--solid:hover {
-  filter: brightness(0.98);
-  box-shadow: 0 6px 20px rgba(3, 45, 96, 0.12);
+  box-shadow: 0 6px 20px rgba(3, 45, 96, 0.1);
+  filter: brightness(0.99);
 }
 
 .marketing-card-link--solid .marketing-card-link__arrow {
   color: var(--mkt-navy);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
 }
 
 .marketing-card-link__arrow::after {
@@ -760,14 +786,11 @@
 .marketing-card-link__label {
   display: inline-block;
   width: fit-content;
-  padding: 4px 10px;
-  border-radius: 4px;
-  background: var(--mkt-navy);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
+  color: var(--mkt-blue);
 }
 
 .marketing-card-link h3 {
@@ -1278,10 +1301,10 @@
 .marketing-cta-band {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(165deg, #032d60 0%, #001639 100%);
+  background-color: var(--mkt-brand-dark);
+  color: #ffffff;
   padding: clamp(56px, 7vw, 72px) clamp(16px, 3vw, 40px);
   text-align: center;
-  color: #ffffff;
   border-top: 3px solid var(--mkt-blue);
 }
 
@@ -1425,9 +1448,10 @@
   justify-content: center;
   gap: 12px;
   padding: 14px 20px;
-  background: #00122e;
+  background-color: var(--mkt-brand-dark-mid);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   font-size: 13px;
+  color: #ffffff;
 }
 
 .marketing-contact-strip a {
@@ -1445,7 +1469,7 @@
 
 /* Footer */
 .marketing-footer {
-  background: linear-gradient(180deg, #001639 0%, #00122e 100%);
+  background-color: var(--mkt-brand-dark);
   color: rgba(255, 255, 255, 0.72);
   padding: 48px clamp(16px, 3vw, 40px) 24px;
   border-top: 3px solid var(--mkt-blue);
@@ -2016,81 +2040,66 @@
   border-top: 1px solid var(--mkt-border);
 }
 
-/* Default rich hero — navy (home catalog, teams) */
+/* Inner page heroes — clean white header (home keeps navy .marketing-hero) */
 .marketing-page-hero--rich {
   position: relative;
   overflow: hidden;
-  padding-bottom: clamp(48px, 6vw, 72px);
-  background: linear-gradient(165deg, #032d60 0%, #001639 52%, #00122e 100%);
-  color: #ffffff;
-  border-bottom: 3px solid var(--mkt-blue);
+  padding: clamp(40px, 5vw, 56px) clamp(16px, 3vw, 40px);
+  padding-bottom: clamp(40px, 5vw, 56px);
+  background: #ffffff;
+  color: var(--mkt-text);
+  border-bottom: 1px solid var(--mkt-border);
 }
 
-/* Module page heroes — visible solid color per module */
+.marketing-page-hero--rich::before {
+  display: none;
+}
+
+.marketing-page-hero--rich h1 {
+  color: var(--mkt-navy);
+}
+
+.marketing-page-hero--rich .marketing-page-hero__lead {
+  color: var(--mkt-muted);
+}
+
+.marketing-page-hero--rich .marketing-kicker {
+  color: var(--mkt-blue);
+}
+
+.marketing-page-hero--rich .marketing-capability-chip {
+  border-radius: var(--mkt-radius);
+  background: var(--mkt-bg);
+  border: 1px solid var(--mkt-border);
+  color: var(--mkt-navy);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Module page heroes — tinted band per module */
 .marketing-page-hero--rich.marketing-page-hero--module-plans {
   background: var(--mkt-module-plans-bg);
-  color: var(--mkt-navy);
-  border-bottom: 4px solid var(--mkt-module-plans);
+  border-bottom: 3px solid var(--mkt-module-plans);
 }
 
 .marketing-page-hero--rich.marketing-page-hero--module-participants {
   background: var(--mkt-module-participants-bg);
-  color: var(--mkt-navy);
-  border-bottom: 4px solid var(--mkt-module-participants);
+  border-bottom: 3px solid var(--mkt-module-participants);
 }
 
 .marketing-page-hero--rich.marketing-page-hero--module-crm-sync {
   background: var(--mkt-module-crm-sync-bg);
-  color: var(--mkt-navy);
-  border-bottom: 4px solid var(--mkt-module-crm-sync);
+  border-bottom: 3px solid var(--mkt-module-crm-sync);
 }
 
 .marketing-page-hero--rich.marketing-page-hero--module-commissions {
   background: var(--mkt-module-commissions-bg);
-  color: var(--mkt-navy);
-  border-bottom: 4px solid var(--mkt-module-commissions);
+  border-bottom: 3px solid var(--mkt-module-commissions);
 }
 
 .marketing-page-hero--rich.marketing-page-hero--module-dashboard {
   background: var(--mkt-module-dashboard-bg);
-  color: var(--mkt-navy);
-  border-bottom: 4px solid var(--mkt-module-dashboard);
-}
-
-.marketing-page-hero--rich[class*="marketing-page-hero--module-"]::before {
-  display: none;
-}
-
-.marketing-page-hero--rich::before {
-  content: "";
-  position: absolute;
-  top: -100px;
-  right: -60px;
-  width: 320px;
-  height: 320px;
-  border-radius: 50%;
-  background: rgba(1, 118, 211, 0.14);
-  pointer-events: none;
-}
-
-.marketing-page-hero--rich h1 {
-  color: #ffffff;
-}
-
-.marketing-page-hero--rich .marketing-page-hero__lead {
-  color: rgba(255, 255, 255, 0.88);
-}
-
-.marketing-page-hero--rich .marketing-kicker {
-  color: #7cb8f0;
-}
-
-.marketing-page-hero--rich[class*="marketing-page-hero--module-"] h1 {
-  color: var(--mkt-navy);
-}
-
-.marketing-page-hero--rich[class*="marketing-page-hero--module-"] .marketing-page-hero__lead {
-  color: var(--mkt-muted);
+  border-bottom: 3px solid var(--mkt-module-dashboard);
 }
 
 .marketing-page-hero--rich.marketing-page-hero--module-plans .marketing-kicker {
@@ -2113,17 +2122,44 @@
   color: var(--mkt-module-dashboard);
 }
 
-.marketing-page-hero--rich .marketing-capability-chip {
-  border-radius: var(--mkt-radius);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+/* Team page heroes */
+.marketing-page-hero--rich.marketing-page-hero--team-finance {
+  background: var(--mkt-team-finance-bg);
+  border-bottom: 3px solid var(--mkt-team-finance);
 }
 
-/* Module content bands — match module color */
+.marketing-page-hero--rich.marketing-page-hero--team-compensation {
+  background: var(--mkt-team-compensation-bg);
+  border-bottom: 3px solid var(--mkt-team-compensation);
+}
+
+.marketing-page-hero--rich.marketing-page-hero--team-revops {
+  background: var(--mkt-team-revops-bg);
+  border-bottom: 3px solid var(--mkt-team-revops);
+}
+
+.marketing-page-hero--rich.marketing-page-hero--team-sales {
+  background: var(--mkt-team-sales-bg);
+  border-bottom: 3px solid var(--mkt-team-sales);
+}
+
+.marketing-page-hero--rich.marketing-page-hero--team-finance .marketing-kicker {
+  color: var(--mkt-team-finance);
+}
+
+.marketing-page-hero--rich.marketing-page-hero--team-compensation .marketing-kicker {
+  color: var(--mkt-team-compensation);
+}
+
+.marketing-page-hero--rich.marketing-page-hero--team-revops .marketing-kicker {
+  color: var(--mkt-team-revops);
+}
+
+.marketing-page-hero--rich.marketing-page-hero--team-sales .marketing-kicker {
+  color: var(--mkt-team-sales);
+}
+
+/* Module content bands */
 .marketing-pillar--module-plans {
   background: var(--mkt-module-plans-bg);
 }
@@ -2144,32 +2180,28 @@
   background: var(--mkt-module-dashboard-bg);
 }
 
-.marketing-section--module-plans {
-  background: #ffffff;
-}
-
-.marketing-section--module-participants {
-  background: #ffffff;
-}
-
-.marketing-section--module-crm-sync {
-  background: #ffffff;
-}
-
-.marketing-section--module-commissions {
-  background: #ffffff;
-}
-
+.marketing-section--module-plans,
+.marketing-section--module-participants,
+.marketing-section--module-crm-sync,
+.marketing-section--module-commissions,
 .marketing-section--module-dashboard {
   background: #ffffff;
 }
 
-/* Team content sections */
-.marketing-section--team-finance,
-.marketing-section--team-compensation,
-.marketing-section--team-revops,
+.marketing-section--team-finance {
+  background: var(--mkt-team-finance-bg);
+}
+
+.marketing-section--team-compensation {
+  background: var(--mkt-team-compensation-bg);
+}
+
+.marketing-section--team-revops {
+  background: var(--mkt-team-revops-bg);
+}
+
 .marketing-section--team-sales {
-  background: var(--mkt-bg);
+  background: var(--mkt-team-sales-bg);
 }
 
 /* Themed pillar cards — unified enterprise shadow */
@@ -2216,14 +2248,14 @@
 }
 
 .marketing-capability-chip {
-  padding: 8px 14px;
-  border-radius: 999px;
-  background: #ffffff;
-  border: 1px solid rgba(3, 45, 96, 0.12);
+  padding: 8px 12px;
+  border-radius: var(--mkt-radius);
+  background: var(--mkt-bg);
+  border: 1px solid var(--mkt-border);
   font-size: 12px;
   font-weight: 500;
   color: var(--mkt-navy);
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 .marketing-section__sub {
@@ -2270,23 +2302,13 @@
   margin: 0 auto;
 }
 
-.marketing-feature-card {
-  position: relative;
-  padding: 24px 22px 22px;
-  border-radius: var(--mkt-radius-lg);
-  background: #ffffff;
-  border: 1px solid rgba(3, 45, 96, 0.08);
-  box-shadow: 0 4px 16px rgba(3, 45, 96, 0.06);
-  overflow: hidden;
-}
-
 .marketing-feature-card::before {
   content: "";
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 4px;
+  height: 3px;
   background: var(--mkt-blue);
 }
 
@@ -2310,6 +2332,16 @@
   background: var(--mkt-module-dashboard);
 }
 
+.marketing-feature-card {
+  position: relative;
+  padding: 24px 22px;
+  border-radius: var(--mkt-radius);
+  background: #ffffff;
+  border: 1px solid var(--mkt-border);
+  box-shadow: none;
+  overflow: hidden;
+}
+
 .marketing-feature-card h3 {
   margin: 0;
   font-size: 16px;
@@ -2330,8 +2362,8 @@
 }
 
 .marketing-card-link--rich {
-  padding: 26px 24px;
-  box-shadow: 0 12px 36px rgba(3, 45, 96, 0.08);
+  padding: 24px;
+  box-shadow: none;
 }
 
 .marketing-card-link--rich:not(.marketing-card-link--solid) {
@@ -2402,14 +2434,14 @@
 
 .marketing-check-item__mark {
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  background: var(--mkt-navy);
-  color: #fff;
+  border-radius: var(--mkt-radius);
+  background: var(--mkt-blue-soft);
+  color: var(--mkt-blue);
   font-size: 11px;
   font-weight: 700;
 }
@@ -2421,12 +2453,28 @@
   color: var(--mkt-muted);
 }
 
-.marketing-team-visual__card--finance,
-.marketing-team-visual__card--compensation,
-.marketing-team-visual__card--revops,
+.marketing-team-visual__card--finance {
+  background: #ffffff;
+  border: 1px solid var(--mkt-team-finance-edge);
+  border-left: 4px solid var(--mkt-team-finance);
+}
+
+.marketing-team-visual__card--compensation {
+  background: #ffffff;
+  border: 1px solid var(--mkt-team-compensation-edge);
+  border-left: 4px solid var(--mkt-team-compensation);
+}
+
+.marketing-team-visual__card--revops {
+  background: #ffffff;
+  border: 1px solid var(--mkt-team-revops-edge);
+  border-left: 4px solid var(--mkt-team-revops);
+}
+
 .marketing-team-visual__card--sales {
-  background: var(--mkt-surface);
-  border-left: 4px solid var(--mkt-blue);
+  background: #ffffff;
+  border: 1px solid var(--mkt-team-sales-edge);
+  border-left: 4px solid var(--mkt-team-sales);
 }
 
 .marketing-section--rich.marketing-section--catalog,
@@ -2602,14 +2650,14 @@
 /* Marketing page always uses light enterprise theme */
 html:has(.marketing-site),
 html:has(.marketing-site) body {
-  background: #f4f6f9;
-  color: #181818;
+  background: var(--mkt-bg);
+  color: var(--mkt-text);
 }
 
 [data-theme="dark"] html:has(.marketing-site),
 [data-theme="dark"] html:has(.marketing-site) body {
-  background: #f4f6f9;
-  color: #181818;
+  background: var(--mkt-bg);
+  color: var(--mkt-text);
 }
 
 [data-theme="dark"] .marketing-site,

@@ -9,11 +9,13 @@ import MarketingTeamsIndex from "./pages/MarketingTeamsIndex";
 import MarketingTeamPage from "./pages/MarketingTeamPage";
 import MarketingDemo from "./pages/MarketingDemo";
 import "./marketing.css";
+import "./marketing-enterprise.css";
 
 function MarketingLayout() {
   const [view, setView] = useState({ type: "home" });
   const [openMenu, setOpenMenu] = useState(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [navScrolled, setNavScrolled] = useState(false);
 
   const navigate = useCallback((nextView) => {
     setView(nextView);
@@ -54,6 +56,15 @@ function MarketingLayout() {
 
   useEffect(() => {
     document.title = "Incentra — Sales compensation platform";
+  }, []);
+
+  const isHome = view.type === "home";
+
+  useEffect(() => {
+    const onScroll = () => setNavScrolled(window.scrollY > 20);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   useEffect(() => {
@@ -105,7 +116,9 @@ function MarketingLayout() {
           Skip to main content
         </a>
 
-        <header className={`marketing-nav${mobileNavOpen ? " marketing-nav--open" : ""}`}>
+        <header
+          className={`marketing-nav${mobileNavOpen ? " marketing-nav--open" : ""}${isHome && !navScrolled ? " marketing-nav--transparent" : ""}${navScrolled ? " marketing-nav--scrolled" : ""}`}
+        >
           <button type="button" className="marketing-brand" aria-label="Incentra home" onClick={nav.goHome}>
             <img src="/incentra-icon.svg" alt="" className="marketing-brand__logo" />
             <span className="marketing-brand__name">Incentra</span>
@@ -176,9 +189,18 @@ function MarketingLayout() {
             <Link to="/login" className="marketing-nav__login" onClick={closeMenus}>
               Sign in
             </Link>
-            <button type="button" className="marketing-nav__cta" onClick={nav.showDemo}>
-              Request demo
-            </button>
+            <div className="marketing-nav__actions">
+              <a
+                href="mailto:shivakumar@incentra.co.in?subject=Incentra%20sales%20inquiry"
+                className="marketing-nav__cta-secondary"
+                onClick={closeMenus}
+              >
+                Contact sales
+              </a>
+              <button type="button" className="marketing-nav__cta" onClick={nav.showDemo}>
+                Request demo
+              </button>
+            </div>
           </nav>
         </header>
 
@@ -186,22 +208,20 @@ function MarketingLayout() {
           {content}
         </div>
 
-        <section className="marketing-contact-strip" id="contact">
-          <a href="mailto:shivakumar@incentra.co.in">shivakumar@incentra.co.in</a>
-          <span aria-hidden="true">·</span>
-          <a href="tel:+918499087617">+91 84990 87617</a>
-        </section>
-
-        <footer className="marketing-footer">
+        <footer className="marketing-footer" id="contact">
           <div className="marketing-footer__top">
             <div className="marketing-footer__brand-block">
               <button type="button" className="marketing-footer__logo" onClick={nav.goHome}>
                 <img src="/incentra-icon.svg" alt="" />
                 <span>Incentra</span>
               </button>
-              <p>Sales compensation platform — plans, orders, commissions, payroll export.</p>
+              <p>Enterprise sales compensation — plans, orders, commissions, and payroll export.</p>
+              <div className="marketing-footer__social">
+                <a href="mailto:shivakumar@incentra.co.in">Email</a>
+                <a href="tel:+918499087617">Phone</a>
+              </div>
             </div>
-            <div className="marketing-footer__grid">
+            <div className="marketing-footer__grid marketing-footer__grid--enterprise">
               <div className="marketing-footer__col">
                 <span className="marketing-footer__col-title">Product</span>
                 {PRODUCT_AREAS.map((area) => (
@@ -216,7 +236,7 @@ function MarketingLayout() {
                 ))}
               </div>
               <div className="marketing-footer__col">
-                <span className="marketing-footer__col-title">Teams</span>
+                <span className="marketing-footer__col-title">Solutions</span>
                 {SOLUTIONS_BY_FUNCTION.map((team) => (
                   <button
                     key={team.slug}
@@ -229,6 +249,18 @@ function MarketingLayout() {
                 ))}
               </div>
               <div className="marketing-footer__col">
+                <span className="marketing-footer__col-title">Resources</span>
+                <button type="button" className="marketing-footer__link" onClick={nav.showDemo}>
+                  Request demo
+                </button>
+                <button type="button" className="marketing-footer__link" onClick={nav.showProducts}>
+                  Product overview
+                </button>
+                <button type="button" className="marketing-footer__link" onClick={nav.showTeams}>
+                  Solutions by team
+                </button>
+              </div>
+              <div className="marketing-footer__col">
                 <span className="marketing-footer__col-title">Company</span>
                 <a href="mailto:shivakumar@incentra.co.in" className="marketing-footer__link">
                   Contact
@@ -237,8 +269,17 @@ function MarketingLayout() {
                   Sign in
                 </Link>
                 <button type="button" className="marketing-footer__link" onClick={nav.showDemo}>
-                  Request demo
+                  Book consultation
                 </button>
+              </div>
+              <div className="marketing-footer__col">
+                <span className="marketing-footer__col-title">Legal</span>
+                <span className="marketing-footer__link marketing-footer__link--muted">
+                  Privacy policy
+                </span>
+                <span className="marketing-footer__link marketing-footer__link--muted">
+                  Terms of service
+                </span>
               </div>
             </div>
           </div>
