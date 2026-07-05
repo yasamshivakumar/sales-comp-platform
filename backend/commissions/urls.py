@@ -6,6 +6,7 @@ from .health import health_check, readiness_check
 from . import enterprise_views
 from . import integration_views
 from . import ai_views
+from .oidc_views import oidc_token_exchange
 from .rule_views import (
     CommissionRuleListCreateView,
     CommissionRuleDetailView,
@@ -202,6 +203,7 @@ urlpatterns = [
     path("auth/invite/<str:token>/", invite_detail, name="auth-invite-detail"),
     path("auth/invite/<str:token>/accept/", invite_accept, name="auth-invite-accept"),
     path("auth/email-login/", email_login, name="auth-email-login"),
+    path("auth/oidc-exchange/", oidc_token_exchange, name="auth-oidc-exchange"),
     path("auth/change-password/", change_password, name="auth-change-password"),
     path("user-profile/", get_user_profile, name="user-profile"),
     path(

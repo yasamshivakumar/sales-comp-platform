@@ -8,7 +8,12 @@ from urllib import error, request
 
 from django.conf import settings
 
-from .commission_ai import _resolve_ai_runtime, ai_setup_status
+from .commission_ai import (
+    CommissionAIError,
+    _assert_http_url,
+    _resolve_ai_runtime,
+    ai_setup_status,
+)
 
 logger = logging.getLogger("commissions")
 
@@ -79,8 +84,12 @@ def call_json_ai(*, system_prompt, user_payload, schema_hint, temperature=0.2, m
         "response_format": {"type": "json_object"},
     }
     body = json.dumps(payload).encode("utf-8")
+    try:
+        endpoint = _assert_http_url(f"{runtime['base_url']}/chat/completions")
+    except CommissionAIError as exc:
+        raise AIServiceError(str(exc)) from exc
     req = request.Request(
-        f"{runtime['base_url']}/chat/completions",
+        endpoint,
         data=body,
         headers={
             "Content-Type": "application/json",
@@ -90,7 +99,7 @@ def call_json_ai(*, system_prompt, user_payload, schema_hint, temperature=0.2, m
     )
     timeout = int(getattr(settings, "COMMISSION_AI_TIMEOUT", 45))
     try:
-        with request.urlopen(req, timeout=timeout) as resp:
+        with request.urlopen(req, timeout=timeout) as resp:  # nosec B310
             data = json.loads(resp.read().decode("utf-8")[:MAX_RESPONSE_CHARS])
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:500]

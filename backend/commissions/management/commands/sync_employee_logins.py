@@ -15,7 +15,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--reset-password",
             action="store_true",
-            help="Reset every login user to DEFAULT_ONBOARDING_PASSWORD (or DEBUG fallback)",
+            help="Reset every login user to DEFAULT_ONBOARDING_PASSWORD",
         )
 
     def handle(self, *args, **options):
@@ -24,7 +24,7 @@ class Command(BaseCommand):
             self.stderr.write(
                 self.style.ERROR(
                     "No onboarding password configured. Set DEFAULT_ONBOARDING_PASSWORD "
-                    "in backend/.env or run with DEBUG=True for the dev fallback."
+                    "in backend/.env."
                 )
             )
             return
@@ -36,8 +36,8 @@ class Command(BaseCommand):
                 f"updated: {stats['updated']}, skipped: {stats['skipped']}"
             )
         )
-        self.stdout.write("")
-        self.stdout.write("Employees can sign in with their User Setup email and:")
-        self.stdout.write(f"  Password: {pwd}")
-        self.stdout.write("")
+        self.stdout.write(
+            "Employees can sign in with their User Setup email and the "
+            "configured onboarding password (not displayed)."
+        )
         self.stdout.write("Ask users to change their password after first login.")

@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import api from "../api";
 import { formatMoney } from "../utils/currency";
 
@@ -94,8 +94,6 @@ function CommissionSearchSelect({
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const filtered = useMemo(() => commissions, [commissions]);
-
   const applySelection = (commission) => {
     setQuery(commissionLabel(commission));
     setOpen(false);
@@ -120,6 +118,7 @@ function CommissionSearchSelect({
   };
 
   const showBrowseHint = !query.trim() && commissions.length >= 15;
+  const listboxId = `${inputId}-listbox`;
 
   return (
     <div className="commission-search" ref={wrapperRef}>
@@ -128,6 +127,7 @@ function CommissionSearchSelect({
         type="text"
         role="combobox"
         aria-expanded={open}
+        aria-controls={listboxId}
         aria-autocomplete="list"
         className="commission-search__input input"
         value={query}
@@ -141,20 +141,31 @@ function CommissionSearchSelect({
         <p className="commission-search__hint">Showing recent commissions. Type to search.</p>
       )}
       {open && (
-        <ul className="commission-search__list" role="listbox" aria-labelledby={inputId}>
-          {loading && filtered.length === 0 && (
+        <ul
+          id={listboxId}
+          className="commission-search__list"
+          role="listbox"
+          aria-labelledby={inputId}
+        >
+          {loading && commissions.length === 0 && (
             <li className="commission-search__empty">Loading commissions…</li>
           )}
-          {!loadError && filtered.length === 0 && !loading && (
+          {!loadError && commissions.length === 0 && !loading && (
             <li className="commission-search__empty">No commissions found</li>
           )}
           {loadError && (
             <li className="commission-search__empty commission-search__empty--error">{loadError}</li>
           )}
-          {filtered.map((commission) => {
+          {commissions.map((commission) => {
             const blocked = commission.has_open_dispute;
+            const isSelected = String(value) === String(commission.id);
             return (
-              <li key={commission.id} role="option" aria-disabled={blocked}>
+              <li
+                key={commission.id}
+                role="option"
+                aria-selected={isSelected}
+                aria-disabled={blocked}
+              >
                 <button
                   type="button"
                   className={`commission-search__option${blocked ? " commission-search__option--disabled" : ""}`}

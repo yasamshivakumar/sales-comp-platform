@@ -153,9 +153,15 @@ function CommissionRules() {
   }, [fetchRules]);
 
   useEffect(() => {
-    api.get("compensation-plans/").then((res) => setPlans(res.data)).catch(() => {});
-    api.get("commission-rules/choices/").then((res) => setChoices(res.data)).catch(() => {});
-  }, []);
+    api
+      .get("compensation-plans/")
+      .then((res) => setPlans(res.data))
+      .catch(() => error("Failed to load compensation plans"));
+    api
+      .get("commission-rules/choices/")
+      .then((res) => setChoices(res.data))
+      .catch(() => error("Failed to load rule choices"));
+  }, [error]);
 
   const selectRule = async (id) => {
     if (!id) {
@@ -288,7 +294,6 @@ function CommissionRules() {
               setDraft(null);
             }}
           >
-            <option value="">All plans</option>
             {plans.map((plan) => (
               <option key={plan.id} value={plan.id}>
                 {plan.plan_name} ({plan.role || "—"}

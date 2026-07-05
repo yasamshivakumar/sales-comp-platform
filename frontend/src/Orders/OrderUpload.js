@@ -38,9 +38,6 @@ function OrderUpload({ onUploadSuccess }) {
         success(
           `Import finished — ${result?.success ?? 0} succeeded, ${result?.failed ?? 0} failed`
         );
-        if (result?.errors?.length) {
-          console.warn("Upload errors:", result.errors);
-        }
         return true;
       }
       if (status === "failed") {
@@ -98,12 +95,6 @@ function OrderUpload({ onUploadSuccess }) {
             title: `${res.data.failed} row(s) failed to import`,
             message: detail,
           });
-        }
-        if (res.data.commission_warnings?.length) {
-          console.warn("Orders imported without commission:", res.data.commission_warnings);
-        }
-        if (res.data.errors?.length) {
-          console.warn("Upload errors:", res.data.errors);
         }
       }
       setFile(null);

@@ -21,7 +21,6 @@ from .models import (
     Order,
     SCRateTable,
     SCFlatRateTable,
-    SCLookupTable,
     UserProfile,
 )
 from .plan_periods import parse_date
@@ -151,7 +150,6 @@ def _rule_steps(plan, order, user_profile, base_amount, currency=None):
             continue
         if not evaluate_rule_conditions(rule, context):
             continue
-        before_rule = amount
         for result in rule.results.filter(is_active=True).order_by("sequence", "id"):
             before = amount
             rate_type = result.result_rate_type

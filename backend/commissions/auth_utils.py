@@ -8,15 +8,9 @@ def get_onboarding_password():
     """
     Initial login password for employees provisioned via User Setup.
 
-    Uses DEFAULT_ONBOARDING_PASSWORD from the environment. In DEBUG mode only,
-    falls back to Welcome@123 so local dev works without extra .env setup.
+    Requires DEFAULT_ONBOARDING_PASSWORD from the environment — never hardcode.
     """
-    pwd = (getattr(settings, "DEFAULT_ONBOARDING_PASSWORD", "") or "").strip()
-    if pwd:
-        return pwd
-    if settings.DEBUG:
-        return "Welcome@123"
-    return ""
+    return (getattr(settings, "DEFAULT_ONBOARDING_PASSWORD", "") or "").strip()
 
 
 def apply_onboarding_password(django_user, *, user_created=False, force=False):

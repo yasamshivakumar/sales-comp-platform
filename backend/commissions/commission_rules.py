@@ -7,7 +7,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.utils import timezone
 
-from .models import CommissionRule, CommissionRuleCondition, CommissionRuleResult
+from .models import CommissionRule, CommissionRuleResult
 
 HOLD_DAYS = {
     CommissionRuleResult.HOLD_PERIOD_CHOICES[1][0]: 30,
@@ -74,10 +74,7 @@ def evaluate_condition(condition, context):
 
     if condition.field == "sales_amount":
         actual_num = _decimal(actual)
-        try:
-            expected_num = _decimal(expected)
-        except Exception:
-            return False
+        expected_num = _decimal(expected)
         if op == "eq":
             return actual_num == expected_num
         if op == "neq":

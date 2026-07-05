@@ -51,11 +51,12 @@ class ErrorBoundary extends React.Component {
               </details>
             )}
 
-            <button onClick={this.handleReset} style={styles.button}>
+            <button type="button" onClick={this.handleReset} style={styles.button}>
               Try Again
             </button>
-            <button 
-              onClick={() => window.location.href = '/'} 
+            <button
+              type="button"
+              onClick={() => { window.location.href = '/'; }}
               style={{ ...styles.button, ...styles.secondaryButton }}
             >
               Go to Home

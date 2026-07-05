@@ -157,13 +157,14 @@ export function ModulePreviewVisual({ slug, label }) {
   );
 }
 
-export function TeamPersonaVisual({ label, bullets }) {
+export function TeamPersonaVisual({ label, bullets, slug = "finance" }) {
   return (
     <div className="marketing-team-visual" aria-hidden="true">
-      <div className="marketing-team-visual__card">
+      <div className={`marketing-team-visual__card marketing-team-visual__card--${slug}`}>
         <span className="marketing-team-visual__label">{label}</span>
+        <p className="marketing-team-visual__title">Key capabilities</p>
         <ul className="marketing-team-visual__checks">
-          {bullets.slice(0, 3).map((b) => (
+          {bullets.slice(0, 4).map((b) => (
             <li key={b}>{b}</li>
           ))}
         </ul>

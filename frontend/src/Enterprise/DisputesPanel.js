@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api from "../api";
 import StatusPill from "../Components/StatusPill";
 import CommissionSearchSelect from "../Components/CommissionSearchSelect";
@@ -37,22 +37,24 @@ function DisputesPanel({
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const response = await api.get("disputes/");
       const data = response.data;
       setDisputes(Array.isArray(data) ? data : data?.results || []);
+      setMessage("");
     } catch {
       setDisputes([]);
+      setMessage("Failed to load disputes.");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     if (!prefillCommission) return;

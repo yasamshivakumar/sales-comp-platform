@@ -1,6 +1,12 @@
+import json
+import logging
+import urllib.error
 import urllib.parse
+import urllib.request
 
-from .base import BaseConnector, ConnectorError, http_get_json
+from .base import BaseConnector, ConnectorError, assert_http_url, http_get_json
+
+logger = logging.getLogger("commissions")
 
 
 class SalesforceConnector(BaseConnector):
@@ -35,6 +41,7 @@ class SalesforceConnector(BaseConnector):
             raise ConnectorError(
                 "Provide access_token or OAuth client_id, client_secret, username, password"
             )
+        assert_http_url(login_url)
         payload = urllib.parse.urlencode({
             "grant_type": "password",
             "client_id": client_id,
@@ -42,7 +49,6 @@ class SalesforceConnector(BaseConnector):
             "username": username,
             "password": f"{password}{security_token}",
         }).encode("utf-8")
-        import urllib.request
 
         request = urllib.request.Request(
             login_url,
@@ -51,19 +57,38 @@ class SalesforceConnector(BaseConnector):
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         try:
-            with urllib.request.urlopen(request, timeout=60) as response:
+            with urllib.request.urlopen(request, timeout=60) as response:  # nosec B310
                 data = response.read().decode("utf-8")
-        except Exception as exc:
-            raise ConnectorError(f"Salesforce login failed: {exc}") from exc
-        import json
+        except urllib.error.HTTPError as exc:
+            logger.warning("Salesforce login HTTP error: %s", exc.code)
+            raise ConnectorError("Salesforce login failed") from exc
+        except urllib.error.URLError as exc:
+            logger.warning("Salesforce login request failed: %s", exc.reason)
+            raise ConnectorError("Salesforce login failed") from exc
 
-        parsed = json.loads(data)
+        try:
+            parsed = json.loads(data)
+        except json.JSONDecodeError as exc:
+            raise ConnectorError("Salesforce login returned invalid JSON") from exc
+
+        if not isinstance(parsed, dict):
+            raise ConnectorError("Salesforce login returned an unexpected response")
+
         token = parsed.get("access_token")
         if not token:
-            raise ConnectorError(f"Salesforce login failed: {parsed}")
+            error_code = parsed.get("error") or "unknown_error"
+            error_desc = parsed.get("error_description") or "no access_token"
+            logger.warning(
+                "Salesforce login failed: %s (%s)",
+                error_code,
+                error_desc,
+            )
+            raise ConnectorError(f"Salesforce login failed: {error_code}")
+
         self.credentials["access_token"] = token
-        if parsed.get("instance_url"):
-            self.credentials["instance_url"] = parsed["instance_url"]
+        instance_url = parsed.get("instance_url")
+        if instance_url:
+            self.credentials["instance_url"] = instance_url
         return token
 
     def _query(self, soql, limit=None):
@@ -81,6 +106,8 @@ class SalesforceConnector(BaseConnector):
         records = []
         while url:
             payload = http_get_json(url, headers=headers)
+            if not isinstance(payload, dict):
+                raise ConnectorError("Salesforce query returned an unexpected response")
             records.extend(payload.get("records") or [])
             next_url = payload.get("nextRecordsUrl")
             if not next_url:
@@ -91,6 +118,8 @@ class SalesforceConnector(BaseConnector):
                 break
         cleaned = []
         for row in records:
+            if not isinstance(row, dict):
+                continue
             item = dict(row)
             item.pop("attributes", None)
             cleaned.append(item)

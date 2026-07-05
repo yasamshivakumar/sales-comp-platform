@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import serializers
 from .models import Employee, Sale, Commission, UserProfile, HierarchyRelationship, CompensationTier, Order
 
@@ -239,6 +240,7 @@ class CommissionRuleSerializer(serializers.ModelSerializer):
             for row in results:
                 CommissionRuleResult.objects.create(rule=rule, **row)
 
+    @transaction.atomic
     def create(self, validated_data):
         conditions = validated_data.pop("conditions", [])
         results = validated_data.pop("results", [])
@@ -246,6 +248,7 @@ class CommissionRuleSerializer(serializers.ModelSerializer):
         self._sync_children(rule, conditions, results)
         return rule
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         conditions = validated_data.pop("conditions", None)
         results = validated_data.pop("results", None)
@@ -322,105 +325,38 @@ class CompensationPlanSerializer(serializers.ModelSerializer):
 
         return merged
 
-    # --------------------------------------
-    # Create plan and child tables
-    # --------------------------------------
+    def _sync_tables(self, plan, rate_tables=None, flat_rate_tables=None, lookup_tables=None):
+        if rate_tables is not None:
+            plan.sc_rate_tables.all().delete()
+            for row in rate_tables:
+                SCRateTable.objects.create(compensation_plan=plan, **row)
+        if flat_rate_tables is not None:
+            plan.sc_flat_rate_tables.all().delete()
+            for row in flat_rate_tables:
+                SCFlatRateTable.objects.create(compensation_plan=plan, **row)
+        if lookup_tables is not None:
+            plan.sc_lookup_tables.all().delete()
+            for row in lookup_tables:
+                SCLookupTable.objects.create(compensation_plan=plan, **row)
+
+    @transaction.atomic
     def create(self, validated_data):
-        rate_tables = validated_data.pop(
-            'sc_rate_tables',
-            []
-        )
-
-        flat_rate_tables = validated_data.pop(
-            'sc_flat_rate_tables',
-            []
-        )
-
-        lookup_tables = validated_data.pop(
-            'sc_lookup_tables',
-            [],
-        )
-
-        # Create Compensation Plan
-        plan = CompensationPlan.objects.create(
-            **validated_data
-        )
-
-        # Create SC Rate Tables
-        for row in rate_tables:
-            SCRateTable.objects.create(
-                compensation_plan=plan,
-                **row
-            )
-
-        # Create SC Flat Rate Tables
-        for row in flat_rate_tables:
-            SCFlatRateTable.objects.create(
-                compensation_plan=plan,
-                **row
-            )
-
-        for row in lookup_tables:
-            SCLookupTable.objects.create(
-                compensation_plan=plan,
-                **row,
-            )
-
+        rate_tables = validated_data.pop("sc_rate_tables", [])
+        flat_rate_tables = validated_data.pop("sc_flat_rate_tables", [])
+        lookup_tables = validated_data.pop("sc_lookup_tables", [])
+        plan = CompensationPlan.objects.create(**validated_data)
+        self._sync_tables(plan, rate_tables, flat_rate_tables, lookup_tables)
         return plan
 
-    # --------------------------------------
-    # Update plan and replace child tables
-    # --------------------------------------
+    @transaction.atomic
     def update(self, instance, validated_data):
-        rate_tables = validated_data.pop(
-            'sc_rate_tables',
-            None
-        )
-
-        flat_rate_tables = validated_data.pop(
-            'sc_flat_rate_tables',
-            None
-        )
-
-        lookup_tables = validated_data.pop(
-            'sc_lookup_tables',
-            None,
-        )
-
-        # Update plan fields
+        rate_tables = validated_data.pop("sc_rate_tables", None)
+        flat_rate_tables = validated_data.pop("sc_flat_rate_tables", None)
+        lookup_tables = validated_data.pop("sc_lookup_tables", None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-
         instance.save()
-
-        # Replace rate tables
-        if rate_tables is not None:
-            instance.sc_rate_tables.all().delete()
-
-            for row in rate_tables:
-                SCRateTable.objects.create(
-                    compensation_plan=instance,
-                    **row
-                )
-
-        # Replace flat rate tables
-        if flat_rate_tables is not None:
-            instance.sc_flat_rate_tables.all().delete()
-
-            for row in flat_rate_tables:
-                SCFlatRateTable.objects.create(
-                    compensation_plan=instance,
-                    **row
-                )
-
-        if lookup_tables is not None:
-            instance.sc_lookup_tables.all().delete()
-            for row in lookup_tables:
-                SCLookupTable.objects.create(
-                    compensation_plan=instance,
-                    **row,
-                )
-
+        self._sync_tables(instance, rate_tables, flat_rate_tables, lookup_tables)
         return instance
 
 class OrderSerializer(serializers.ModelSerializer):
@@ -456,7 +392,6 @@ class OrderSerializer(serializers.ModelSerializer):
         if not getattr(obj, "employee_id", None) or not getattr(obj, "order_date", None):
             return None
         from .currencies import normalize_currency
-        from .models import UserProfile
         from .plan_periods import month_bounds
 
         period_start, _period_end = month_bounds(obj.order_date.year, obj.order_date.month)
@@ -664,20 +599,42 @@ class CommissionDisputeSerializer(serializers.ModelSerializer):
         order = self._order_for_commission(obj)
         if order and order.employee_id:
             return order.employee_id
-        try:
-            from .models import UserProfile
+        from .models import UserProfile
 
-            profile = UserProfile.objects.filter(
-                email__iexact=obj.commission.employee.email,
-                organization=getattr(obj.commission, "organization", None),
-            ).first()
-            return profile.employee_id if profile else None
-        except Exception:
+        employee = getattr(getattr(obj, "commission", None), "employee", None)
+        employee_email = getattr(employee, "email", None)
+        if not employee_email:
             return None
+        profile = UserProfile.objects.filter(
+            email__iexact=employee_email,
+            organization=getattr(obj.commission, "organization", None),
+        ).first()
+        return profile.employee_id if profile else None
+
+
+def _mask_integration_credentials(credentials):
+    if not credentials:
+        return {}
+    masked = {}
+    for key, value in credentials.items():
+        if key in (
+            "access_token",
+            "password",
+            "client_secret",
+            "api_key",
+            "security_token",
+            "refresh_token",
+        ):
+            masked[key] = "••••••••" if value else ""
+        else:
+            masked[key] = value
+    return masked
 
 
 class ExternalIntegrationSerializer(serializers.ModelSerializer):
     webhook_urls = serializers.SerializerMethodField()
+    credentials_masked = serializers.SerializerMethodField()
+    credentials = serializers.JSONField(write_only=True, required=False)
 
     class Meta:
         model = ExternalIntegration
@@ -692,6 +649,9 @@ class ExternalIntegrationSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def get_credentials_masked(self, obj):
+        return _mask_integration_credentials(obj.credentials)
 
     def get_webhook_urls(self, obj):
         request = self.context.get("request")
@@ -710,6 +670,25 @@ class ExternalIntegrationSerializer(serializers.ModelSerializer):
             )
             return {"events": f"{base}/{obj.webhook_secret}/"}
         return {}
+
+    def update(self, instance, validated_data):
+        credentials = validated_data.pop("credentials", serializers.empty)
+        if credentials is not serializers.empty and credentials is not None:
+            # Merge so blank form fields do not wipe existing secrets.
+            merged = dict(instance.credentials or {})
+            for key, value in credentials.items():
+                if value is None:
+                    continue
+                if isinstance(value, str) and not value.strip():
+                    continue
+                if value == "••••••••":
+                    continue
+                merged[key] = value
+            instance.credentials = merged
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
 
 
 class IntegrationSyncLogSerializer(serializers.ModelSerializer):

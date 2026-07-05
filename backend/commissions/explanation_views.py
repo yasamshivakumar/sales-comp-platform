@@ -14,7 +14,6 @@ from .commission_explanation import (
 )
 from .commission_ai import ai_setup_status
 from .enterprise_views import _commissions_for_user
-from .models import Commission
 
 
 def _commission_for_user(request, commission_id):

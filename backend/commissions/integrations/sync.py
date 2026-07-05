@@ -6,6 +6,7 @@ import secrets
 from django.utils import timezone
 
 from ..models import ExternalIntegration, IntegrationSyncLog
+from .base import ConnectorError
 from .employee_ids import (
     build_hubspot_owner_index,
     normalize_crm_id,

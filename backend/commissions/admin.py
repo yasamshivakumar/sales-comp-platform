@@ -8,6 +8,10 @@ from .models import (
     AuditLog,
     Organization,
     ImportJob,
+    CompensationPlan,
+    CompensationTier,
+    SCRateTable,
+    SCFlatRateTable,
 )
 
 admin.site.register(Organization)
@@ -16,9 +20,6 @@ admin.site.register(Employee)
 admin.site.register(Sale)
 admin.site.register(UserProfile)
 admin.site.register(Order)
-
-from .models import CompensationPlan, CompensationTier
-from .models import CompensationPlan, SCRateTable, SCFlatRateTable
 
 
 # ---------------------------------------------------

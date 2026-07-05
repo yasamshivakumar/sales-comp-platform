@@ -5,7 +5,7 @@ import logging
 from django.utils import timezone
 
 from .models import ImportJob
-from .integrations.order_sync import parse_order_date, process_orders_rows
+from .integrations.order_sync import process_orders_rows
 
 from django.conf import settings
 

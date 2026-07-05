@@ -54,7 +54,7 @@ function MarketingHome() {
         </div>
       </section>
 
-      <section className="marketing-section marketing-section--wash" id="product-modules">
+      <section className="marketing-section marketing-section--home-product" id="product-modules">
         <div className="marketing-section__head marketing-section__head--center">
           <p className="marketing-kicker">Product</p>
           <h2>Explore by module</h2>
@@ -76,7 +76,7 @@ function MarketingHome() {
         </div>
       </section>
 
-      <section className="marketing-section marketing-section--wash">
+      <section className="marketing-section marketing-section--home-teams">
         <div className="marketing-section__head marketing-section__head--center">
           <p className="marketing-kicker">Teams</p>
           <h2>Built for every stakeholder</h2>
@@ -98,7 +98,7 @@ function MarketingHome() {
         </div>
       </section>
 
-      <section className="marketing-section marketing-section--muted">
+      <section className="marketing-section marketing-section--home-platform">
         <div className="marketing-section__head marketing-section__head--center">
           <p className="marketing-kicker">Platform basics</p>
           <h2>Built-in from day one</h2>

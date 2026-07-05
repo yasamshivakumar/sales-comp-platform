@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api, { clearAuthStorage } from "../api";
 import { useToast } from "../Components/Toast";
 import PageHeader from "../Components/PageHeader";
@@ -53,14 +53,20 @@ function UserSetup() {
   const [saving, setSaving] = useState(false);
   const { success, error, warning } = useToast();
 
+  const fetchUsers = useCallback(() => {
+    api
+      .get("user-setup/")
+      .then((res) => setUsers(res.data))
+      .catch(() => error("Failed to load users"));
+  }, [error]);
+
   useEffect(() => {
     fetchUsers();
-    api.get("territories/").then((res) => setTerritories(res.data)).catch(() => {});
-  }, []);
-
-  const fetchUsers = () => {
-    api.get("user-setup/").then((res) => setUsers(res.data)).catch(() => {});
-  };
+    api
+      .get("territories/")
+      .then((res) => setTerritories(res.data))
+      .catch(() => error("Failed to load territories"));
+  }, [fetchUsers, error]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;

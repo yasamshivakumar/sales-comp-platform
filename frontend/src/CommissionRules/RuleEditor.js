@@ -1,7 +1,12 @@
 import DatePickerField from "../Components/DatePickerField";
 
+function clientRowKey() {
+  return `row-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
 function emptyCondition(sequence) {
   return {
+    _key: clientRowKey(),
     field: "product_name",
     operator: "eq",
     value: "",
@@ -12,6 +17,7 @@ function emptyCondition(sequence) {
 
 function emptyResult(sequence) {
   return {
+    _key: clientRowKey(),
     result_name: `Result ${sequence}`,
     hold_period: "none",
     result_classification: "commission",
@@ -198,7 +204,7 @@ function RuleEditor({ draft, setDraft, choices, plans, currency = "INR" }) {
                 </tr>
               ) : (
                 draft.conditions.map((row, index) => (
-                  <tr key={index}>
+                  <tr key={row.id ?? row._key ?? `condition-${index}`}>
                     <td>
                       <select
                         value={row.field}
@@ -290,7 +296,7 @@ function RuleEditor({ draft, setDraft, choices, plans, currency = "INR" }) {
         </p>
         {(draft.results || []).map((row, index) => (
           <div
-            key={index}
+            key={row.id ?? row._key ?? `result-${index}`}
             className="cr-section"
             style={{ borderTop: index > 0 ? "1px solid #334155" : undefined, paddingTop: index > 0 ? 12 : 0 }}
           >

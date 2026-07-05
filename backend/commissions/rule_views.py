@@ -1,6 +1,6 @@
 from .currencies import currency_choices_for_api
 
-from rest_framework import generics, status
+from rest_framework import generics
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
@@ -15,6 +15,10 @@ from .tenants import filter_queryset_by_organization
 def _require_admin(request):
     if not user_is_admin(request):
         raise PermissionDenied("Only administrators can manage commission rules")
+
+
+def _choice_list(choices):
+    return [{"value": value, "label": label} for value, label in choices]
 
 
 class CommissionRuleListCreateView(generics.ListCreateAPIView):
@@ -61,22 +65,10 @@ def commission_rule_choices(request):
     _require_admin(request)
     return Response(
         {
-            "rule_types": [
-                {"value": v, "label": l}
-                for v, l in CommissionRule.RULE_TYPE_CHOICES
-            ],
-            "condition_fields": [
-                {"value": v, "label": l}
-                for v, l in CommissionRuleCondition.FIELD_CHOICES
-            ],
-            "operators": [
-                {"value": v, "label": l}
-                for v, l in CommissionRuleCondition.OPERATOR_CHOICES
-            ],
-            "classifications": [
-                {"value": v, "label": l}
-                for v, l in CommissionRuleResult.CLASSIFICATION_CHOICES
-            ],
+            "rule_types": _choice_list(CommissionRule.RULE_TYPE_CHOICES),
+            "condition_fields": _choice_list(CommissionRuleCondition.FIELD_CHOICES),
+            "operators": _choice_list(CommissionRuleCondition.OPERATOR_CHOICES),
+            "classifications": _choice_list(CommissionRuleResult.CLASSIFICATION_CHOICES),
             "rate_types": [
                 {"value": "override_tier_pct", "label": "Override tier %"},
                 {"value": "add_bonus", "label": "Add bonus"},
@@ -85,22 +77,10 @@ def commission_rule_choices(request):
                 {"value": "multiplier", "label": "Multiplier"},
                 {"value": "override", "label": "Override amount"},
             ],
-            "value_units": [
-                {"value": v, "label": l}
-                for v, l in CommissionRuleResult.VALUE_UNIT_CHOICES
-            ],
-            "quota_periods": [
-                {"value": v, "label": l}
-                for v, l in CommissionRuleResult.QUOTA_PERIOD_CHOICES
-            ],
-            "hold_periods": [
-                {"value": v, "label": l}
-                for v, l in CommissionRuleResult.HOLD_PERIOD_CHOICES
-            ],
+            "value_units": _choice_list(CommissionRuleResult.VALUE_UNIT_CHOICES),
+            "quota_periods": _choice_list(CommissionRuleResult.QUOTA_PERIOD_CHOICES),
+            "hold_periods": _choice_list(CommissionRuleResult.HOLD_PERIOD_CHOICES),
             "currencies": currency_choices_for_api(),
-            "earning_groups": [
-                {"value": v, "label": l}
-                for v, l in CommissionRuleResult.EARNING_GROUP_CHOICES
-            ],
+            "earning_groups": _choice_list(CommissionRuleResult.EARNING_GROUP_CHOICES),
         }
     )

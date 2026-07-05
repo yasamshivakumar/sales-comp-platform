@@ -43,7 +43,6 @@ function MonthPickerField({
           margin: "dense",
           fullWidth,
           required,
-          className: mergedClass,
           placeholder: "Select month",
           helperText,
           inputProps: { readOnly: true },

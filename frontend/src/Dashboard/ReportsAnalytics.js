@@ -412,8 +412,8 @@ function ReportsAnalytics({ compact = false }) {
         limited: Boolean(leaderboardRes.data.limited),
         count: leaderboardRes.data.count ?? null,
       });
-    } catch {
-      /* keep prior table data on search failure */
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Failed to refresh employee tables"));
     }
   }, [employeeTableQuery]);
 
@@ -806,7 +806,7 @@ function ReportsAnalytics({ compact = false }) {
                         </thead>
                         <tbody>
                           {advanced.top_growth_reps.map((row, idx) => (
-                            <tr key={idx}>
+                            <tr key={row.employee_id || row.employee_email || `growth-${idx}`}>
                               <td>{row.employee_name || row.employee_id || "—"}</td>
                               <td align="right">{formatMoney(row.current_commission, row.currency, { compact })}</td>
                               <td align="right">{formatMoney(row.previous_commission, row.currency, { compact })}</td>
@@ -896,7 +896,14 @@ function ReportsAnalytics({ compact = false }) {
                     </tr>
                   ) : (
                     tableRows.map((row, idx) => (
-                      <tr key={idx}>
+                      <tr
+                        key={
+                          row.employee_id ||
+                          row.employee_email ||
+                          row.employee__email ||
+                          `row-${idx}`
+                        }
+                      >
                         {viewMode === "analytics" && leaderboard.length > 0 && (
                           <td>
                             <span className="ra-rank">{row.rank ?? idx + 1}</span>
@@ -939,7 +946,7 @@ function ReportsAnalytics({ compact = false }) {
                     </thead>
                     <tbody>
                       {periodData.data.map((row, idx) => (
-                        <tr key={idx}>
+                        <tr key={row.period || `period-${idx}`}>
                           <td>{row.period}</td>
                           <td align="right">
                             {formatMoneyList(row.totals_by_currency, "total", { compact }) ||

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from decimal import Decimal
-from urllib import error, request
+from urllib import error, parse, request
 
 from django.conf import settings
 
@@ -40,11 +40,20 @@ class CommissionAIError(Exception):
     """Raised when the LLM API call fails."""
 
 
+def _assert_http_url(url: str) -> str:
+    """Reject non-HTTP(S) schemes before urlopen (Bandit B310 / Sonar)."""
+    parsed = parse.urlparse(str(url or ""))
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise CommissionAIError("Only http(s) URLs are allowed for AI requests")
+    return url
+
+
 def _ollama_installed_models(timeout=2) -> list[str]:
     base = getattr(settings, "COMMISSION_AI_OLLAMA_URL", "http://localhost:11434/v1").rstrip("/")
     root = base.replace("/v1", "")
     try:
-        with request.urlopen(f"{root}/api/tags", timeout=timeout) as resp:
+        tags_url = _assert_http_url(f"{root}/api/tags")
+        with request.urlopen(tags_url, timeout=timeout) as resp:  # nosec B310
             data = json.loads(resp.read().decode("utf-8"))
         names = []
         for item in data.get("models") or []:
@@ -53,7 +62,14 @@ def _ollama_installed_models(timeout=2) -> list[str]:
                 names.append(name.split(":")[0] if ":" in name else name)
                 names.append(name)
         return names
-    except (error.URLError, error.HTTPError, TimeoutError, OSError, json.JSONDecodeError):
+    except (
+        CommissionAIError,
+        error.URLError,
+        error.HTTPError,
+        TimeoutError,
+        OSError,
+        json.JSONDecodeError,
+    ):
         return []
 
 
@@ -73,9 +89,10 @@ def _probe_ollama(timeout=2) -> bool:
     base = getattr(settings, "COMMISSION_AI_OLLAMA_URL", "http://localhost:11434/v1").rstrip("/")
     root = base.replace("/v1", "")
     try:
-        with request.urlopen(f"{root}/api/tags", timeout=timeout) as resp:
+        tags_url = _assert_http_url(f"{root}/api/tags")
+        with request.urlopen(tags_url, timeout=timeout) as resp:  # nosec B310
             return resp.status == 200
-    except (error.URLError, error.HTTPError, TimeoutError, OSError):
+    except (CommissionAIError, error.URLError, error.HTTPError, TimeoutError, OSError):
         return False
 
 
@@ -399,8 +416,9 @@ def _call_chat_completion(question: str, context: dict, runtime: dict) -> str:
         "max_tokens": 600,
     }
     body = json.dumps(payload).encode("utf-8")
+    endpoint = _assert_http_url(f"{runtime['base_url']}/chat/completions")
     req = request.Request(
-        f"{runtime['base_url']}/chat/completions",
+        endpoint,
         data=body,
         headers={
             "Content-Type": "application/json",
@@ -411,7 +429,7 @@ def _call_chat_completion(question: str, context: dict, runtime: dict) -> str:
     timeout = getattr(settings, "COMMISSION_AI_TIMEOUT", 45)
 
     try:
-        with request.urlopen(req, timeout=timeout) as resp:
+        with request.urlopen(req, timeout=timeout) as resp:  # nosec B310
             data = json.loads(resp.read().decode("utf-8"))
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:500]

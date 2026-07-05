@@ -7,9 +7,7 @@ from decimal import Decimal, InvalidOperation
 from django.db import transaction
 from django.db.models import Count, Sum
 from django.utils.dateparse import parse_date
-from rest_framework.exceptions import ValidationError
-
-from .ai_service import AIServiceError, call_json_ai
+from .ai_service import call_json_ai
 from .audit import record_audit
 from .business_groups import (
     apply_business_group_to_commissions,

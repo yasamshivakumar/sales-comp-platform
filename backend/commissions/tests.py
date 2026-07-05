@@ -27,7 +27,6 @@ from .models import (
 from .services import (
     resolve_compensation_plan,
     calculate_commission_for_order,
-    clear_commissions_for_order,
     approve_commissions,
     find_sc_lookup_tier,
 )

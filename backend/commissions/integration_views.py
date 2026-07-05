@@ -22,18 +22,6 @@ from .serializers import ExternalIntegrationSerializer, IntegrationSyncLogSerial
 from .tenants import filter_queryset_by_organization
 
 
-def _mask_credentials(credentials):
-    if not credentials:
-        return {}
-    masked = {}
-    for key, value in credentials.items():
-        if key in ("access_token", "password", "client_secret", "api_key", "security_token"):
-            masked[key] = "••••••••" if value else ""
-        else:
-            masked[key] = value
-    return masked
-
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def integration_providers(request):
@@ -95,34 +83,6 @@ class ExternalIntegrationViewSet(viewsets.ModelViewSet):
             {"id": instance.pk, "name": instance.name},
         )
         instance.delete()
-
-    def retrieve(self, request, *args, **kwargs):
-        response = super().retrieve(request, *args, **kwargs)
-        data = response.data
-        data["credentials_masked"] = _mask_credentials(data.get("credentials"))
-        if data.get("provider") == ExternalIntegration.PROVIDER_WEBHOOK:
-            data["webhook_urls"] = _webhook_urls(request, data.get("webhook_secret"))
-        elif data.get("provider") == ExternalIntegration.PROVIDER_HUBSPOT:
-            data["webhook_urls"] = _hubspot_webhook_url(request, data.get("webhook_secret"))
-        return Response(data)
-
-
-def _webhook_urls(request, secret):
-    if not secret:
-        return {}
-    base = request.build_absolute_uri("/api/integrations/webhook/").rstrip("/")
-    return {
-        "users": f"{base}/{secret}/users/",
-        "orders": f"{base}/{secret}/orders/",
-    }
-
-
-def _hubspot_webhook_url(request, secret):
-    if not secret:
-        return {}
-    base = request.build_absolute_uri("/api/integrations/hubspot/webhook/").rstrip("/")
-    return {"events": f"{base}/{secret}/"}
-
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])

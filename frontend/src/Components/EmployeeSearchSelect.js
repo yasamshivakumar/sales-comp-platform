@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import api from "../api";
 
 function EmployeeSearchSelect({ value, onSelect, disabled, placeholder }) {
@@ -58,8 +58,6 @@ function EmployeeSearchSelect({ value, onSelect, disabled, placeholder }) {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const filtered = useMemo(() => employees, [employees]);
-
   const applySelection = (employee) => {
     setQuery(employee.employee_id);
     setOpen(false);
@@ -100,6 +98,7 @@ function EmployeeSearchSelect({ value, onSelect, disabled, placeholder }) {
   };
 
   const showBrowseHint = !query.trim() && employees.length >= 15;
+  const listboxId = `${inputId}-listbox`;
 
   return (
     <div className="employee-search" ref={wrapperRef}>
@@ -108,6 +107,7 @@ function EmployeeSearchSelect({ value, onSelect, disabled, placeholder }) {
         type="text"
         role="combobox"
         aria-expanded={open}
+        aria-controls={listboxId}
         aria-autocomplete="list"
         className="employee-search__input"
         value={query}
@@ -122,18 +122,27 @@ function EmployeeSearchSelect({ value, onSelect, disabled, placeholder }) {
         <p className="employee-search__hint">Showing 15 employees. Type to search all.</p>
       )}
       {open && (
-        <ul className="employee-search__list" role="listbox" aria-labelledby={inputId}>
-          {loading && filtered.length === 0 && (
+        <ul
+          id={listboxId}
+          className="employee-search__list"
+          role="listbox"
+          aria-labelledby={inputId}
+        >
+          {loading && employees.length === 0 && (
             <li className="employee-search__empty">Loading employees…</li>
           )}
-          {!loadError && filtered.length === 0 && !loading && (
+          {!loadError && employees.length === 0 && !loading && (
             <li className="employee-search__empty">No employees found in User Setup</li>
           )}
           {loadError && (
             <li className="employee-search__empty employee-search__empty--error">{loadError}</li>
           )}
-          {filtered.map((employee) => (
-              <li key={employee.id} role="option">
+          {employees.map((employee) => (
+              <li
+                key={employee.id}
+                role="option"
+                aria-selected={String(value) === String(employee.employee_id)}
+              >
                 <button
                   type="button"
                   className="employee-search__option"

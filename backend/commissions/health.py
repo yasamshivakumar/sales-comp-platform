@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.db import connection
+from django.db import DatabaseError, connection
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -55,7 +55,7 @@ def readiness_check(request):
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
         db_ok = True
-    except Exception:
+    except DatabaseError:
         db_ok = False
 
     celery_ok = None
@@ -65,7 +65,7 @@ def readiness_check(request):
 
             celery_ok = celery_app.control.ping(timeout=1.0)
             celery_ok = bool(celery_ok)
-        except Exception:
+        except (OSError, TimeoutError, ConnectionError, RuntimeError):
             celery_ok = False
 
     healthy = db_ok and (celery_ok is not False)

@@ -1,6 +1,8 @@
+import logging
 import sys
 
 from django.conf import settings
+from django.db import DatabaseError, OperationalError
 
 from .models import (
     Commission,
@@ -13,6 +15,8 @@ from .models import (
     UserProfile,
 )
 
+logger = logging.getLogger("commissions")
+
 
 def get_default_organization():
     try:
@@ -21,7 +25,8 @@ def get_default_organization():
             defaults={"name": "Default Organization"},
         )
         return org
-    except Exception:
+    except (DatabaseError, OperationalError) as exc:
+        logger.warning("Could not resolve default organization: %s", exc)
         return None
 
 

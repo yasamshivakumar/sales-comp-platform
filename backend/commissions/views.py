@@ -1,73 +1,71 @@
-from datetime import datetime
-from rest_framework import status
 import csv
 import io
 import logging
+
+from django.conf import settings
+from django.contrib.auth import authenticate
+from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
+from django.core.files.base import ContentFile
+from django.core.validators import validate_email
+from django.db.models import Prefetch
+from django.http import HttpResponse
+from django.utils.dateparse import parse_date
+from rest_framework import generics, status, viewsets
+from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
-from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import viewsets
+from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.views import APIView
+
+from .audit import record_audit
+from .emails import notify_admins, notify_user
+from .imports import process_orders_csv, process_users_csv, should_use_async_import
+from .invites import accept_invite, get_valid_invite, invite_context
 from .models import (
-    Employee,
-    Sale,
+    AuditLog,
     Commission,
-    UserProfile,
-    HierarchyRelationship,
     CompensationPlan,
     CompensationTier,
+    Employee,
+    HierarchyRelationship,
+    ImportJob,
     Order,
-    SCRateTable,
+    Sale,
     SCFlatRateTable,
-)
-from decimal import Decimal, InvalidOperation
-from .serializers import (
-    EmployeeSerializer,
-    SaleSerializer,
-    CommissionSerializer,
-    CompensationPlanSerializer,
-    CompensationTierSerializer,
-    OrderSerializer,
-    SCRateTableSerializer,
-    SCFlatRateTableSerializer,
-)
-from django.contrib.auth.models import User
-from rest_framework.views import APIView
-from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.authtoken.models import Token
-from rest_framework.permissions import AllowAny
-from django.contrib.auth import authenticate
-from rest_framework import generics
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import PermissionDenied
-from django.core.validators import validate_email
-from django.core.exceptions import ValidationError
-from django.db.models import Prefetch
-from .serializers import UserProfileSerializer, HierarchyRelationshipSerializer
-from django.conf import settings
-from .services import (
-    calculate_commission_for_order,
-    approve_commissions,
-    recalculate_orders_in_range,
+    SCRateTable,
+    UserProfile,
 )
 from .permissions import (
+    get_request_user_profile,
     require_admin,
     require_finance_or_admin,
+    user_can_view_finance_data,
     user_is_admin,
     user_is_finance,
     user_is_manager,
-    user_can_view_finance_data,
-    get_request_user_profile,
 )
-from .audit import record_audit
-from .emails import notify_admins, notify_user
-from .invites import accept_invite, get_valid_invite, invite_context
-from .models import AuditLog, ImportJob
-from .imports import process_orders_csv, process_users_csv, should_use_async_import
+from .serializers import (
+    CommissionSerializer,
+    CompensationPlanSerializer,
+    CompensationTierSerializer,
+    EmployeeSerializer,
+    HierarchyRelationshipSerializer,
+    OrderSerializer,
+    SaleSerializer,
+    SCFlatRateTableSerializer,
+    SCRateTableSerializer,
+    UserProfileSerializer,
+)
+from .services import (
+    approve_commissions,
+    calculate_commission_for_order,
+    recalculate_orders_in_range,
+)
 from .tenants import filter_queryset_by_organization, get_profile_for_user
-from django.core.files.base import ContentFile
-from django.db import transaction
-from django.http import HttpResponse
-from django.utils.dateparse import parse_date
 
 logger = logging.getLogger("commissions")
 
@@ -1052,7 +1050,7 @@ def email_login(request):
         try:
             user = User.objects.get(username=email)
         except User.DoesNotExist:
-            logger.warning(f"Login attempt with non-existent email: {email}")
+            logger.warning("Login attempt with non-existent email: %s", email)
             record_audit(request, "login_failed", {"email": email})
             return Response(
                 {'error': 'Invalid credentials'},
@@ -1061,7 +1059,7 @@ def email_login(request):
     
     # Check password
     if not user.check_password(password):
-        logger.warning(f"Failed login attempt for email: {email}")
+        logger.warning("Failed login attempt for email: %s", email)
         record_audit(request, "login_failed", {"email": email})
         return Response(
             {'error': 'Invalid credentials'},
@@ -1082,7 +1080,7 @@ def email_login(request):
         # Get user profile for additional info
         user_profile = UserProfile.objects.filter(email=user.email).first()
         
-        logger.info(f"Successful login for email: {email}")
+        logger.info("Successful login for email: %s", email)
         record_audit(request, "login_success", {"user_id": user.id, "email": email})
         
         return Response({
@@ -1095,7 +1093,7 @@ def email_login(request):
         })
         
     except Exception as e:
-        logger.error(f"Login error: {str(e)}")
+        logger.error("Login error: %s", e)
         return Response(
             {'error': 'An error occurred during login'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1141,7 +1139,7 @@ def change_password(request):
     try:
         # Verify old password
         if not user.check_password(old_password):
-            logger.warning(f"Failed password change attempt for user: {user.email}")
+            logger.warning("Failed password change attempt for user: %s", user.email)
             return Response(
                 {'error': 'Old password is incorrect'},
                 status=status.HTTP_401_UNAUTHORIZED
@@ -1157,7 +1155,7 @@ def change_password(request):
         # Create new token for current session
         token, _ = Token.objects.get_or_create(user=user)
         
-        logger.info(f"Password changed successfully for user: {user.email}")
+        logger.info("Password changed successfully for user: %s", user.email)
         
         return Response({
             'message': 'Password changed successfully',
@@ -1165,7 +1163,7 @@ def change_password(request):
         })
         
     except Exception as e:
-        logger.error(f"Password change error: {str(e)}")
+        logger.error("Password change error: %s", e)
         return Response(
             {'error': 'An error occurred while changing password'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1216,7 +1214,7 @@ def get_user_profile(request):
             status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
-        logger.error(f"Error fetching user profile: {str(e)}")
+        logger.error("Error fetching user profile: %s", e)
         return Response(
             {'error': 'An error occurred'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1449,34 +1447,35 @@ def employee_earnings_report(request):
     Employee Earnings Report
     Detailed breakdown of commissions by employee
     """
-    from django.db.models import Sum, Count
-    
-    user = request.user
-    try:
-        user_profile = UserProfile.objects.get(email=user.email)
-        is_admin = user_profile.role.lower() in ['admin', 'administrator']
-    except:
-        is_admin = False
-    
-    # Get commissions
+    from django.db.models import Avg, Count, Sum
+
+    user_profile = get_profile_for_user(request.user)
+    role = (getattr(user_profile, "role", None) or "").lower()
+    is_admin = role in ("admin", "administrator")
+
     commissions = Commission.objects.all()
-    
+    commissions = filter_queryset_by_organization(
+        commissions, getattr(request, "organization", None)
+    )
+
     if not is_admin:
-        possible_emails = [user.email]
-        if user_profile.employee_id:
-            possible_emails.append(f"{user_profile.employee_id}@company.com")
+        possible_emails = [request.user.email]
+        employee_id = getattr(user_profile, "employee_id", None)
+        if employee_id:
+            possible_emails.append(f"{employee_id}@company.com")
         commissions = commissions.filter(employee__email__in=possible_emails)
-    
-    # Group by employee
-    earnings_data = commissions.values('employee__name', 'employee__email', 'employee_id').annotate(
-        total_earnings=Sum('commission_amount'),
-        commission_count=Count('id'),
-        avg_commission=Sum('commission_amount')
-    ).order_by('-total_earnings')
-    
+
+    earnings_data = commissions.values(
+        "employee__name", "employee__email", "employee_id"
+    ).annotate(
+        total_earnings=Sum("commission_amount"),
+        commission_count=Count("id"),
+        avg_commission=Avg("commission_amount"),
+    ).order_by("-total_earnings")
+
     return Response({
-        'earnings': list(earnings_data),
-        'is_admin': is_admin,
+        "earnings": list(earnings_data),
+        "is_admin": is_admin,
     })
 
 
@@ -1679,6 +1678,26 @@ def commission_payroll_export(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    commissions = list(
+        queryset.select_related(
+            "sale__order",
+            "employee",
+            "compensation_plan",
+        ).order_by("sale__order__order_date", "employee__name")
+    )
+    emails = [
+        comm.employee.email
+        for comm in commissions
+        if getattr(comm.employee, "email", None)
+    ]
+    profile_qs = UserProfile.objects.filter(email__in=emails).only("email", "employee_id")
+    org = getattr(request, "organization", None)
+    if org is not None:
+        profile_qs = profile_qs.filter(organization=org)
+    profiles_by_email = {
+        (profile.email or "").lower(): profile for profile in profile_qs
+    }
+
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow([
@@ -1696,9 +1715,9 @@ def commission_payroll_export(request):
         "approved_at",
     ])
 
-    for comm in queryset.order_by("sale__order__order_date", "employee__name"):
+    for comm in commissions:
         order = comm.sale.order if comm.sale_id and comm.sale.order_id else None
-        profile = UserProfile.objects.filter(email=comm.employee.email).first()
+        profile = profiles_by_email.get((comm.employee.email or "").lower())
         writer.writerow([
             comm.id,
             profile.employee_id if profile else "",

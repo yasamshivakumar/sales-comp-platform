@@ -1157,7 +1157,7 @@
 /* Demo section */
 .marketing-demo-section {
   padding: clamp(48px, 6vw, 72px) clamp(16px, 3vw, 40px);
-  background: linear-gradient(180deg, #ffffff 0%, var(--mkt-sky-wash) 60%, var(--mkt-indigo-wash) 100%);
+  background: linear-gradient(180deg, #ffffff 0%, #eef6fc 60%, #e3eef8 100%);
 }
 
 .marketing-demo-section__inner {
@@ -1817,6 +1817,526 @@
 
 .marketing-team-visual__checks li:last-child {
   border-bottom: none;
+}
+
+/* Themed page backgrounds */
+.marketing-section[class*="marketing-section--"],
+.marketing-section--wash,
+.marketing-section--muted {
+  max-width: none;
+}
+
+.marketing-section[class*="marketing-section--"] .marketing-section__head,
+.marketing-section[class*="marketing-section--"] .marketing-tabs,
+.marketing-section[class*="marketing-section--"] .marketing-persona,
+.marketing-section[class*="marketing-section--"] .marketing-card-grid,
+.marketing-section--catalog .marketing-card-grid,
+.marketing-section--catalog-teams .marketing-card-grid {
+  max-width: var(--mkt-max);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Home sections */
+.marketing-section--home-product {
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 0%, rgba(1, 118, 210, 0.14), transparent 55%),
+    linear-gradient(180deg, #edf6fd 0%, #e3f0fa 55%, #d9ebf8 100%);
+  border-top: 1px solid rgba(1, 118, 210, 0.1);
+  border-bottom: 1px solid rgba(1, 118, 210, 0.08);
+}
+
+.marketing-section--home-teams {
+  background:
+    radial-gradient(ellipse 70% 55% at 85% 10%, rgba(99, 102, 241, 0.12), transparent 50%),
+    linear-gradient(180deg, #f3f0ff 0%, #ebe8ff 55%, #e4e0fc 100%);
+  border-top: 1px solid rgba(99, 102, 241, 0.1);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.08);
+}
+
+.marketing-section--home-platform {
+  background:
+    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(3, 45, 96, 0.08), transparent 55%),
+    linear-gradient(180deg, #e8eef6 0%, #dfe8f2 50%, #d5e2ef 100%);
+  border-top: 1px solid rgba(3, 45, 96, 0.1);
+}
+
+.marketing-section--catalog {
+  background: linear-gradient(180deg, #eef6fc 0%, #e2eff9 100%);
+}
+
+.marketing-section--catalog-teams {
+  background: linear-gradient(180deg, #f2f0ff 0%, #e8e5ff 100%);
+}
+
+/* Module page heroes */
+.marketing-page-hero--module-plans {
+  background: linear-gradient(135deg, #021a38 0%, #032d60 45%, #0176d2 100%);
+}
+
+.marketing-page-hero--module-participants {
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 48%, #4338ca 100%);
+}
+
+.marketing-page-hero--module-crm-sync {
+  background: linear-gradient(135deg, #042f2e 0%, #0f766e 50%, #14b8a6 100%);
+}
+
+.marketing-page-hero--module-commissions {
+  background: linear-gradient(135deg, #2e1065 0%, #5b21b6 50%, #7c3aed 100%);
+}
+
+.marketing-page-hero--module-dashboard {
+  background: linear-gradient(135deg, #011627 0%, #0c4a6e 55%, #0369a1 100%);
+}
+
+.marketing-page-hero--catalog {
+  background: linear-gradient(135deg, #011627 0%, #032d60 40%, #0ea5e9 100%);
+}
+
+.marketing-page-hero--catalog-teams {
+  background: linear-gradient(135deg, #1e1b4b 0%, #3730a3 50%, #6366f1 100%);
+}
+
+/* Module content bands */
+.marketing-pillar--module-plans {
+  background: linear-gradient(180deg, #f0f8ff 0%, #e3f2fc 100%);
+}
+
+.marketing-pillar--module-participants {
+  background: linear-gradient(180deg, #f5f3ff 0%, #ede9fe 100%);
+}
+
+.marketing-pillar--module-crm-sync {
+  background: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%);
+}
+
+.marketing-pillar--module-commissions {
+  background: linear-gradient(180deg, #f5f3ff 0%, #ede9fe 55%, #e9d5ff 100%);
+}
+
+.marketing-pillar--module-dashboard {
+  background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+}
+
+.marketing-section--module-plans {
+  background: linear-gradient(180deg, #dceefb 0%, #cfe6f5 100%);
+}
+
+.marketing-section--module-participants {
+  background: linear-gradient(180deg, #e9e5ff 0%, #ddd6fe 100%);
+}
+
+.marketing-section--module-crm-sync {
+  background: linear-gradient(180deg, #ccfbf1 0%, #99f6e4 100%);
+}
+
+.marketing-section--module-commissions {
+  background: linear-gradient(180deg, #ede9fe 0%, #ddd6fe 100%);
+}
+
+.marketing-section--module-dashboard {
+  background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%);
+}
+
+/* Team page heroes */
+.marketing-page-hero--team-finance {
+  background: linear-gradient(135deg, #011627 0%, #032d60 50%, #059669 100%);
+}
+
+.marketing-page-hero--team-compensation {
+  background: linear-gradient(135deg, #312e81 0%, #5b21b6 55%, #9333ea 100%);
+}
+
+.marketing-page-hero--team-revops {
+  background: linear-gradient(135deg, #0c4a6e 0%, #0e7490 50%, #06b6d4 100%);
+}
+
+.marketing-page-hero--team-sales {
+  background: linear-gradient(135deg, #7c2d12 0%, #c2410c 45%, #ea580c 100%);
+}
+
+/* Team content sections */
+.marketing-section--team-finance {
+  background:
+    radial-gradient(circle at 10% 20%, rgba(5, 150, 105, 0.1), transparent 40%),
+    linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%);
+}
+
+.marketing-section--team-compensation {
+  background:
+    radial-gradient(circle at 90% 15%, rgba(147, 51, 234, 0.1), transparent 42%),
+    linear-gradient(180deg, #f5f3ff 0%, #ede9fe 100%);
+}
+
+.marketing-section--team-revops {
+  background:
+    radial-gradient(circle at 15% 80%, rgba(6, 182, 212, 0.12), transparent 40%),
+    linear-gradient(180deg, #ecfeff 0%, #cffafe 100%);
+}
+
+.marketing-section--team-sales {
+  background:
+    radial-gradient(circle at 85% 25%, rgba(234, 88, 12, 0.1), transparent 42%),
+    linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%);
+}
+
+/* Themed pillar cards */
+.marketing-pillar--module-plans .marketing-pillar-card {
+  border-color: rgba(1, 118, 210, 0.12);
+  box-shadow: 0 6px 20px rgba(1, 118, 210, 0.08);
+}
+
+.marketing-pillar--module-participants .marketing-pillar-card {
+  border-color: rgba(67, 56, 202, 0.12);
+  box-shadow: 0 6px 20px rgba(67, 56, 202, 0.08);
+}
+
+.marketing-pillar--module-crm-sync .marketing-pillar-card {
+  border-color: rgba(20, 184, 166, 0.15);
+  box-shadow: 0 6px 20px rgba(20, 184, 166, 0.08);
+}
+
+.marketing-pillar--module-commissions .marketing-pillar-card {
+  border-color: rgba(124, 58, 237, 0.12);
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.08);
+}
+
+.marketing-pillar--module-dashboard .marketing-pillar-card {
+  border-color: rgba(3, 105, 161, 0.12);
+  box-shadow: 0 6px 20px rgba(3, 105, 161, 0.08);
+}
+
+.marketing-section--team-sales .marketing-persona {
+  background: rgba(255, 255, 255, 0.82);
+}
+
+/* Rich product & team page styling */
+.marketing-page-hero--rich {
+  position: relative;
+  overflow: hidden;
+  padding-bottom: clamp(48px, 6vw, 72px);
+}
+
+.marketing-page-hero--rich::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 85% 20%, rgba(255, 255, 255, 0.12), transparent 40%),
+    radial-gradient(circle at 10% 90%, rgba(1, 118, 210, 0.2), transparent 45%);
+  pointer-events: none;
+}
+
+.marketing-page-hero--rich .marketing-page-hero__inner {
+  position: relative;
+  z-index: 1;
+}
+
+.marketing-page-hero__inner--wide {
+  max-width: 880px;
+}
+
+.marketing-page-hero__copy-block {
+  min-width: 0;
+}
+
+.marketing-hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.marketing-hero-badge {
+  display: inline-flex;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.marketing-hero-badge--soft {
+  background: rgba(124, 184, 240, 0.2);
+  border-color: rgba(124, 184, 240, 0.35);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.marketing-capability-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.marketing-capability-chip {
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.92);
+  line-height: 1.3;
+}
+
+.marketing-section__sub {
+  margin: 12px 0 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--mkt-muted);
+}
+
+.marketing-pillar--rich {
+  padding: clamp(56px, 7vw, 80px) clamp(16px, 3vw, 40px);
+}
+
+.marketing-pillar__head {
+  max-width: 640px;
+  margin-bottom: 36px;
+}
+
+.marketing-pillar__head--center {
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+}
+
+.marketing-pillar__head h2 {
+  margin: 0;
+  font-size: clamp(22px, 2.8vw, 30px);
+  font-weight: 700;
+  color: var(--mkt-navy);
+}
+
+.marketing-pillar__head p {
+  margin: 12px 0 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--mkt-muted);
+}
+
+.marketing-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 18px;
+  max-width: var(--mkt-max);
+  margin: 0 auto;
+}
+
+.marketing-feature-card {
+  position: relative;
+  padding: 24px 22px 22px;
+  border-radius: var(--mkt-radius-lg);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(3, 45, 96, 0.08);
+  box-shadow: 0 10px 32px rgba(3, 45, 96, 0.08);
+  overflow: hidden;
+}
+
+.marketing-feature-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--mkt-blue), #7cb8f0);
+}
+
+.marketing-pillar--module-participants .marketing-feature-card::before {
+  background: linear-gradient(90deg, #4338ca, #818cf8);
+}
+
+.marketing-pillar--module-crm-sync .marketing-feature-card::before {
+  background: linear-gradient(90deg, #0f766e, #2dd4bf);
+}
+
+.marketing-pillar--module-commissions .marketing-feature-card::before {
+  background: linear-gradient(90deg, #6d28d9, #a78bfa);
+}
+
+.marketing-pillar--module-dashboard .marketing-feature-card::before {
+  background: linear-gradient(90deg, #0369a1, #38bdf8);
+}
+
+.marketing-feature-card__num {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: rgba(3, 45, 96, 0.12);
+}
+
+.marketing-feature-card h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--mkt-navy);
+  line-height: 1.35;
+}
+
+.marketing-feature-card p {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--mkt-muted);
+}
+
+.marketing-section--rich {
+  padding: clamp(56px, 7vw, 80px) clamp(16px, 3vw, 40px);
+}
+
+.marketing-card-link--rich {
+  padding: 26px 24px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 36px rgba(3, 45, 96, 0.08);
+}
+
+.marketing-card-link__meta {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mkt-blue);
+}
+
+.marketing-card-link--team-finance {
+  border-top-color: #059669;
+}
+
+.marketing-card-link--team-compensation {
+  border-top-color: #7c3aed;
+}
+
+.marketing-card-link--team-revops {
+  border-top-color: #0891b2;
+}
+
+.marketing-card-link--team-sales {
+  border-top-color: #ea580c;
+}
+
+.marketing-tabs--rich {
+  max-width: var(--mkt-max);
+  margin: 0 auto 28px;
+  padding: 12px;
+  border: none;
+  border-radius: var(--mkt-radius-lg);
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(3, 45, 96, 0.08);
+}
+
+.marketing-tabs--rich .marketing-tabs__btn--active {
+  box-shadow: 0 4px 14px rgba(3, 45, 96, 0.15);
+}
+
+.marketing-persona--rich {
+  max-width: var(--mkt-max);
+  padding: clamp(28px, 4vw, 40px);
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(3, 45, 96, 0.08);
+  box-shadow: 0 20px 50px rgba(3, 45, 96, 0.1);
+}
+
+.marketing-persona__eyebrow {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: var(--mkt-blue-soft);
+  color: var(--mkt-blue);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.marketing-check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.marketing-check-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--mkt-radius);
+  background: var(--mkt-sky-wash);
+  border: 1px solid rgba(3, 45, 96, 0.06);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mkt-navy);
+}
+
+.marketing-check-item__mark {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--mkt-navy);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.marketing-team-visual__title {
+  margin: 8px 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.marketing-team-visual__card--finance {
+  background: linear-gradient(160deg, #032d60 0%, #065f46 100%);
+}
+
+.marketing-team-visual__card--compensation {
+  background: linear-gradient(160deg, #4c1d95 0%, #7c3aed 100%);
+}
+
+.marketing-team-visual__card--revops {
+  background: linear-gradient(160deg, #0c4a6e 0%, #0891b2 100%);
+}
+
+.marketing-team-visual__card--sales {
+  background: linear-gradient(160deg, #9a3412 0%, #ea580c 100%);
+}
+
+.marketing-section--rich.marketing-section--catalog,
+.marketing-section--rich.marketing-section--catalog-teams {
+  padding-top: clamp(48px, 6vw, 64px);
+}
+
+@media (max-width: 768px) {
+  .marketing-capability-row {
+    margin-top: 18px;
+  }
+
+  .marketing-capability-chip {
+    font-size: 11px;
+    padding: 6px 10px;
+  }
+
+  .marketing-check-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .marketing-feature-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Responsive */

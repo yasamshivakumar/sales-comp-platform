@@ -1,4 +1,3 @@
-from .base import BaseConnector
 from .generic_rest import GenericRestConnector
 from .hubspot import HubSpotConnector
 from .salesforce import SalesforceConnector

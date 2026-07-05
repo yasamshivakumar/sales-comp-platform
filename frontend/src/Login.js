@@ -32,17 +32,46 @@ function Login() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const token = params.get("token");
-    if (token) {
-      saveAuthSession({ token });
-      success({
-        title: "SSO sign-in complete",
-        message: "Redirecting to your workspace…",
+    const ssoCode = params.get("sso_code");
+    const ssoError = params.get("sso_error");
+
+    if (ssoError) {
+      error({
+        title: "SSO sign-in failed",
+        message: "Could not complete single sign-on. Please try again.",
       });
       window.history.replaceState({}, "", "/login");
-      setTimeout(() => navigate("/dashboard"), 800);
+      return;
     }
-  }, [navigate, success]);
+
+    if (!ssoCode) return undefined;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.post("auth/oidc-exchange/", { code: ssoCode });
+        if (cancelled) return;
+        saveAuthSession({ token: res.data.token });
+        success({
+          title: "SSO sign-in complete",
+          message: "Redirecting to your workspace…",
+        });
+        window.history.replaceState({}, "", "/login");
+        setTimeout(() => navigate("/dashboard"), 800);
+      } catch (err) {
+        if (cancelled) return;
+        error({
+          title: "SSO sign-in failed",
+          message: getApiErrorMessage(err, "Invalid or expired sign-in code."),
+        });
+        window.history.replaceState({}, "", "/login");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate, success, error]);
 
   const handleLogin = async () => {
     if (!email || !password) {

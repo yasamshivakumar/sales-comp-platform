@@ -192,6 +192,7 @@ REST_FRAMEWORK = {
         "user": os.getenv("THROTTLE_USER", "120/min"),
         "anon": os.getenv("THROTTLE_ANON", "30/min"),
         "login": os.getenv("THROTTLE_LOGIN", "10/min"),
+        "oidc_exchange": os.getenv("THROTTLE_OIDC_EXCHANGE", "10/min"),
         "upload": os.getenv("THROTTLE_UPLOAD", "6/min"),
         "ai": os.getenv("THROTTLE_AI", "20/hour"),
     },

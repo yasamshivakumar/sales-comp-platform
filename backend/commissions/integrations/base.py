@@ -11,6 +11,14 @@ class ConnectorError(Exception):
     pass
 
 
+def assert_http_url(url):
+    """Reject non-HTTP(S) schemes (file:, data:, etc.) before urlopen."""
+    parsed = urllib.parse.urlparse(str(url or ""))
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ConnectorError("Only http(s) URLs are allowed for CRM requests")
+    return url
+
+
 class BaseConnector:
     provider = "base"
 
@@ -28,6 +36,7 @@ class BaseConnector:
 
 
 def _http_request(method, url, headers=None, body=None, timeout=60):
+    assert_http_url(url)
     data = None
     if body is not None:
         data = json.dumps(body).encode("utf-8")
@@ -38,7 +47,7 @@ def _http_request(method, url, headers=None, body=None, timeout=60):
         method=method.upper(),
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec B310
             raw = response.read().decode("utf-8")
             if not raw:
                 return {}
@@ -57,9 +66,13 @@ def _http_request(method, url, headers=None, body=None, timeout=60):
         raise
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
-        raise ConnectorError(f"HTTP {exc.code}: {detail[:500]}") from exc
+        # Avoid logging full bodies (may include tokens or PII).
+        safe_detail = detail[:200].replace("\n", " ")
+        logger.warning("HTTP %s from CRM endpoint", exc.code)
+        raise ConnectorError(f"HTTP {exc.code}: {safe_detail}") from exc
     except urllib.error.URLError as exc:
-        raise ConnectorError(str(exc)) from exc
+        logger.warning("CRM request failed: %s", exc.reason)
+        raise ConnectorError("CRM request failed") from exc
 
 
 def http_get_json(url, headers=None, timeout=60):

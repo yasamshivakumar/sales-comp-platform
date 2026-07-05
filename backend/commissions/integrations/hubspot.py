@@ -32,7 +32,11 @@ class HubSpotConnector(BaseConnector):
                 page_params["after"] = after
             url = f"{HUBSPOT_API}{path}?{urllib.parse.urlencode(page_params)}"
             payload = http_get_json(url, headers=self._headers())
+            if not isinstance(payload, dict):
+                raise ConnectorError("HubSpot returned an unexpected response")
             batch = payload.get("results") or []
+            if not isinstance(batch, list):
+                raise ConnectorError("HubSpot results payload is invalid")
             records.extend(batch)
             if limit and len(records) >= limit:
                 return records[:limit]
@@ -60,7 +64,11 @@ class HubSpotConnector(BaseConnector):
                 headers=self._headers(),
                 body=body,
             )
+            if not isinstance(payload, dict):
+                raise ConnectorError("HubSpot search returned an unexpected response")
             batch = payload.get("results") or []
+            if not isinstance(batch, list):
+                raise ConnectorError("HubSpot search results payload is invalid")
             records.extend(batch)
             if limit and len(records) >= limit:
                 return records[:limit]

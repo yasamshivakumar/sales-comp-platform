@@ -44,7 +44,6 @@ function DatePickerField({
           margin: "dense",
           fullWidth,
           required,
-          className: mergedClass,
           placeholder: "Select date",
           inputProps: { readOnly: true },
           ...slotProps?.textField,

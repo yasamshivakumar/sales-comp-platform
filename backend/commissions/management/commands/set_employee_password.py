@@ -53,9 +53,6 @@ class Command(BaseCommand):
             user.save()
 
         self.stdout.write(self.style.SUCCESS(f"Login ready for {profile.email}"))
-        self.stdout.write("")
-        self.stdout.write("Login with:")
-        self.stdout.write(f"  Email:    {profile.email}")
-        self.stdout.write(f"  Password: {password}")
-        self.stdout.write("")
+        self.stdout.write(f"  Email: {profile.email}")
+        self.stdout.write("  Password: (set — not displayed for security)")
         self.stdout.write("Ask the user to change their password after first login.")

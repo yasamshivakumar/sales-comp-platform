@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../../api";
 
 function HierarchySection({ form, handleChange, renderField }) {
@@ -41,8 +41,6 @@ function HierarchySection({ form, handleChange, renderField }) {
     return name || user.name || user.email || `User #${user.id}`;
   };
 
-  const options = useMemo(() => participants, [participants]);
-
   const showBrowseHint = !participantSearch.trim() && participants.length >= 15;
 
   return (
@@ -78,7 +76,7 @@ function HierarchySection({ form, handleChange, renderField }) {
           onChange={handleChange}
         >
           <option value="">Select parent participant</option>
-          {options.map((user) => (
+          {participants.map((user) => (
             <option key={user.id} value={user.id}>
               {userLabel(user)}
             </option>
@@ -95,7 +93,7 @@ function HierarchySection({ form, handleChange, renderField }) {
           onChange={handleChange}
         >
           <option value="">Select child participant</option>
-          {options.map((user) => (
+          {participants.map((user) => (
             <option key={user.id} value={user.id}>
               {userLabel(user)}
             </option>
