@@ -14,7 +14,6 @@ import MarketingReveal from "../components/MarketingReveal";
 import MarketingButton from "../components/MarketingButton";
 import FaqAccordion from "../components/FaqAccordion";
 import BrowserFrame from "../components/BrowserFrame";
-import { MarketingIcon } from "../components/MarketingIcons";
 
 const HERO_BADGES = [
   "Audit logs",
@@ -31,10 +30,7 @@ function MarketingHome() {
       <section className="mkt-hero" id="home">
         <div className="mkt-hero__inner">
           <MarketingReveal className="mkt-hero__copy">
-            <p className="mkt-hero__eyebrow">
-              <span className="mkt-hero__eyebrow-dot" />
-              Enterprise commission management
-            </p>
+            <p className="mkt-hero__eyebrow">Enterprise commission management</p>
             <h1>Commission operations your finance team can trust</h1>
             <p className="mkt-hero__lead">
               Incentra unifies compensation plans, order ingestion, monthly calculations,
@@ -55,7 +51,6 @@ function MarketingHome() {
             <div className="mkt-hero__trust">
               {HERO_BADGES.map((badge) => (
                 <span key={badge} className="mkt-hero__badge">
-                  <MarketingIcon name="check" />
                   {badge}
                 </span>
               ))}
@@ -107,9 +102,6 @@ function MarketingHome() {
                   className={`mkt-feature-card mkt-feature-card--${area.slug}`}
                   onClick={() => showProduct(area.slug)}
                 >
-                  <span className="mkt-feature-card__icon">
-                    <MarketingIcon name={area.slug} />
-                  </span>
                   <span className="mkt-feature-card__label">{area.label}</span>
                   <h3>{area.headline}</h3>
                   <p>{area.summary}</p>
@@ -179,13 +171,12 @@ function MarketingHome() {
         <div className="mkt-section__inner">
           <MarketingReveal className="mkt-section__head mkt-section__head--center">
             <span className="mkt-kicker">How it works</span>
-            <h2>From CRM deal to payroll export in four steps</h2>
+            <h2>From CRM deal to payroll export</h2>
           </MarketingReveal>
           <div className="mkt-steps">
             {HOW_IT_WORKS.map((step, index) => (
               <MarketingReveal key={step.title} delay={index * 70}>
                 <article className="mkt-step">
-                  <span className="mkt-step__num">{step.step}</span>
                   <h3>{step.title}</h3>
                   <p>{step.description}</p>
                 </article>
@@ -232,9 +223,6 @@ function MarketingHome() {
             {TESTIMONIALS.map((item, index) => (
               <MarketingReveal key={item.name} delay={index * 80}>
                 <article className="mkt-testimonial">
-                  <div className="mkt-testimonial__stars" aria-label={`${item.rating} out of 5 stars`}>
-                    {"★".repeat(item.rating)}
-                  </div>
                   <blockquote>&ldquo;{item.quote}&rdquo;</blockquote>
                   <div className="mkt-testimonial__author">
                     <strong>{item.name}</strong>

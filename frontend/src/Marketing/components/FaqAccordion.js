@@ -21,7 +21,6 @@ function FaqAccordion({ items }) {
               onClick={() => setOpenIndex(isOpen ? -1 : index)}
             >
               <span>{item.question}</span>
-              <span className="mkt-faq__icon" aria-hidden="true" />
             </button>
             <div
               id={panelId}

@@ -51,22 +51,18 @@ export const HOME_BENEFITS = [
 
 export const HOW_IT_WORKS = [
   {
-    step: "01",
     title: "Connect data",
     description: "Sync CRM deals or import orders. Map participants, territories, and business groups.",
   },
   {
-    step: "02",
     title: "Configure plans",
     description: "Set rate, flat, and lookup plans with commission rules and monthly effective dates.",
   },
   {
-    step: "03",
     title: "Automate calculations",
     description: "Run monthly aggregation on successful orders with manager hierarchy splits.",
   },
   {
-    step: "04",
     title: "Generate payouts",
     description: "Finance approves commissions and exports payroll CSV with full status tracking.",
   },
