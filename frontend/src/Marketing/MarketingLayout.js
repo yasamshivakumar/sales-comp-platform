@@ -10,6 +10,7 @@ import MarketingTeamPage from "./pages/MarketingTeamPage";
 import MarketingDemo from "./pages/MarketingDemo";
 import "./marketing.css";
 import "./marketing-enterprise.css";
+import "./marketing-premium.css";
 
 function MarketingLayout() {
   const [view, setView] = useState({ type: "home" });
