@@ -9,10 +9,6 @@ function MarketingProductsIndex() {
     <>
       <section className="marketing-page-hero marketing-page-hero--rich marketing-page-hero--catalog">
         <div className="marketing-page-hero__inner marketing-page-hero__inner--wide">
-          <div className="marketing-hero-badges">
-            <span className="marketing-hero-badge">Live modules</span>
-            <span className="marketing-hero-badge marketing-hero-badge--soft">Shipped today</span>
-          </div>
           <p className="marketing-kicker">Product</p>
           <h1>Modules shipped in Incentra</h1>
           <p className="marketing-page-hero__lead">
@@ -38,7 +34,7 @@ function MarketingProductsIndex() {
               <span className="marketing-card-link__label">{area.label}</span>
               <h3>{area.headline}</h3>
               <p>{area.summary}</p>
-              <span className="marketing-card-link__arrow">Learn more →</span>
+              <span className="marketing-card-link__arrow">View details</span>
             </button>
           ))}
         </div>

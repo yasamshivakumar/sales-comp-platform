@@ -18,9 +18,6 @@ function MarketingProductPage({ slug }) {
       <section className={`marketing-page-hero marketing-page-hero--rich marketing-page-hero--module-${slug}`}>
         <div className="marketing-page-hero__inner marketing-page-hero__inner--split">
           <div className="marketing-page-hero__copy-block">
-            <div className="marketing-hero-badges">
-              <span className="marketing-hero-badge">Live module</span>
-            </div>
             <p className="marketing-kicker">Product · {area.label}</p>
             <h1>{area.headline}</h1>
             <p className="marketing-page-hero__lead">{area.summary}</p>
@@ -34,7 +31,7 @@ function MarketingProductPage({ slug }) {
           <div className="marketing-pillar__head marketing-pillar__head--center">
             <p className="marketing-kicker">Capabilities</p>
             <h2>What you can do in {area.label}</h2>
-            <p>Everything below is available in Incentra today — not on a roadmap slide.</p>
+            <p>Capabilities available in Incentra today.</p>
           </div>
           <div className="marketing-feature-grid">
             {area.items.map((item) => (
@@ -65,7 +62,7 @@ function MarketingProductPage({ slug }) {
             >
               <span className="marketing-card-link__label">{item.label}</span>
               <h3>{item.headline}</h3>
-              <span className="marketing-card-link__arrow">View module →</span>
+              <span className="marketing-card-link__arrow">View details</span>
             </button>
           ))}
         </div>

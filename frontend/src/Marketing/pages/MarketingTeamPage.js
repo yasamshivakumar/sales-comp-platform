@@ -15,10 +15,6 @@ function MarketingTeamPage({ slug }) {
     <>
       <section className={`marketing-page-hero marketing-page-hero--rich marketing-page-hero--team-${slug}`}>
         <div className="marketing-page-hero__inner marketing-page-hero__inner--wide">
-          <div className="marketing-hero-badges">
-            <span className="marketing-hero-badge">Team workflow</span>
-            <span className="marketing-hero-badge marketing-hero-badge--soft">{team.label}</span>
-          </div>
           <p className="marketing-kicker">Teams · {team.label}</p>
           <h1>{team.title}</h1>
           <p className="marketing-page-hero__lead">{team.body}</p>

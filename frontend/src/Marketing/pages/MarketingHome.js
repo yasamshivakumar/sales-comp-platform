@@ -14,7 +14,7 @@ function MarketingHome() {
       <section className="marketing-hero" id="home">
         <div className="marketing-hero__inner marketing-hero__inner--split">
           <div className="marketing-hero__copy">
-            <p className="marketing-kicker marketing-kicker--light">Sales compensation platform</p>
+            <p className="marketing-kicker">Sales compensation platform</p>
             <h1>Plans, orders, commissions, and payroll — in one place</h1>
             <p className="marketing-hero__lead">
               Incentra is a multi-tenant SaaS platform for compensation plan setup, order
@@ -28,7 +28,7 @@ function MarketingHome() {
               </button>
               <button
                 type="button"
-                className="marketing-btn marketing-btn--secondary marketing-btn--on-dark"
+                className="marketing-btn marketing-btn--secondary"
                 onClick={showProducts}
               >
                 Explore product
@@ -42,7 +42,7 @@ function MarketingHome() {
       <section className="marketing-band marketing-band--unified">
         <div className="marketing-band__inner marketing-band__inner--split">
           <div>
-            <p className="marketing-kicker marketing-kicker--light">What Incentra does today</p>
+            <p className="marketing-kicker">What Incentra does today</p>
             <h2>One platform for your compensation workflow</h2>
             <p className="marketing-band__lead">
               Each organization gets isolated data, role-based access, and a single path from
@@ -70,7 +70,7 @@ function MarketingHome() {
               <span className="marketing-card-link__label">{area.label}</span>
               <h3>{area.headline}</h3>
               <p>{area.summary}</p>
-              <span className="marketing-card-link__arrow">Learn more →</span>
+              <span className="marketing-card-link__arrow">View details</span>
             </button>
           ))}
         </div>

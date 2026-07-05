@@ -9,10 +9,6 @@ function MarketingTeamsIndex() {
     <>
       <section className="marketing-page-hero marketing-page-hero--rich marketing-page-hero--catalog-teams">
         <div className="marketing-page-hero__inner marketing-page-hero__inner--wide">
-          <div className="marketing-hero-badges">
-            <span className="marketing-hero-badge">4 team workflows</span>
-            <span className="marketing-hero-badge marketing-hero-badge--soft">Role-based</span>
-          </div>
           <p className="marketing-kicker">Teams</p>
           <h1>How each team uses Incentra</h1>
           <p className="marketing-page-hero__lead">
