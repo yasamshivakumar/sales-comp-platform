@@ -36,7 +36,6 @@ import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
 import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
-import InsightsOutlinedIcon from "@mui/icons-material/InsightsOutlined";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import api, { clearAuthStorage, getAuthSessionValue } from "../../api";
 import { useTheme as useAppTheme } from "../../ThemeContext";
@@ -474,18 +473,20 @@ function AppLayout({ children }) {
   const drawerContent = (
     <Box className="enterprise-sidebar" sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <Box sx={{ px: 1, pt: 2, pb: 1, textAlign: "center", position: "relative" }}>
-        <Avatar
+        <Box
+          component="img"
+          src="/incentra-icon.svg"
+          alt=""
           sx={{
-            bgcolor: enterprise.accent,
             width: 40,
             height: 40,
+            display: "block",
             mx: "auto",
             mb: 0.75,
+            borderRadius: 1.5,
             boxShadow: "0 4px 14px rgba(1,118,211,0.45)",
           }}
-        >
-          <InsightsOutlinedIcon />
-        </Avatar>
+        />
         <Typography variant="caption" fontWeight={800} display="block" lineHeight={1.2} color="#fff">
           Incentra
         </Typography>
