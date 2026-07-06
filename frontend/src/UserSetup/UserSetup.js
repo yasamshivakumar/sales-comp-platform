@@ -217,7 +217,15 @@ function UserSetup() {
         setFile(null);
         return;
       }
-      const { success: ok = 0, failed = 0, errors = [] } = res.data || {};
+      const {
+        success: ok = 0,
+        failed = 0,
+        errors = [],
+        users_created: usersCreated = 0,
+        users_updated: usersUpdated = 0,
+        activation_emails_sent: emailsSent = 0,
+        email_failures: emailFailures = 0,
+      } = res.data || {};
       if (failed > 0) {
         const detail = errors
           .slice(0, 3)
@@ -227,7 +235,15 @@ function UserSetup() {
           `Upload finished — ${ok} succeeded, ${failed} failed.${detail ? ` ${detail}` : ""}`
         );
       } else {
-        success(`Upload done — ${ok} user${ok === 1 ? "" : "s"} imported`);
+        const parts = [
+          `${usersCreated || ok} created`,
+          usersUpdated ? `${usersUpdated} updated` : null,
+          emailsSent ? `${emailsSent} activation email${emailsSent === 1 ? "" : "s"} sent` : null,
+          emailFailures
+            ? `${emailFailures} email failure${emailFailures === 1 ? "" : "s"}`
+            : null,
+        ].filter(Boolean);
+        success(`Upload done — ${parts.join(" · ")}`);
       }
       if (ok > 0) fetchUsers();
       setFile(null);

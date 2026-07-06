@@ -599,27 +599,28 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
             )
 
             # ---------------------------------------------------
-            # Create Django Auth User
+            # Login / activation invite
             # ---------------------------------------------------
+            invite_status = "none"
+            invite_link = ""
+            invite_error = ""
+
             if enable_login:
+                if created:
+                    from .invites import build_invite_url, create_user_invite
 
-                django_user, user_created = User.objects.get_or_create(
-                    username=username,
-                    defaults={
-                        'email': email,
-                        'first_name': profile.first_name,
-                        'last_name': profile.last_name,
-                        'is_active': True,
-                    }
-                )
+                    _, token, sent, invite_error = create_user_invite(
+                        profile,
+                        invited_by=request.user,
+                    )
+                    invite_status = "sent" if sent else "created"
+                    if token and not sent:
+                        invite_link = build_invite_url(token)
+                else:
+                    from .auth_utils import provision_login_user
 
-                django_user.email = email
-                django_user.first_name = profile.first_name
-                django_user.last_name = profile.last_name
-                django_user.is_active = True
-
-                _apply_onboarding_password(django_user, user_created)
-                django_user.save()
+                    provision_login_user(profile)
+                    invite_status = "existing"
 
             # ---------------------------------------------------
             # Hierarchy Relationship
@@ -654,9 +655,15 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
                     )
 
             serializer = self.get_serializer(profile)
+            payload = dict(serializer.data)
+            payload["invite_status"] = invite_status
+            if invite_link:
+                payload["invite_link"] = invite_link
+            if invite_error:
+                payload["invite_error"] = invite_error
 
             return Response(
-                serializer.data,
+                payload,
                 status=status.HTTP_201_CREATED
                 if created
                 else status.HTTP_200_OK
@@ -742,11 +749,6 @@ class UserProfileUploadView(APIView):
             "message": "Upload completed successfully",
             **result,
         }
-        if getattr(settings, "DEFAULT_ONBOARDING_PASSWORD", ""):
-            payload["note"] = (
-                "New login users received the password from DEFAULT_ONBOARDING_PASSWORD. "
-                "Change it after first login."
-            )
         record_audit(
             request,
             "user_setup_upload",
@@ -1206,6 +1208,75 @@ def _profile_display_name(profile):
     return full or (profile.name or "").strip() or profile.email
 
 
+def _manager_for_profile(profile, organization=None):
+    qs = HierarchyRelationship.objects.filter(
+        child_participant=profile,
+    ).select_related("parent_participant")
+    if organization:
+        qs = qs.filter(
+            parent_participant__organization=organization,
+            child_participant__organization=organization,
+        )
+    rel = qs.first()
+    return rel.parent_participant if rel else None
+
+
+def serialize_user_profile_detail(profile, *, organization=None):
+    """Full imported employee profile for order forms and admin views."""
+    manager = _manager_for_profile(profile, organization)
+    territory = profile.territory
+    return {
+        "id": profile.id,
+        "employee_id": profile.employee_id or "",
+        "display_name": _profile_display_name(profile),
+        "name": profile.name or "",
+        "email": profile.email or "",
+        "role": profile.role or "",
+        "username": profile.username or "",
+        "first_name": profile.first_name or "",
+        "last_name": profile.last_name or "",
+        "prefix": profile.prefix or "",
+        "title": profile.title or "",
+        "position_name": profile.position_name or "",
+        "position_title": profile.position_title or "",
+        "pay_period_type": profile.pay_period_type or "",
+        "business_group": profile.business_group or "",
+        "personal_target": str(profile.personal_target),
+        "personal_currency": profile.personal_currency or "",
+        "hire_date": profile.hire_date.isoformat() if profile.hire_date else "",
+        "territory_id": profile.territory_id,
+        "territory_name": territory.name if territory else "",
+        "territory_code": territory.code if territory else "",
+        "manager_name": _profile_display_name(manager) if manager else "",
+        "manager_employee_id": manager.employee_id if manager else "",
+        "hierarchy": profile.hierarchy or "",
+        "function_name": profile.function_name or "",
+        "title_category": profile.title_category or "",
+        "level": profile.level or "",
+        "market": profile.market or "",
+        "region": profile.market or "",
+        "enable_login": profile.enable_login,
+        "crm_user_id": profile.crm_user_id or "",
+    }
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def employee_user_detail(request, pk):
+    """Return full imported employee profile for Create Order auto-fill."""
+    org = getattr(request, "organization", None)
+    profile = filter_queryset_by_organization(
+        UserProfile.objects.select_related("territory"),
+        org,
+    ).filter(pk=pk).first()
+    if not profile:
+        return Response(
+            {"error": "Employee profile not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    return Response(serialize_user_profile_detail(profile, organization=org))
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def employee_directory(request):
@@ -1240,18 +1311,10 @@ def employee_directory(request):
     results = []
     for profile in profile_list:
         manager = manager_by_child.get(profile.id)
-        results.append(
-            {
-                "id": profile.id,
-                "employee_id": profile.employee_id,
-                "display_name": _profile_display_name(profile),
-                "position_name": profile.position_name or "",
-                "business_group": profile.business_group or "",
-                "manager_name": _profile_display_name(manager) if manager else "",
-                "territory_id": profile.territory_id,
-                "territory_name": profile.territory.name if profile.territory else "",
-            }
-        )
+        detail = serialize_user_profile_detail(profile, organization=org)
+        detail["manager_name"] = _profile_display_name(manager) if manager else ""
+        detail["manager_employee_id"] = manager.employee_id if manager else ""
+        results.append(detail)
 
     return Response(results)
 

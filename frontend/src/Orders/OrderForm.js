@@ -23,17 +23,28 @@ const INITIAL_FORM = {
   currency: "USD",
 };
 
-const INITIAL_EMPLOYEE_META = {
-  display_name: "",
-  position_name: "",
-  business_group: "",
-  manager_name: "",
-  territory_name: "",
-};
+const PROFILE_DISPLAY_FIELDS = [
+  { key: "display_name", label: "Employee name" },
+  { key: "email", label: "Email" },
+  { key: "role", label: "Role" },
+  { key: "title", label: "Title" },
+  { key: "position_title", label: "Position title" },
+  { key: "manager_name", label: "Manager" },
+  { key: "manager_employee_id", label: "Manager employee ID" },
+  { key: "function_name", label: "Function" },
+  { key: "level", label: "Level" },
+  { key: "market", label: "Market" },
+  { key: "hierarchy", label: "Hierarchy" },
+  { key: "hire_date", label: "Hire date" },
+  { key: "personal_target", label: "Personal target" },
+  { key: "pay_period_type", label: "Pay period" },
+];
 
 function OrderForm({ onOrderCreated }) {
   const [form, setForm] = useState(INITIAL_FORM);
-  const [employeeMeta, setEmployeeMeta] = useState(INITIAL_EMPLOYEE_META);
+  const [profileDetail, setProfileDetail] = useState(null);
+  const [profileLocked, setProfileLocked] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(false);
   const [saving, setSaving] = useState(false);
   const { success, error } = useToast();
 
@@ -41,17 +52,22 @@ function OrderForm({ onOrderCreated }) {
     setForm({ ...form, [event.target.name]: event.target.value });
   };
 
-  const handleBusinessGroupChange = (event) => {
-    const businessGroup = event.target.value;
-    const groupCurrency = currencyForBusinessGroup(businessGroup, "");
-    setForm({
-      ...form,
-      business_group: businessGroup,
-      currency: groupCurrency || form.currency,
-    });
+  const applyProfileToForm = (profile) => {
+    const groupCurrency = currencyForBusinessGroup(profile.business_group || "", "");
+    setForm((prev) => ({
+      ...prev,
+      employee_id: profile.employee_id || "",
+      position_name: profile.position_name || "",
+      business_group: profile.business_group || "",
+      territory: profile.territory_id ? String(profile.territory_id) : "",
+      region: profile.region || profile.market || "",
+      currency: profile.personal_currency || groupCurrency || prev.currency,
+    }));
+    setProfileDetail(profile);
+    setProfileLocked(true);
   };
 
-  const handleEmployeeSelect = (employee) => {
+  const handleEmployeeSelect = async (employee) => {
     if (!employee) {
       setForm((prev) => ({
         ...prev,
@@ -59,32 +75,57 @@ function OrderForm({ onOrderCreated }) {
         position_name: "",
         business_group: "",
         territory: "",
+        region: "",
       }));
-      setEmployeeMeta(INITIAL_EMPLOYEE_META);
+      setProfileDetail(null);
+      setProfileLocked(false);
       return;
     }
 
-    const groupCurrency = currencyForBusinessGroup(employee.business_group || "", "");
-    setForm((prev) => ({
-      ...prev,
-      employee_id: employee.employee_id || "",
-      position_name: employee.position_name || "",
-      business_group: employee.business_group || prev.business_group || "",
-      territory: employee.territory_id || "",
-      currency: groupCurrency || prev.currency,
-    }));
-    setEmployeeMeta({
-      display_name: employee.display_name || "",
-      position_name: employee.position_name || "",
-      business_group: employee.business_group || "",
-      manager_name: employee.manager_name || "",
-      territory_name: employee.territory_name || "",
-    });
+    if (!employee.id) {
+      setForm((prev) => ({
+        ...prev,
+        employee_id: employee.employee_id || "",
+        position_name: "",
+        business_group: "",
+        territory: "",
+        region: "",
+      }));
+      setProfileDetail(null);
+      setProfileLocked(false);
+      return;
+    }
+
+    setLoadingProfile(true);
+    try {
+      const res = await api.get(`users/${employee.id}/`);
+      applyProfileToForm(res.data);
+    } catch (err) {
+      setProfileDetail(null);
+      setProfileLocked(false);
+      const groupCurrency = currencyForBusinessGroup(employee.business_group || "", "");
+      setForm((prev) => ({
+        ...prev,
+        employee_id: employee.employee_id || "",
+        position_name: employee.position_name || "",
+        business_group: employee.business_group || prev.business_group || "",
+        territory: employee.territory_id ? String(employee.territory_id) : "",
+        region: employee.market || employee.region || "",
+        currency: groupCurrency || prev.currency,
+      }));
+      error(
+        err.response?.data?.error ||
+          "Could not load full employee profile. Basic fields were filled from search."
+      );
+    } finally {
+      setLoadingProfile(false);
+    }
   };
 
   const resetForm = () => {
     setForm(INITIAL_FORM);
-    setEmployeeMeta(INITIAL_EMPLOYEE_META);
+    setProfileDetail(null);
+    setProfileLocked(false);
   };
 
   const saveOrder = async () => {
@@ -114,13 +155,9 @@ function OrderForm({ onOrderCreated }) {
     }
   };
 
-  const showEmployeeMeta = Boolean(
-    form.employee_id &&
-      (employeeMeta.display_name ||
-        employeeMeta.position_name ||
-        employeeMeta.manager_name ||
-        employeeMeta.territory_name)
-  );
+  const importedInputProps = profileLocked
+    ? { readOnly: true, className: "form-field__input form-field__input--readonly" }
+    : {};
 
   return (
     <div className="orders-panel">
@@ -128,7 +165,7 @@ function OrderForm({ onOrderCreated }) {
         <div>
           <h2 className="orders-panel__title">Create order</h2>
           <p className="orders-panel__desc">
-            Select an employee from User Setup to auto-fill position, business group, manager, and territory.
+            Select an employee to auto-fill imported profile fields. Order details remain editable.
           </p>
         </div>
       </div>
@@ -157,46 +194,97 @@ function OrderForm({ onOrderCreated }) {
         </div>
 
         <div className="form-field">
-          <label htmlFor="employee_id">Employee ID *</label>
+          <label htmlFor="employee_id">Employee *</label>
           <EmployeeSearchSelect
             value={form.employee_id}
             onSelect={handleEmployeeSelect}
-            disabled={saving}
+            disabled={saving || loadingProfile}
             placeholder="Search EMP001 or rep name…"
+          />
+          {loadingProfile && (
+            <p className="orders-form-hint">Loading employee profile…</p>
+          )}
+        </div>
+
+        <div className="form-field">
+          <label htmlFor="position_name">Position</label>
+          <input
+            id="position_name"
+            name="position_name"
+            value={form.position_name}
+            onChange={handleChange}
+            placeholder="Account Executive"
+            {...importedInputProps}
           />
         </div>
 
-        {showEmployeeMeta && (
-          <div className="orders-employee-meta">
-            {employeeMeta.display_name && (
-              <div className="orders-employee-meta__item">
-                <span className="orders-employee-meta__label">Rep</span>
-                <span className="orders-employee-meta__value">{employeeMeta.display_name}</span>
-              </div>
-            )}
-            <div className="orders-employee-meta__item">
-              <span className="orders-employee-meta__label">Position</span>
-              <span className="orders-employee-meta__value">
-                {employeeMeta.position_name || "—"}
-              </span>
-            </div>
-            <div className="orders-employee-meta__item">
-              <span className="orders-employee-meta__label">Manager</span>
-              <span className="orders-employee-meta__value">
-                {employeeMeta.manager_name || "—"}
-              </span>
-            </div>
-            <div className="orders-employee-meta__item">
-              <span className="orders-employee-meta__label">Business group</span>
-              <span className="orders-employee-meta__value">
-                {employeeMeta.business_group || "—"}
-              </span>
-            </div>
-            <div className="orders-employee-meta__item">
-              <span className="orders-employee-meta__label">Territory</span>
-              <span className="orders-employee-meta__value">
-                {employeeMeta.territory_name || "—"}
-              </span>
+        <div className="form-field">
+          <label htmlFor="business_group">Business group</label>
+          <input
+            id="business_group"
+            name="business_group"
+            value={form.business_group}
+            onChange={handleChange}
+            placeholder="USA"
+            {...importedInputProps}
+          />
+        </div>
+
+        <div className="form-field">
+          <label htmlFor="region">Region</label>
+          <input
+            id="region"
+            name="region"
+            value={form.region}
+            onChange={handleChange}
+            placeholder="West"
+            {...importedInputProps}
+          />
+        </div>
+
+        <div className="form-field">
+          <label htmlFor="currency">Currency</label>
+          <select
+            id="currency"
+            name="currency"
+            value={form.currency}
+            onChange={handleChange}
+            disabled={profileLocked}
+            className={profileLocked ? "form-field__input--readonly" : undefined}
+          >
+            {CURRENCY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {profileDetail && (
+          <div className="orders-employee-meta orders-employee-meta--profile">
+            <p className="orders-employee-meta__title">Imported employee profile</p>
+            <div className="orders-employee-meta__grid">
+              {PROFILE_DISPLAY_FIELDS.map(({ key, label }) => {
+                const value = profileDetail[key];
+                if (!value) return null;
+                return (
+                  <div key={key} className="orders-employee-meta__item">
+                    <span className="orders-employee-meta__label">{label}</span>
+                    <span className="orders-employee-meta__value">{value}</span>
+                  </div>
+                );
+              })}
+              {profileDetail.territory_name && (
+                <div className="orders-employee-meta__item">
+                  <span className="orders-employee-meta__label">Territory</span>
+                  <span className="orders-employee-meta__value">
+                    {profileDetail.territory_name}
+                    {profileDetail.territory_code
+                      ? ` (${profileDetail.territory_code})`
+                      : ""}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -235,17 +323,6 @@ function OrderForm({ onOrderCreated }) {
         </div>
 
         <div className="form-field">
-          <label htmlFor="region">Region</label>
-          <input
-            id="region"
-            name="region"
-            value={form.region}
-            onChange={handleChange}
-            placeholder="West"
-          />
-        </div>
-
-        <div className="form-field">
           <label htmlFor="customer_segment">Customer segment</label>
           <input
             id="customer_segment"
@@ -253,17 +330,6 @@ function OrderForm({ onOrderCreated }) {
             value={form.customer_segment}
             onChange={handleChange}
             placeholder="Enterprise"
-          />
-        </div>
-
-        <div className="form-field">
-          <label htmlFor="business_group">Business group</label>
-          <input
-            id="business_group"
-            name="business_group"
-            value={form.business_group}
-            onChange={handleBusinessGroupChange}
-            placeholder="USA"
           />
         </div>
 
@@ -295,28 +361,12 @@ function OrderForm({ onOrderCreated }) {
           </select>
         </div>
 
-        <div className="form-field">
-          <label htmlFor="currency">Currency</label>
-          <select
-            id="currency"
-            name="currency"
-            value={form.currency}
-            onChange={handleChange}
-          >
-            {CURRENCY_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
         <div className="orders-form-actions">
           <button
             type="button"
             className="btn-primary"
             onClick={saveOrder}
-            disabled={saving}
+            disabled={saving || loadingProfile}
           >
             {saving ? "Saving…" : "Save order"}
           </button>
@@ -324,7 +374,7 @@ function OrderForm({ onOrderCreated }) {
             type="button"
             className="btn-secondary"
             onClick={resetForm}
-            disabled={saving}
+            disabled={saving || loadingProfile}
           >
             Clear form
           </button>

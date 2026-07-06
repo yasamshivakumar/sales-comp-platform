@@ -1071,6 +1071,80 @@ class UserSetupDuplicateTests(TestCase):
         self.assertEqual(res.json()["failed"], 1)
         self.assertIn("Employee ID", res.json()["errors"][0]["error"])
 
+    def test_csv_upload_sends_activation_email_for_new_login_users(self):
+        from django.core import mail
+
+        mail.outbox = []
+        csv = (
+            "enable_login,email,role,employee_id,name\n"
+            "true,csvinvite@test.com,Sales Rep,EMP301,CSV Invite\n"
+        )
+        res = self._upload_csv(csv)
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(body["success"], 1)
+        self.assertEqual(body["users_created"], 1)
+        self.assertEqual(body["activation_emails_sent"], 1)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("csvinvite@test.com", mail.outbox[0].to)
+
+    def test_csv_upload_skips_activation_email_for_existing_users(self):
+        from django.core import mail
+
+        mail.outbox = []
+        csv = (
+            "enable_login,email,role,employee_id,name\n"
+            "true,existing@test.com,Sales Rep,EMP100,Updated Name\n"
+        )
+        res = self._upload_csv(csv)
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(body["success"], 1)
+        self.assertEqual(body["users_updated"], 1)
+        self.assertEqual(body["activation_emails_sent"], 0)
+        self.assertEqual(len(mail.outbox), 0)
+
+
+class EmployeeProfileDetailTests(TestCase):
+    def setUp(self):
+        self.org = get_default_organization()
+        self.admin = User.objects.create_user(
+            username="profile-admin@test.com",
+            email="profile-admin@test.com",
+            password="AdminPass123!",
+        )
+        UserProfile.objects.create(
+            organization=self.org,
+            email="profile-admin@test.com",
+            name="Admin",
+            role="Admin",
+            employee_id="ADM900",
+        )
+        self.profile = UserProfile.objects.create(
+            organization=self.org,
+            email="orderrep@test.com",
+            name="Order Rep",
+            role="Sales Rep",
+            employee_id="EMP400",
+            business_group="USA",
+            position_name="AE",
+            market="West",
+            personal_currency="USD",
+        )
+        self.client = Client()
+        token = Token.objects.create(user=self.admin)
+        self.auth = {"HTTP_AUTHORIZATION": f"Token {token.key}"}
+
+    def test_user_profile_detail_returns_imported_fields(self):
+        res = self.client.get(f"/api/users/{self.profile.id}/", **self.auth)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["employee_id"], "EMP400")
+        self.assertEqual(data["business_group"], "USA")
+        self.assertEqual(data["position_name"], "AE")
+        self.assertEqual(data["region"], "West")
+        self.assertEqual(data["email"], "orderrep@test.com")
+
 
 class EmployeeStatementTests(TestCase):
     def setUp(self):

@@ -67,10 +67,14 @@ def process_users_rows(
     Returns {success, failed, errors, total_rows}.
 
     strict_csv: require employee_id + role (CSV upload contract).
-    login_via_invite: CRM sends invite emails; CSV uses direct onboarding password.
+    login_via_invite: send activation invite emails for newly created login users.
     """
     success = 0
     failed = 0
+    users_created = 0
+    users_updated = 0
+    activation_emails_sent = 0
+    email_failures = 0
     errors = []
     records = []
     email_to_profile = {}
@@ -211,15 +215,40 @@ def process_users_rows(
             if profile.employee_id:
                 employee_id_to_profile[profile.employee_id] = profile
 
+            invite_status = ""
+            invite_error = ""
             if enable_login:
                 if login_via_invite:
-                    from ..invites import create_user_invite
+                    if created:
+                        from ..invites import create_user_invite
 
-                    create_user_invite(profile)
+                        _, _token, sent, invite_error = create_user_invite(profile)
+                        if sent:
+                            activation_emails_sent += 1
+                            invite_status = "sent"
+                        else:
+                            email_failures += 1
+                            invite_status = "email_failed"
+                            logger.warning(
+                                "Activation email failed for %s: %s",
+                                email,
+                                invite_error,
+                            )
+                    else:
+                        from ..auth_utils import provision_login_user
+
+                        provision_login_user(profile)
+                        invite_status = "skipped_existing"
                 else:
                     from ..auth_utils import provision_login_user
 
                     provision_login_user(profile)
+                    invite_status = "provisioned"
+
+            if created:
+                users_created += 1
+            else:
+                users_updated += 1
 
             parent_value = str(row.get("parent_participant", "")).strip()
             child_value = str(row.get("child_participant", "")).strip()
@@ -251,14 +280,19 @@ def process_users_rows(
                     )
 
             success += 1
-            records.append({
+            record = {
                 "row": index,
                 "email": email,
                 "name": name_val,
                 "employee_id": profile.employee_id,
                 "crm_user_id": crm_user_id_val,
                 "status": "created" if created else "updated",
-            })
+            }
+            if invite_status:
+                record["invite_status"] = invite_status
+            if invite_error:
+                record["invite_error"] = invite_error
+            records.append(record)
         except Exception as exc:
             failed += 1
             errors.append({"row": index, "email": row.get("email", ""), "error": str(exc)})
@@ -276,6 +310,11 @@ def process_users_rows(
     return {
         "success": success,
         "failed": failed,
+        "users_created": users_created,
+        "users_updated": users_updated,
+        "existing_users_skipped": users_updated,
+        "activation_emails_sent": activation_emails_sent,
+        "email_failures": email_failures,
         "errors": errors[:20],
         "records": records,
         "total_rows": len(rows),

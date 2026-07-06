@@ -55,7 +55,7 @@ def process_users_csv(organization, decoded_csv):
         organization,
         rows,
         allow_updates=True,
-        login_via_invite=False,
+        login_via_invite=True,
         strict_csv=True,
     )
 

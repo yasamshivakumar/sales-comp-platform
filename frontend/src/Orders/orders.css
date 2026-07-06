@@ -308,6 +308,54 @@
   word-break: break-word;
 }
 
+.orders-employee-meta--profile {
+  grid-column: 1 / -1;
+}
+
+.orders-employee-meta__title {
+  grid-column: 1 / -1;
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--x-text-muted);
+}
+
+.orders-employee-meta__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 960px) {
+  .orders-employee-meta__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .orders-employee-meta__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-field__input--readonly,
+.orders-form-grid input[readonly],
+.orders-form-grid select:disabled {
+  background: #f4f6f9;
+  color: var(--x-text-secondary);
+  border-color: var(--x-border);
+  cursor: not-allowed;
+}
+
+.orders-form-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--x-text-muted);
+}
+
 .orders-page .btn-primary {
   background: var(--x-primary);
   border-radius: 4px;
