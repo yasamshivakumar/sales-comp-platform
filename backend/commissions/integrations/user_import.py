@@ -33,6 +33,29 @@ def _org_profile_filter(organization):
     return Q()
 
 
+def _resolve_territory_id(organization, raw_value):
+    """Resolve territory from CSV value: numeric id, code, or name."""
+    if raw_value in ("", None):
+        return None
+    text = str(raw_value).strip()
+    if not text:
+        return None
+    qs = Territory.objects.filter(organization=organization)
+    if text.isdigit():
+        territory = qs.filter(pk=int(text)).first()
+        if territory:
+            return territory.pk
+    territory = qs.filter(code__iexact=text).first()
+    if territory:
+        return territory.pk
+    territory = qs.filter(name__iexact=text).first()
+    if territory:
+        return territory.pk
+    raise ValueError(
+        f"Territory not found for this organization: {text}"
+    )
+
+
 def _find_existing_profile(organization, email, crm_user_id="", crm_alt_user_id=""):
     """Find an existing profile by email or CRM ids within the org scope."""
     org_filter = _org_profile_filter(organization)
@@ -142,7 +165,8 @@ def process_users_rows(
                 crm_alt_user_id_val,
             )
 
-            territory_id = row.get("territory") or row.get("territory_id")
+            territory_raw = row.get("territory") or row.get("territory_id")
+            territory_id = _resolve_territory_id(organization, territory_raw)
             defaults = {
                 "organization": organization,
                 "enable_login": enable_login,
@@ -165,13 +189,6 @@ def process_users_rows(
                 "position_title": str(row.get("position_title", "")).strip(),
             }
             if territory_id:
-                if not Territory.objects.filter(
-                    pk=territory_id,
-                    organization=organization,
-                ).exists():
-                    raise ValueError(
-                        "Territory does not belong to this organization."
-                    )
                 defaults["territory_id"] = territory_id
 
             if enable_login and UserProfile.objects.filter(

@@ -26,7 +26,8 @@ function BulkUploadSection({ file, setFile, uploadUsers }) {
         <div>
           <h3 className="orders-section__title">Bulk import</h3>
           <p className="orders-section__desc">
-            CSV required columns: email, role, employee_id, name. All other columns optional.
+            CSV required columns: email, role, employee_id, name. Optional columns include
+            territory (code or id), business_group, hire_date, and more — see the template.
           </p>
         </div>
       </div>

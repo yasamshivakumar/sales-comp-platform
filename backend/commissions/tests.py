@@ -23,6 +23,7 @@ from .models import (
     Sale,
     UserInvite,
     AuditLog,
+    Territory,
 )
 from .services import (
     resolve_compensation_plan,
@@ -1103,6 +1104,23 @@ class UserSetupDuplicateTests(TestCase):
         self.assertEqual(body["users_updated"], 1)
         self.assertEqual(body["activation_emails_sent"], 0)
         self.assertEqual(len(mail.outbox), 0)
+
+    def test_csv_upload_assigns_territory_by_code(self):
+        Territory.objects.create(
+            organization=self.org,
+            name="West Region",
+            code="WEST",
+        )
+        csv = (
+            "email,role,employee_id,name,territory\n"
+            "territoryrep@test.com,Sales Rep,EMP302,Territory Rep,WEST\n"
+        )
+        res = self._upload_csv(csv)
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(body["success"], 1)
+        profile = UserProfile.objects.get(email="territoryrep@test.com")
+        self.assertEqual(profile.territory.code, "WEST")
 
 
 class EmployeeProfileDetailTests(TestCase):

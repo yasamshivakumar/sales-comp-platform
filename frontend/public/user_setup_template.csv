@@ -1,1 +1,1 @@
-enable_login,name,email,role,username,first_name,last_name,prefix,employee_id,hire_date,personal_target,personal_currency,business_group,title,pay_period_type,position_name,position_title,parent_participant,child_participant,split_percentage
+enable_login,name,email,role,username,first_name,last_name,prefix,employee_id,hire_date,personal_target,personal_currency,business_group,territory,title,pay_period_type,position_name,position_title,parent_participant,child_participant,split_percentage
