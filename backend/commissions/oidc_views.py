@@ -5,13 +5,13 @@ from django.conf import settings
 from django.core.cache import cache
 from django.http import HttpResponseRedirect
 from mozilla_django_oidc.views import OIDCAuthenticationCallbackView
-from rest_framework.authtoken.models import Token
+from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
-from rest_framework import status
 
+from .authentication import issue_user_token
 from .models import UserProfile
 from .tenants import get_default_organization
 
@@ -48,7 +48,7 @@ class TokenOIDCCallbackView(OIDCAuthenticationCallbackView):
                 enable_login=True,
             )
 
-        token, _ = Token.objects.get_or_create(user=user)
+        token = issue_user_token(user)
         code = secrets.token_urlsafe(32)
         cache.set(f"{OIDC_EXCHANGE_PREFIX}{code}", token.key, timeout=OIDC_EXCHANGE_TTL_SECONDS)
         frontend = settings.FRONTEND_URL.rstrip("/")

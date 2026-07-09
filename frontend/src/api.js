@@ -48,6 +48,7 @@ export function clearAuthStorage() {
     sessionStorage.removeItem(key);
     localStorage.removeItem(key);
   });
+  window.dispatchEvent(new CustomEvent("auth-changed"));
 }
 
 function clearLegacyLocalAuthStorage() {
@@ -96,6 +97,7 @@ export function saveAuthSession(data) {
     sessionStorage.removeItem(SESSION_EXPIRES_AT_KEY);
   }
   scheduleAutoLogout();
+  window.dispatchEvent(new CustomEvent("auth-changed"));
 }
 
 export function getAuthToken() {
@@ -130,9 +132,18 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    if (error.response?.status === 401) {
+    const requestUrl = error.config?.url || "";
+    const isAuthRequest = /auth\/(email-login|oidc-exchange)\/?$/.test(requestUrl);
+
+    if (error.response?.status === 401 && !isAuthRequest) {
       clearAuthStorage();
       window.dispatchEvent(new CustomEvent("unauthorized"));
+      if (
+        window.location.pathname !== "/login" &&
+        !window.location.pathname.startsWith("/invite")
+      ) {
+        window.location.href = "/login";
+      }
     }
 
     if (isDevelopment && isDebugEnabled) {

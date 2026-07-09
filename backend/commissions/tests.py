@@ -1123,6 +1123,50 @@ class UserSetupDuplicateTests(TestCase):
         self.assertEqual(profile.territory.code, "WEST")
 
 
+class LoginTokenRefreshTests(TestCase):
+    def setUp(self):
+        self.org = get_default_organization()
+        self.user = User.objects.create_user(
+            username="loginrefresh@test.com",
+            email="loginrefresh@test.com",
+            password="testpass",
+        )
+        UserProfile.objects.create(
+            organization=self.org,
+            email="loginrefresh@test.com",
+            name="Login Refresh",
+            role="Admin",
+            employee_id="ADM777",
+        )
+        self.client = Client()
+
+    def test_email_login_issues_fresh_token_when_previous_token_expired(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        stale_token = Token.objects.create(user=self.user)
+        Token.objects.filter(pk=stale_token.pk).update(
+            created=timezone.now() - timedelta(hours=2)
+        )
+
+        login = self.client.post(
+            "/api/auth/email-login/",
+            {"email": "loginrefresh@test.com", "password": "testpass"},
+            content_type="application/json",
+        )
+        self.assertEqual(login.status_code, 200)
+        new_token = login.json()["token"]
+        self.assertNotEqual(new_token, stale_token.key)
+
+        profile = self.client.get(
+            "/api/user-profile/",
+            HTTP_AUTHORIZATION=f"Token {new_token}",
+        )
+        self.assertEqual(profile.status_code, 200)
+        self.assertEqual(profile.json()["email"], "loginrefresh@test.com")
+
+
 class EmployeeProfileDetailTests(TestCase):
     def setUp(self):
         self.org = get_default_organization()

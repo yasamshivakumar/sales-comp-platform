@@ -22,6 +22,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .audit import record_audit
+from .authentication import issue_user_token, token_expires_at_iso
 from .emails import notify_admins, notify_user
 from .imports import process_orders_csv, process_users_csv, should_use_async_import
 from .invites import accept_invite, get_valid_invite, invite_context
@@ -369,7 +370,7 @@ def login(request):
         )
 
     # Get or create token
-    token, _ = Token.objects.get_or_create(user=user)
+    token = issue_user_token(user)
     record_audit(request, "login_success", {"user_id": user.pk})
 
     # Return success response
@@ -1051,7 +1052,7 @@ def email_login(request):
     
     try:
         # Get or create token
-        token, _ = Token.objects.get_or_create(user=user)
+        token = issue_user_token(user)
         
         # Get user profile for additional info
         user_profile = UserProfile.objects.filter(email=user.email).first()
@@ -1066,6 +1067,7 @@ def email_login(request):
             'user_id': user.id,
             'role': user_profile.role if user_profile else 'Sales Rep',
             'name': user_profile.name if user_profile else user.get_full_name() or user.username,
+            'token_expires_at': token_expires_at_iso(token),
         })
         
     except Exception as e:
@@ -1125,17 +1127,15 @@ def change_password(request):
         user.set_password(new_password)
         user.save()
         
-        # Invalidate all tokens to force re-login on other devices
-        Token.objects.filter(user=user).delete()
-        
         # Create new token for current session
-        token, _ = Token.objects.get_or_create(user=user)
+        token = issue_user_token(user)
         
         logger.info("Password changed successfully for user: %s", user.email)
         
         return Response({
             'message': 'Password changed successfully',
-            'token': token.key
+            'token': token.key,
+            'token_expires_at': token_expires_at_iso(token),
         })
         
     except Exception as e:

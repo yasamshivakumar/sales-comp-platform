@@ -14,13 +14,17 @@ import SecurityIcon from "@mui/icons-material/Security";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
-import api, { getApiErrorMessage, saveAuthSession } from "./api";
+import api, { getApiErrorMessage, getAuthToken, isSessionExpired, saveAuthSession } from "./api";
 import { useToast } from "./Components/Toast";
 import AuthTextField from "./Components/AuthTextField";
 import AuthPageLayout, { authFormCardSx } from "./Components/AuthPageLayout";
 
 const apiHost = process.env.REACT_APP_API_HOST || "http://localhost:8000";
 const oidcEnabled = process.env.REACT_APP_OIDC_ENABLED === "true";
+
+function hasValidSession() {
+  return Boolean(getAuthToken()) && !isSessionExpired();
+}
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -29,6 +33,12 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { success, error } = useToast();
+
+  useEffect(() => {
+    if (hasValidSession()) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [navigate]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -57,7 +67,7 @@ function Login() {
           message: "Redirecting to your workspace…",
         });
         window.history.replaceState({}, "", "/login");
-        setTimeout(() => navigate("/dashboard"), 800);
+        navigate("/dashboard", { replace: true });
       } catch (err) {
         if (cancelled) return;
         error({
@@ -98,9 +108,9 @@ function Login() {
       saveAuthSession(res.data);
       success({
         title: "Welcome back",
-        message: `Signed in as ${res.data.name || res.data.email}. Opening dashboard…`,
+        message: `Signed in as ${res.data.name || res.data.email}.`,
       });
-      setTimeout(() => navigate("/dashboard"), 1000);
+      navigate("/dashboard", { replace: true });
     } catch (err) {
       error({
         title: "Sign in failed",
