@@ -1,4 +1,5 @@
-from django.db import models, transaction
+from django.db import models
+from django.utils import timezone
 from decimal import Decimal
 import logging
 
@@ -15,7 +16,6 @@ from .models import (
     UserProfile,
     HierarchyRelationship,
 )
-from .workflow import order_has_locked_commissions
 
 logger = logging.getLogger(__name__)
 
@@ -284,6 +284,9 @@ def _aggregate_has_locked_commissions(order):
     return _aggregate_commission_queryset_for_order(order).filter(
         status__in=Commission.LOCKED_STATUSES
     ).exists()
+
+
+from .workflow import order_has_locked_commissions
 
 
 def _order_has_approved_commissions(order):
@@ -622,7 +625,6 @@ def clear_commissions_for_order(order, force=False):
     return deleted_order_sales + deleted_summary_sales
 
 
-@transaction.atomic
 def calculate_commission_for_order(order, replace_existing=True, force=False):
     """
     Calculate one monthly aggregate commission for this order's employee/month.

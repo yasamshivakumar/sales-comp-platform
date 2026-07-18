@@ -49,6 +49,15 @@ function BookDemoForm() {
           rows={4}
         />
       </label>
+      <label className="marketing-demo-form__honeypot" aria-hidden="true">
+        <span>Website</span>
+        <input
+          tabIndex={-1}
+          autoComplete="off"
+          value={demoForm.website}
+          onChange={updateDemoForm("website")}
+        />
+      </label>
       <button
         type="submit"
         className="marketing-btn marketing-btn--primary marketing-demo-form__submit"

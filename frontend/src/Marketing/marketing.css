@@ -1427,6 +1427,15 @@
   grid-column: 1 / -1;
 }
 
+.marketing-demo-form__honeypot {
+  position: absolute;
+  left: -10000px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
 .marketing-demo-form__status {
   padding: 12px;
   border-radius: var(--mkt-radius);

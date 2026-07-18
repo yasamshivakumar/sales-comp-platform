@@ -17,17 +17,6 @@ def api_root(request):
                 "health": "/api/health/",
                 "readiness": "/api/health/ready/",
                 "login": "/api/auth/email-login/",
-                "signup": "/api/auth/signup/",
-                "statements": "/api/statements/me/",
-                "leaderboard": "/api/leaderboard/",
-                "audit_logs": "/api/audit-logs/",
-                "territories": "/api/territories/",
-                "payout_runs": "/api/payout-runs/",
-                "disputes": "/api/disputes/",
-                "integrations": "/api/integrations/",
-                "integration_webhook": "/api/integrations/webhook/{secret}/users/",
-                "api": "/api/",
-                "admin": "/admin/",
             },
         }
     )

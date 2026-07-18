@@ -8,6 +8,7 @@ export function useBookDemo() {
     company: "",
     phone: "",
     message: "",
+    website: "",
   });
   const [demoStatus, setDemoStatus] = useState({ type: "", message: "" });
   const [demoSubmitting, setDemoSubmitting] = useState(false);
@@ -26,7 +27,7 @@ export function useBookDemo() {
         type: "success",
         message: "Request received. Our team will contact you within one business day.",
       });
-      setDemoForm({ name: "", email: "", company: "", phone: "", message: "" });
+      setDemoForm({ name: "", email: "", company: "", phone: "", message: "", website: "" });
     } catch (err) {
       const fallbackEmail = err.response?.data?.contact_email || "shivakumar@incentra.co.in";
       const fallbackPhone = err.response?.data?.contact_phone || "8499087617";

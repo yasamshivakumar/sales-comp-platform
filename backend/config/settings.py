@@ -195,8 +195,13 @@ REST_FRAMEWORK = {
         "oidc_exchange": os.getenv("THROTTLE_OIDC_EXCHANGE", "10/min"),
         "upload": os.getenv("THROTTLE_UPLOAD", "6/min"),
         "ai": os.getenv("THROTTLE_AI", "20/hour"),
+        "demo": os.getenv("THROTTLE_DEMO", "5/min"),
+        "webhook": os.getenv("THROTTLE_WEBHOOK", "60/min"),
     },
 }
+
+# Reject integration webhook URLs whose secret is shorter than this (defense in depth).
+WEBHOOK_SECRET_MIN_LENGTH = int(os.getenv("WEBHOOK_SECRET_MIN_LENGTH", "24"))
 
 TOKEN_TTL_MINUTES = int(os.getenv("TOKEN_TTL_MINUTES", "60"))
 

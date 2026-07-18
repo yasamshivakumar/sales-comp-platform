@@ -27,7 +27,8 @@ logger = logging.getLogger("commissions")
 def ensure_webhook_secret(integration):
     if integration.webhook_secret:
         return integration.webhook_secret
-    integration.webhook_secret = secrets.token_urlsafe(24)
+    # ~32+ chars URL-safe secret (meets WEBHOOK_SECRET_MIN_LENGTH default of 24)
+    integration.webhook_secret = secrets.token_urlsafe(32)
     integration.save(update_fields=["webhook_secret"])
     return integration.webhook_secret
 

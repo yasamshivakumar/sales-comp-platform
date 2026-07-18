@@ -576,6 +576,43 @@ class PilotOperationsTests(TestCase):
         self.assertEqual(ready.status_code, 200)
         self.assertTrue(ready.json()["database"])
 
+    def test_api_root_does_not_list_internal_endpoints(self):
+        client = Client()
+        response = client.get("/")
+        self.assertEqual(response.status_code, 200)
+        endpoints = response.json()["endpoints"]
+        self.assertIn("health", endpoints)
+        self.assertIn("login", endpoints)
+        self.assertNotIn("signup", endpoints)
+        self.assertNotIn("integrations", endpoints)
+        self.assertNotIn("admin", endpoints)
+
+    def test_book_demo_honeypot_does_not_send_email(self):
+        from django.core import mail
+
+        mail.outbox = []
+        client = Client()
+        response = client.post(
+            "/api/marketing/book-demo/",
+            {
+                "name": "Bot",
+                "email": "bot@spam.test",
+                "website": "https://spam.example",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_webhook_rejects_short_secret(self):
+        client = Client()
+        response = client.post(
+            "/api/integrations/webhook/short/users/",
+            {"users": []},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 404)
+
     def test_audit_log_requires_finance_or_admin(self):
         org = get_default_organization()
         admin_user = User.objects.create_user(

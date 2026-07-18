@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Login from "./Login";
@@ -16,28 +15,11 @@ import MyStatement from "./Dashboard/MyStatement";
 import AuditLogs from "./Enterprise/AuditLogs";
 import Territories from "./Enterprise/Territories";
 import Payouts from "./Enterprise/Payouts";
-import { getAuthToken, isSessionExpired } from "./api";
-
-function hasValidSession() {
-  return Boolean(getAuthToken()) && !isSessionExpired();
-}
+import { getAuthToken } from "./api";
 
 function PrivateRoute({ children }) {
-  const [authed, setAuthed] = useState(hasValidSession);
-
-  useEffect(() => {
-    const syncAuth = () => setAuthed(hasValidSession());
-    window.addEventListener("auth-changed", syncAuth);
-    window.addEventListener("unauthorized", syncAuth);
-    window.addEventListener("session-expired", syncAuth);
-    return () => {
-      window.removeEventListener("auth-changed", syncAuth);
-      window.removeEventListener("unauthorized", syncAuth);
-      window.removeEventListener("session-expired", syncAuth);
-    };
-  }, []);
-
-  return authed ? children : <Navigate to="/login" replace />;
+  const token = getAuthToken();
+  return token ? children : <Navigate to="/login" />;
 }
 
 function Layout({ children }) {

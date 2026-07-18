@@ -1,72 +1,73 @@
+from datetime import datetime
+from rest_framework import status
 import csv
 import io
 import logging
-
-from django.conf import settings
-from django.contrib.auth import authenticate
-from django.contrib.auth.models import User
-from django.core.exceptions import ValidationError
-from django.core.files.base import ContentFile
-from django.core.validators import validate_email
-from django.db.models import Prefetch
-from django.http import HttpResponse
-from django.utils.dateparse import parse_date
-from rest_framework import generics, status, viewsets
-from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
-from rest_framework.exceptions import PermissionDenied
-from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
-from rest_framework.views import APIView
-
-from .audit import record_audit
-from .authentication import issue_user_token, token_expires_at_iso
-from .emails import notify_admins, notify_user
-from .imports import process_orders_csv, process_users_csv, should_use_async_import
-from .invites import accept_invite, get_valid_invite, invite_context
+from rest_framework.response import Response
+from rest_framework import viewsets
 from .models import (
-    AuditLog,
+    Employee,
+    Sale,
     Commission,
+    UserProfile,
+    HierarchyRelationship,
     CompensationPlan,
     CompensationTier,
-    Employee,
-    HierarchyRelationship,
-    ImportJob,
     Order,
-    Sale,
-    SCFlatRateTable,
     SCRateTable,
-    UserProfile,
+    SCFlatRateTable,
 )
-from .permissions import (
-    get_request_user_profile,
-    require_admin,
-    require_finance_or_admin,
-    user_can_view_finance_data,
-    user_is_admin,
-    user_is_finance,
-    user_is_manager,
-)
+from decimal import Decimal, InvalidOperation
 from .serializers import (
+    EmployeeSerializer,
+    SaleSerializer,
     CommissionSerializer,
     CompensationPlanSerializer,
     CompensationTierSerializer,
-    EmployeeSerializer,
-    HierarchyRelationshipSerializer,
     OrderSerializer,
-    SaleSerializer,
-    SCFlatRateTableSerializer,
     SCRateTableSerializer,
-    UserProfileSerializer,
+    SCFlatRateTableSerializer,
 )
+from django.contrib.auth.models import User
+from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.authtoken.models import Token
+from rest_framework.permissions import AllowAny
+from django.contrib.auth import authenticate
+from rest_framework import generics
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError
+from django.db.models import Prefetch
+from .serializers import UserProfileSerializer, HierarchyRelationshipSerializer
+from django.conf import settings
 from .services import (
-    approve_commissions,
     calculate_commission_for_order,
+    approve_commissions,
     recalculate_orders_in_range,
 )
+from .permissions import (
+    require_admin,
+    require_finance_or_admin,
+    user_is_admin,
+    user_is_finance,
+    user_is_manager,
+    user_can_view_finance_data,
+    get_request_user_profile,
+)
+from .audit import record_audit
+from .emails import notify_admins, notify_user
+from .invites import accept_invite, get_valid_invite, invite_context
+from .models import AuditLog, ImportJob
+from .imports import process_orders_csv, process_users_csv, should_use_async_import
 from .tenants import filter_queryset_by_organization, get_profile_for_user
+from django.core.files.base import ContentFile
+from django.db import transaction
+from django.http import HttpResponse
+from django.utils.dateparse import parse_date
 
 logger = logging.getLogger("commissions")
 
@@ -214,57 +215,40 @@ class SCFlatRateTableViewSet(viewsets.ModelViewSet):
         
         return queryset
 
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([AllowAny])
 @throttle_classes([ScopedRateThrottle])
 def signup(request):
-    username = request.data.get('username')
-    email = request.data.get('email')
-    password = request.data.get('password')
-
-    # Validate required fields
-    if not username or not password:
-        return Response(
-            {'error': 'Username and password are required'},
-            status=400
-        )
-
-    # Check if username already exists
-    if User.objects.filter(username=username).exists():
-        return Response(
-            {'error': 'Username already exists'},
-            status=400
-        )
-
-    # Create user
-    user = User.objects.create_user(
-        username=username,
-        email=email,
-        password=password
+    """Public self-signup is disabled — accounts are invite-only via User Setup."""
+    return Response(
+        {
+            "error": (
+                "Public signup is disabled. Ask your administrator to invite you "
+                "from User Setup."
+            ),
+        },
+        status=status.HTTP_403_FORBIDDEN,
     )
 
-    # Create authentication token
-    token, _ = Token.objects.get_or_create(user=user)
-
-    # Return success response
-    return Response({
-        'message': 'User created successfully',
-        'token': token.key
-    })
 
 signup.throttle_scope = "login"
 
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([ScopedRateThrottle])
 def book_demo_request(request):
     """Public marketing form endpoint that emails demo requests to the sales inbox."""
     data = request.data or {}
-    name = str(data.get("name") or "").strip()
-    email = str(data.get("email") or "").strip().lower()
-    company = str(data.get("company") or "").strip()
-    phone = str(data.get("phone") or "").strip()
-    message = str(data.get("message") or "").strip()
+    # Honeypot: bots often fill hidden fields; accept silently without emailing.
+    if str(data.get("website") or data.get("company_url") or "").strip():
+        return Response({"message": "Demo request sent successfully."})
+
+    name = str(data.get("name") or "").strip()[:200]
+    email = str(data.get("email") or "").strip().lower()[:254]
+    company = str(data.get("company") or "").strip()[:200]
+    phone = str(data.get("phone") or "").strip()[:40]
+    message = str(data.get("message") or "").strip()[:2000]
 
     if not name:
         return Response({"error": "Name is required."}, status=status.HTTP_400_BAD_REQUEST)
@@ -297,6 +281,9 @@ def book_demo_request(request):
         )
 
     return Response({"message": "Demo request sent successfully."})
+
+
+book_demo_request.throttle_scope = "demo"
 
 
 @api_view(["GET"])
@@ -370,7 +357,7 @@ def login(request):
         )
 
     # Get or create token
-    token = issue_user_token(user)
+    token, _ = Token.objects.get_or_create(user=user)
     record_audit(request, "login_success", {"user_id": user.pk})
 
     # Return success response
@@ -600,28 +587,27 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
             )
 
             # ---------------------------------------------------
-            # Login / activation invite
+            # Create Django Auth User
             # ---------------------------------------------------
-            invite_status = "none"
-            invite_link = ""
-            invite_error = ""
-
             if enable_login:
-                if created:
-                    from .invites import build_invite_url, create_user_invite
 
-                    _, token, sent, invite_error = create_user_invite(
-                        profile,
-                        invited_by=request.user,
-                    )
-                    invite_status = "sent" if sent else "created"
-                    if token and not sent:
-                        invite_link = build_invite_url(token)
-                else:
-                    from .auth_utils import provision_login_user
+                django_user, user_created = User.objects.get_or_create(
+                    username=username,
+                    defaults={
+                        'email': email,
+                        'first_name': profile.first_name,
+                        'last_name': profile.last_name,
+                        'is_active': True,
+                    }
+                )
 
-                    provision_login_user(profile)
-                    invite_status = "existing"
+                django_user.email = email
+                django_user.first_name = profile.first_name
+                django_user.last_name = profile.last_name
+                django_user.is_active = True
+
+                _apply_onboarding_password(django_user, user_created)
+                django_user.save()
 
             # ---------------------------------------------------
             # Hierarchy Relationship
@@ -656,15 +642,9 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
                     )
 
             serializer = self.get_serializer(profile)
-            payload = dict(serializer.data)
-            payload["invite_status"] = invite_status
-            if invite_link:
-                payload["invite_link"] = invite_link
-            if invite_error:
-                payload["invite_error"] = invite_error
 
             return Response(
-                payload,
+                serializer.data,
                 status=status.HTTP_201_CREATED
                 if created
                 else status.HTTP_200_OK
@@ -750,6 +730,11 @@ class UserProfileUploadView(APIView):
             "message": "Upload completed successfully",
             **result,
         }
+        if getattr(settings, "DEFAULT_ONBOARDING_PASSWORD", ""):
+            payload["note"] = (
+                "New login users received the password from DEFAULT_ONBOARDING_PASSWORD. "
+                "Change it after first login."
+            )
         record_audit(
             request,
             "user_setup_upload",
@@ -827,18 +812,44 @@ def _orders_queryset_for_request(request):
 
 class OrderListCreateView(generics.ListCreateAPIView):
     """
-    GET  /api/orders/   -> List orders (role-scoped; supports order_status and q)
+    GET  /api/orders/   -> List all uploaded orders (filtered by role)
     POST /api/orders/   -> Create a single order manually
-
+    
     Access Control:
     - Admin: Can see all orders, can create/update/delete orders
     - Regular employee: Can only see their own orders, cannot create/modify
     """
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
-
+    
     def get_queryset(self):
-        return _orders_queryset_for_request(self.request)
+        """
+        Filter orders based on user role:
+        - Admin: Can see all orders
+        - Regular employee: Can only see their own orders
+        """
+        user = self.request.user
+        queryset = filter_queryset_by_organization(
+            Order.objects.all().order_by("-order_date"),
+            getattr(self.request, "organization", None),
+        )
+
+        try:
+            user_profile = UserProfile.objects.get(email=user.email)
+            is_admin = user_profile.role.lower() in ['admin', 'administrator']
+            
+            if is_admin:
+                # Admin can see all orders
+                return queryset
+            else:
+                # Employee can only see their own orders
+                if user_profile.employee_id:
+                    return queryset.filter(employee_id=user_profile.employee_id)
+                else:
+                    return queryset.filter(employee_email=user.email)
+        except UserProfile.DoesNotExist:
+            # Fallback: show nothing if profile doesn't exist
+            return queryset.none()
 
     def perform_create(self, serializer):
         order = serializer.save(
@@ -1027,7 +1038,7 @@ def email_login(request):
         try:
             user = User.objects.get(username=email)
         except User.DoesNotExist:
-            logger.warning("Login attempt with non-existent email: %s", email)
+            logger.warning(f"Login attempt with non-existent email: {email}")
             record_audit(request, "login_failed", {"email": email})
             return Response(
                 {'error': 'Invalid credentials'},
@@ -1036,7 +1047,7 @@ def email_login(request):
     
     # Check password
     if not user.check_password(password):
-        logger.warning("Failed login attempt for email: %s", email)
+        logger.warning(f"Failed login attempt for email: {email}")
         record_audit(request, "login_failed", {"email": email})
         return Response(
             {'error': 'Invalid credentials'},
@@ -1052,12 +1063,12 @@ def email_login(request):
     
     try:
         # Get or create token
-        token = issue_user_token(user)
+        token, _ = Token.objects.get_or_create(user=user)
         
         # Get user profile for additional info
         user_profile = UserProfile.objects.filter(email=user.email).first()
         
-        logger.info("Successful login for email: %s", email)
+        logger.info(f"Successful login for email: {email}")
         record_audit(request, "login_success", {"user_id": user.id, "email": email})
         
         return Response({
@@ -1067,11 +1078,10 @@ def email_login(request):
             'user_id': user.id,
             'role': user_profile.role if user_profile else 'Sales Rep',
             'name': user_profile.name if user_profile else user.get_full_name() or user.username,
-            'token_expires_at': token_expires_at_iso(token),
         })
         
     except Exception as e:
-        logger.error("Login error: %s", e)
+        logger.error(f"Login error: {str(e)}")
         return Response(
             {'error': 'An error occurred during login'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1117,7 +1127,7 @@ def change_password(request):
     try:
         # Verify old password
         if not user.check_password(old_password):
-            logger.warning("Failed password change attempt for user: %s", user.email)
+            logger.warning(f"Failed password change attempt for user: {user.email}")
             return Response(
                 {'error': 'Old password is incorrect'},
                 status=status.HTTP_401_UNAUTHORIZED
@@ -1127,19 +1137,21 @@ def change_password(request):
         user.set_password(new_password)
         user.save()
         
-        # Create new token for current session
-        token = issue_user_token(user)
+        # Invalidate all tokens to force re-login on other devices
+        Token.objects.filter(user=user).delete()
         
-        logger.info("Password changed successfully for user: %s", user.email)
+        # Create new token for current session
+        token, _ = Token.objects.get_or_create(user=user)
+        
+        logger.info(f"Password changed successfully for user: {user.email}")
         
         return Response({
             'message': 'Password changed successfully',
-            'token': token.key,
-            'token_expires_at': token_expires_at_iso(token),
+            'token': token.key
         })
         
     except Exception as e:
-        logger.error("Password change error: %s", e)
+        logger.error(f"Password change error: {str(e)}")
         return Response(
             {'error': 'An error occurred while changing password'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1190,7 +1202,7 @@ def get_user_profile(request):
             status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
-        logger.error("Error fetching user profile: %s", e)
+        logger.error(f"Error fetching user profile: {str(e)}")
         return Response(
             {'error': 'An error occurred'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1311,10 +1323,18 @@ def employee_directory(request):
     results = []
     for profile in profile_list:
         manager = manager_by_child.get(profile.id)
-        detail = serialize_user_profile_detail(profile, organization=org)
-        detail["manager_name"] = _profile_display_name(manager) if manager else ""
-        detail["manager_employee_id"] = manager.employee_id if manager else ""
-        results.append(detail)
+        results.append(
+            {
+                "id": profile.id,
+                "employee_id": profile.employee_id,
+                "display_name": _profile_display_name(profile),
+                "position_name": profile.position_name or "",
+                "business_group": profile.business_group or "",
+                "manager_name": _profile_display_name(manager) if manager else "",
+                "territory_id": profile.territory_id,
+                "territory_name": profile.territory.name if profile.territory else "",
+            }
+        )
 
     return Response(results)
 
@@ -1484,35 +1504,34 @@ def employee_earnings_report(request):
     Employee Earnings Report
     Detailed breakdown of commissions by employee
     """
-    from django.db.models import Avg, Count, Sum
-
-    user_profile = get_profile_for_user(request.user)
-    role = (getattr(user_profile, "role", None) or "").lower()
-    is_admin = role in ("admin", "administrator")
-
+    from django.db.models import Sum, Count
+    
+    user = request.user
+    try:
+        user_profile = UserProfile.objects.get(email=user.email)
+        is_admin = user_profile.role.lower() in ['admin', 'administrator']
+    except:
+        is_admin = False
+    
+    # Get commissions
     commissions = Commission.objects.all()
-    commissions = filter_queryset_by_organization(
-        commissions, getattr(request, "organization", None)
-    )
-
+    
     if not is_admin:
-        possible_emails = [request.user.email]
-        employee_id = getattr(user_profile, "employee_id", None)
-        if employee_id:
-            possible_emails.append(f"{employee_id}@company.com")
+        possible_emails = [user.email]
+        if user_profile.employee_id:
+            possible_emails.append(f"{user_profile.employee_id}@company.com")
         commissions = commissions.filter(employee__email__in=possible_emails)
-
-    earnings_data = commissions.values(
-        "employee__name", "employee__email", "employee_id"
-    ).annotate(
-        total_earnings=Sum("commission_amount"),
-        commission_count=Count("id"),
-        avg_commission=Avg("commission_amount"),
-    ).order_by("-total_earnings")
-
+    
+    # Group by employee
+    earnings_data = commissions.values('employee__name', 'employee__email', 'employee_id').annotate(
+        total_earnings=Sum('commission_amount'),
+        commission_count=Count('id'),
+        avg_commission=Sum('commission_amount')
+    ).order_by('-total_earnings')
+    
     return Response({
-        "earnings": list(earnings_data),
-        "is_admin": is_admin,
+        'earnings': list(earnings_data),
+        'is_admin': is_admin,
     })
 
 
@@ -1715,26 +1734,6 @@ def commission_payroll_export(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    commissions = list(
-        queryset.select_related(
-            "sale__order",
-            "employee",
-            "compensation_plan",
-        ).order_by("sale__order__order_date", "employee__name")
-    )
-    emails = [
-        comm.employee.email
-        for comm in commissions
-        if getattr(comm.employee, "email", None)
-    ]
-    profile_qs = UserProfile.objects.filter(email__in=emails).only("email", "employee_id")
-    org = getattr(request, "organization", None)
-    if org is not None:
-        profile_qs = profile_qs.filter(organization=org)
-    profiles_by_email = {
-        (profile.email or "").lower(): profile for profile in profile_qs
-    }
-
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow([
@@ -1752,9 +1751,9 @@ def commission_payroll_export(request):
         "approved_at",
     ])
 
-    for comm in commissions:
+    for comm in queryset.order_by("sale__order__order_date", "employee__name"):
         order = comm.sale.order if comm.sale_id and comm.sale.order_id else None
-        profile = profiles_by_email.get((comm.employee.email or "").lower())
+        profile = UserProfile.objects.filter(email=comm.employee.email).first()
         writer.writerow([
             comm.id,
             profile.employee_id if profile else "",

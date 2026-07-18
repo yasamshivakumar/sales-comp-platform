@@ -1,9 +1,11 @@
 """API for third-party CRM integrations (Salesforce, REST, webhooks)."""
 
+from django.conf import settings
 from rest_framework import viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 
 from .audit import record_audit
 from .integrations.registry import DEFAULT_CONFIG, list_providers
@@ -20,6 +22,12 @@ from .models import ExternalIntegration, IntegrationSyncLog, UserProfile
 from .permissions import require_admin
 from .serializers import ExternalIntegrationSerializer, IntegrationSyncLogSerializer, UserProfileSerializer
 from .tenants import filter_queryset_by_organization
+
+
+def _webhook_secret_is_valid(raw_secret):
+    secret = (raw_secret or "").strip()
+    min_len = int(getattr(settings, "WEBHOOK_SECRET_MIN_LENGTH", 24))
+    return bool(secret) and len(secret) >= min_len
 
 
 @api_view(["GET"])
@@ -216,19 +224,30 @@ def integration_synced_users(request, integration_id):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([ScopedRateThrottle])
 def integration_webhook_users(request, webhook_secret):
     return _webhook_handler(request, webhook_secret, IntegrationSyncLog.SYNC_WEBHOOK_USERS)
 
 
+integration_webhook_users.throttle_scope = "webhook"
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([ScopedRateThrottle])
 def integration_webhook_orders(request, webhook_secret):
     return _webhook_handler(request, webhook_secret, IntegrationSyncLog.SYNC_WEBHOOK_ORDERS)
 
 
+integration_webhook_orders.throttle_scope = "webhook"
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([ScopedRateThrottle])
 def integration_hubspot_webhook(request, webhook_secret):
+    if not _webhook_secret_is_valid(webhook_secret):
+        return Response({"error": "Invalid webhook secret"}, status=404)
     integration = ExternalIntegration.objects.filter(
         webhook_secret=webhook_secret,
         is_active=True,
@@ -245,6 +264,9 @@ def integration_hubspot_webhook(request, webhook_secret):
         "log_id": log.pk,
         "result": log.result,
     })
+
+
+integration_hubspot_webhook.throttle_scope = "webhook"
 
 
 @api_view(["POST"])
@@ -268,6 +290,8 @@ def trigger_auto_sync(request, integration_id):
 
 
 def _webhook_handler(request, webhook_secret, sync_type):
+    if not _webhook_secret_is_valid(webhook_secret):
+        return Response({"error": "Invalid webhook secret"}, status=404)
     integration = ExternalIntegration.objects.filter(
         webhook_secret=webhook_secret,
         is_active=True,
