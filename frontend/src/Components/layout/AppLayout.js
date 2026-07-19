@@ -179,7 +179,7 @@ const repMenu = [
 /** Enterprise ICM order: insight → transactions → payroll → payout → plan design → org data → compliance */
 const adminMenu = [
   { name: "Dashboard", path: "/dashboard", icon: SpaceDashboardOutlinedIcon },
-  { name: "Sales by Region", path: "/sales-by-region", icon: MapOutlinedIcon },
+  { name: "Sales analysis", path: "/sales-by-region", icon: MapOutlinedIcon },
   { name: "Orders", path: "/orders", icon: ShoppingBagOutlinedIcon },
   { name: "Commissions", path: "/commissions", icon: PaymentsOutlinedIcon },
   { name: "Payouts", path: "/payouts", icon: SavingsOutlinedIcon },
@@ -192,7 +192,7 @@ const adminMenu = [
 
 const financeMenu = [
   { name: "Dashboard", path: "/dashboard", icon: SpaceDashboardOutlinedIcon },
-  { name: "Sales by Region", path: "/sales-by-region", icon: MapOutlinedIcon },
+  { name: "Sales analysis", path: "/sales-by-region", icon: MapOutlinedIcon },
   { name: "Commissions", path: "/commissions", icon: PaymentsOutlinedIcon },
   { name: "Payouts", path: "/payouts", icon: SavingsOutlinedIcon },
   { name: "Audit Log", path: "/audit-logs", icon: FactCheckOutlinedIcon },
@@ -200,7 +200,7 @@ const financeMenu = [
 
 const managerMenu = [
   { name: "Dashboard", path: "/dashboard", icon: SpaceDashboardOutlinedIcon },
-  { name: "Sales by Region", path: "/sales-by-region", icon: MapOutlinedIcon },
+  { name: "Sales analysis", path: "/sales-by-region", icon: MapOutlinedIcon },
   { name: "Commissions", path: "/commissions", icon: PaymentsOutlinedIcon },
   { name: "Audit Log", path: "/audit-logs", icon: FactCheckOutlinedIcon },
 ];

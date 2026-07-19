@@ -156,7 +156,7 @@ function SalesByRegion() {
     <div className="sbr-root">
       <PageHeader
         badge="Sales analysis"
-        title="Sales by region"
+        title="Sales analysis"
         subtitle="Distribution performance by Indian state (region) and territory."
       />
 

@@ -1548,7 +1548,7 @@ def sales_by_region_report(request):
         or user_is_manager(request)
     ):
         raise PermissionDenied(
-            "Only administrators, finance, or managers can view sales by region."
+            "Only administrators, finance, or managers can view sales by analysis."
         )
 
     org = getattr(request, "organization", None)
