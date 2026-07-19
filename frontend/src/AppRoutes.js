@@ -51,11 +51,11 @@ function AppRoutes() {
         />
 
         <Route
-          path="/sales-by-region"
+          path="/sales-analysis"
           element={
             <PrivateRoute>
               <Layout>
-                <SalesByRegion />
+                <SalesAnalysis />
               </Layout>
             </PrivateRoute>
           }
