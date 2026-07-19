@@ -119,16 +119,24 @@ def build_order_defaults(organization, row):
 
     normalize_order_region_fields(defaults, profile=profile)
 
-    territory_id = row.get("territory") or row.get("territory_id")
-    if territory_id and "territory" in order_model_fields:
+    territory_raw = row.get("territory") or row.get("territory_id")
+    if territory_raw not in ("", None) and "territory" in order_model_fields:
         from ..models import Territory
 
-        if not Territory.objects.filter(
-            pk=territory_id,
-            organization=organization,
-        ).exists():
-            raise ValueError("Territory does not belong to this organization.")
-        defaults["territory_id"] = territory_id
+        text = str(territory_raw).strip()
+        qs = Territory.objects.filter(organization=organization)
+        territory = None
+        if text.isdigit():
+            territory = qs.filter(pk=int(text)).first()
+        if not territory:
+            territory = qs.filter(code__iexact=text).first()
+        if not territory:
+            territory = qs.filter(name__iexact=text).first()
+        if not territory:
+            raise ValueError(
+                f"Territory not found for this organization: {text}"
+            )
+        defaults["territory_id"] = territory.pk
 
     if (
         "quantity" in row

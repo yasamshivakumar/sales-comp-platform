@@ -1923,7 +1923,7 @@
 
 .marketing-module-preview__panel--chart {
   display: flex;
-  flex-direction: column;
+    flex-direction: column;
   gap: 12px;
 }
 
@@ -1976,7 +1976,7 @@
 }
 
 .marketing-team-visual__card {
-  width: 100%;
+    width: 100%;
   max-width: 280px;
   padding: 28px 24px;
   border-radius: var(--mkt-radius-lg);
@@ -2073,8 +2073,8 @@
 }
 
 .marketing-page-hero--rich::before {
-  display: none;
-}
+    display: none;
+  }
 
 .marketing-page-hero--rich h1 {
   color: var(--mkt-navy);
@@ -2436,7 +2436,7 @@
 .marketing-check-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
+    gap: 12px;
   margin-top: 22px;
 }
 
@@ -2448,7 +2448,7 @@
   border-radius: var(--mkt-radius);
   background: var(--mkt-sky-wash);
   border: 1px solid rgba(3, 45, 96, 0.06);
-  font-size: 13px;
+    font-size: 13px;
   line-height: 1.45;
   color: var(--mkt-navy);
 }

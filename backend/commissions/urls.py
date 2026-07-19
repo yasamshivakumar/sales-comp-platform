@@ -38,6 +38,7 @@ from .views import (
     employee_user_detail,
     commission_summary_report,
     sales_performance_report,
+    sales_by_region_report,
     employee_earnings_report,
     period_analytics_report,
     approve_commissions_view,
@@ -257,6 +258,11 @@ urlpatterns = [
         "reports/sales-performance/",
         sales_performance_report,
         name="sales-performance-report",
+    ),
+    path(
+        "reports/sales-by-region/",
+        sales_by_region_report,
+        name="sales-by-region-report",
     ),
     path(
         "reports/employee-earnings/",

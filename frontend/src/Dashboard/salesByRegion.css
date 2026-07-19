@@ -1,0 +1,48 @@
+.sbr-root {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sbr-filters {
+  padding: 1rem 1.25rem;
+}
+
+.sbr-error {
+  margin: 0.5rem 0 0;
+  color: #b91c1c;
+  font-size: 0.9rem;
+}
+
+.sbr-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.sbr-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.sbr-table-panel {
+  padding: 1rem 1.25rem;
+}
+
+.sbr-table-title {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.sbr-table-wrap {
+  overflow-x: auto;
+}
+
+@media (max-width: 900px) {
+  .sbr-kpis,
+  .sbr-grid {
+    grid-template-columns: 1fr;
+  }
+}

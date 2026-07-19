@@ -15,6 +15,7 @@ import MyStatement from "./Dashboard/MyStatement";
 import AuditLogs from "./Enterprise/AuditLogs";
 import Territories from "./Enterprise/Territories";
 import Payouts from "./Enterprise/Payouts";
+import SalesByRegion from "./Dashboard/SalesByRegion";
 import { getAuthToken } from "./api";
 
 function PrivateRoute({ children }) {
@@ -44,6 +45,17 @@ function AppRoutes() {
             <PrivateRoute>
               <Layout>
                 <Dashboard />
+              </Layout>
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/sales-by-region"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <SalesByRegion />
               </Layout>
             </PrivateRoute>
           }

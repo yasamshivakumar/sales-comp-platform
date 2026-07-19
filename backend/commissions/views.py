@@ -1191,6 +1191,7 @@ def get_user_profile(request):
             'name': user_profile.name,
             'is_admin': is_admin,
             'is_finance': user_is_finance(request),
+            'is_manager': user_is_manager(request),
             'employee_id': user_profile.employee_id,
             'organization_slug': org.slug if org else None,
             'organization_name': org.name if org else None,
@@ -1495,6 +1496,149 @@ def sales_performance_report(request):
         "start_date": str(start_date) if start_date else None,
         "end_date": str(end_date) if end_date else None,
     })
+
+
+def _sales_breakdown(orders_qs, group_field, empty_label="Unspecified"):
+    """Aggregate sales amount and order count by a field (+ currency)."""
+    from django.db.models import Avg, Count, Sum
+
+    from .currencies import normalize_currency
+
+    rows = (
+        orders_qs.values(group_field, "currency")
+        .annotate(
+            total_sales=Sum("sales_amount"),
+            order_count=Count("id"),
+            avg_order=Avg("sales_amount"),
+        )
+        .order_by("-total_sales")
+    )
+    results = []
+    for row in rows:
+        label = (row[group_field] or "").strip() or empty_label
+        results.append(
+            {
+                "label": label,
+                "currency": normalize_currency(row["currency"]),
+                "total_sales": float(row["total_sales"] or 0),
+                "order_count": row["order_count"],
+                "avg_order": float(row["avg_order"] or 0),
+            }
+        )
+    return results
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def sales_by_region_report(request):
+    """
+    Sales analysis by Order.region (e.g. Indian state) and Territory.
+
+    Admin / finance / manager only.
+    Query: start_date, end_date
+    """
+    from django.db.models import Count, Sum
+
+    from .business_groups import apply_business_group_to_orders, resolve_dashboard_business_group
+    from .currencies import active_currency_totals, normalize_currency
+
+    if not (
+        user_is_admin(request)
+        or user_can_view_finance_data(request)
+        or user_is_manager(request)
+    ):
+        raise PermissionDenied(
+            "Only administrators, finance, or managers can view sales by region."
+        )
+
+    org = getattr(request, "organization", None)
+    orders = filter_queryset_by_organization(Order.objects.all(), org)
+
+    start_date = parse_date(request.query_params.get("start_date") or "")
+    end_date = parse_date(request.query_params.get("end_date") or "")
+    if start_date and end_date:
+        orders = orders.filter(order_date__range=[start_date, end_date])
+
+    profile = get_request_user_profile(request)
+    can_view_all_groups = user_is_admin(request) or user_is_finance(request)
+    effective_group, _, _ = resolve_dashboard_business_group(
+        request, profile, can_view_all_groups
+    )
+    orders = apply_business_group_to_orders(
+        orders,
+        effective_group,
+        organization=org,
+    )
+
+    orders = orders.select_related("territory")
+
+    by_region = _sales_breakdown(orders, "region", empty_label="Unspecified")
+    # Annotate territory name via values on FK name
+    by_territory_raw = (
+        orders.values("territory__name", "currency")
+        .annotate(
+            total_sales=Sum("sales_amount"),
+            order_count=Count("id"),
+        )
+        .order_by("-total_sales")
+    )
+    by_territory = []
+    for row in by_territory_raw:
+        by_territory.append(
+            {
+                "label": (row["territory__name"] or "").strip() or "Unspecified",
+                "currency": normalize_currency(row["currency"]),
+                "total_sales": float(row["total_sales"] or 0),
+                "order_count": row["order_count"],
+            }
+        )
+
+    currency_rows = list(
+        orders.values("currency").annotate(
+            total=Sum("sales_amount"),
+            count=Count("id"),
+        )
+    )
+    totals_by_currency = active_currency_totals(
+        [
+            {
+                "currency": normalize_currency(row["currency"]),
+                "total": float(row["total"] or 0),
+                "count": row["count"],
+            }
+            for row in currency_rows
+        ]
+    )
+    total_sales = sum(item["total"] for item in totals_by_currency)
+    total_orders = orders.count()
+    region_count = (
+        orders.exclude(region__isnull=True)
+        .exclude(region__exact="")
+        .values("region")
+        .distinct()
+        .count()
+    )
+
+    # Share of total within primary currency bucket for table convenience
+    primary_total = total_sales or 1
+    for row in by_region:
+        row["pct_of_total"] = round((row["total_sales"] / primary_total) * 100, 1) if primary_total else 0
+    for row in by_territory:
+        row["pct_of_total"] = round((row["total_sales"] / primary_total) * 100, 1) if primary_total else 0
+
+    return Response(
+        {
+            "total_sales": float(total_sales),
+            "total_orders": total_orders,
+            "region_count": region_count,
+            "totals_by_currency": totals_by_currency,
+            "by_region": by_region,
+            "by_territory": by_territory,
+            "start_date": str(start_date) if start_date else None,
+            "end_date": str(end_date) if end_date else None,
+            "business_group": effective_group or "",
+        }
+    )
 
 
 @api_view(['GET'])

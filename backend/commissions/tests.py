@@ -2206,3 +2206,106 @@ class ProductionAIFeatureTests(TestCase):
         payload = response.json()
         self.assertEqual(payload["executive_summary"], ["Commission is healthy."])
         self.assertEqual(payload["facts"]["business_group"], "USA")
+
+class SalesByRegionReportTests(TestCase):
+    def setUp(self):
+        self.org = get_default_organization()
+        self.admin = User.objects.create_user(
+            username="region-admin@test.com",
+            email="region-admin@test.com",
+            password="testpass",
+        )
+        UserProfile.objects.create(
+            organization=self.org,
+            email="region-admin@test.com",
+            name="Region Admin",
+            role="Admin",
+            employee_id="ADM-R1",
+        )
+        self.rep = User.objects.create_user(
+            username="region-rep@test.com",
+            email="region-rep@test.com",
+            password="testpass",
+        )
+        UserProfile.objects.create(
+            organization=self.org,
+            email="region-rep@test.com",
+            name="Region Rep",
+            role="Sales Rep",
+            employee_id="EMP-R1",
+        )
+        self.west = Territory.objects.create(
+            organization=self.org,
+            name="West Zone",
+            code="WEST",
+        )
+        self.south = Territory.objects.create(
+            organization=self.org,
+            name="South Zone",
+            code="SOUTH",
+        )
+        Order.objects.create(
+            organization=self.org,
+            order_id="ORD-MH-1",
+            order_date=date(2026, 1, 10),
+            employee_id="EMP-R1",
+            sales_amount=Decimal("100000"),
+            region="Maharashtra",
+            territory=self.west,
+            currency="INR",
+            order_status="Success",
+        )
+        Order.objects.create(
+            organization=self.org,
+            order_id="ORD-KA-1",
+            order_date=date(2026, 1, 15),
+            employee_id="EMP-R1",
+            sales_amount=Decimal("50000"),
+            region="Karnataka",
+            territory=self.south,
+            currency="INR",
+            order_status="Success",
+        )
+        Order.objects.create(
+            organization=self.org,
+            order_id="ORD-MH-2",
+            order_date=date(2026, 1, 20),
+            employee_id="EMP-R1",
+            sales_amount=Decimal("25000"),
+            region="Maharashtra",
+            territory=self.west,
+            currency="INR",
+            order_status="Success",
+        )
+        self.client = Client()
+        admin_token = Token.objects.create(user=self.admin)
+        rep_token = Token.objects.create(user=self.rep)
+        self.admin_auth = {"HTTP_AUTHORIZATION": f"Token {admin_token.key}"}
+        self.rep_auth = {"HTTP_AUTHORIZATION": f"Token {rep_token.key}"}
+
+    def test_sales_by_region_groups_states_and_territories(self):
+        response = self.client.get(
+            "/api/reports/sales-by-region/?start_date=2026-01-01&end_date=2026-01-31",
+            **self.admin_auth,
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["total_orders"], 3)
+        self.assertEqual(float(body["total_sales"]), 175000.0)
+        self.assertEqual(body["region_count"], 2)
+
+        by_region = {row["label"]: row for row in body["by_region"]}
+        self.assertEqual(float(by_region["Maharashtra"]["total_sales"]), 125000.0)
+        self.assertEqual(by_region["Maharashtra"]["order_count"], 2)
+        self.assertEqual(float(by_region["Karnataka"]["total_sales"]), 50000.0)
+
+        by_territory = {row["label"]: row for row in body["by_territory"]}
+        self.assertEqual(float(by_territory["West Zone"]["total_sales"]), 125000.0)
+        self.assertEqual(float(by_territory["South Zone"]["total_sales"]), 50000.0)
+
+    def test_sales_by_region_rejects_sales_rep(self):
+        response = self.client.get(
+            "/api/reports/sales-by-region/",
+            **self.rep_auth,
+        )
+        self.assertEqual(response.status_code, 403)
