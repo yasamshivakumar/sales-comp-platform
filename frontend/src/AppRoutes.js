@@ -55,10 +55,14 @@ function AppRoutes() {
           element={
             <PrivateRoute>
               <Layout>
-                <SalesAnalysis />
+                <SalesByRegion />
               </Layout>
             </PrivateRoute>
           }
+        />
+        <Route
+          path="/sales-by-region"
+          element={<Navigate to="/sales-analysis" replace />}
         />
 
         <Route
