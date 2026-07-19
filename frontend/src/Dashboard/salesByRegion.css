@@ -8,6 +8,21 @@
   padding: 1rem 1.25rem;
 }
 
+.sbr-search {
+  min-width: 200px;
+  flex: 1 1 200px;
+}
+
+.sbr-search .input {
+  min-width: 200px;
+}
+
+.sbr-search-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted, #64748b);
+}
+
 .sbr-error {
   margin: 0.5rem 0 0;
   color: #b91c1c;
