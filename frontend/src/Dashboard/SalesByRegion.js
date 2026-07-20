@@ -158,9 +158,6 @@ function SalesByRegion() {
         <div className="sbr-hero__content">
           <span className="sbr-hero__eyebrow">Distribution insights</span>
           <h1 className="sbr-hero__title">Sales analysis</h1>
-          <p className="sbr-hero__subtitle">
-            Compare performance across Indian states and territories.
-          </p>
         </div>
       </header>
 
