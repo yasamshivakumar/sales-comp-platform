@@ -232,7 +232,7 @@ function Login() {
             disabled={loading}
             startIcon={loading ? <CircularProgress size={18} color="inherit" /> : null}
           >
-            {loading ? "Signing in…" : "Sign in securely"}
+            {loading ? "Signing in…" : "Sign in"}
           </Button>
         </Stack>
 
