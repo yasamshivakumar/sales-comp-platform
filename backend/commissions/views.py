@@ -64,6 +64,7 @@ from .invites import accept_invite, get_valid_invite, invite_context
 from .models import AuditLog, ImportJob
 from .imports import process_orders_csv, process_users_csv, should_use_async_import
 from .tenants import filter_queryset_by_organization, get_profile_for_user
+from .authentication import issue_user_token, token_expires_at_iso
 from django.core.files.base import ContentFile
 from django.db import transaction
 from django.http import HttpResponse
@@ -356,14 +357,14 @@ def login(request):
             status=400
         )
 
-    # Get or create token
-    token, _ = Token.objects.get_or_create(user=user)
+    token = issue_user_token(user)
     record_audit(request, "login_success", {"user_id": user.pk})
 
     # Return success response
     return Response({
         'message': 'Login successful',
         'token': token.key,
+        'token_expires_at': token_expires_at_iso(token),
         'username': user.username
     })
 
@@ -1086,24 +1087,24 @@ def email_login(request):
         )
     
     try:
-        # Get or create token
-        token, _ = Token.objects.get_or_create(user=user)
-        
+        token = issue_user_token(user)
+
         # Get user profile for additional info
         user_profile = UserProfile.objects.filter(email=user.email).first()
-        
+
         logger.info(f"Successful login for email: {email}")
         record_audit(request, "login_success", {"user_id": user.id, "email": email})
-        
+
         return Response({
             'message': 'Login successful',
             'token': token.key,
+            'token_expires_at': token_expires_at_iso(token),
             'email': user.email,
             'user_id': user.id,
             'role': user_profile.role if user_profile else 'Sales Rep',
             'name': user_profile.name if user_profile else user.get_full_name() or user.username,
         })
-        
+
     except Exception as e:
         logger.error(f"Login error: {str(e)}")
         return Response(
@@ -1162,16 +1163,14 @@ def change_password(request):
         user.save()
         
         # Invalidate all tokens to force re-login on other devices
-        Token.objects.filter(user=user).delete()
-        
-        # Create new token for current session
-        token, _ = Token.objects.get_or_create(user=user)
-        
+        token = issue_user_token(user)
+
         logger.info(f"Password changed successfully for user: {user.email}")
-        
+
         return Response({
             'message': 'Password changed successfully',
-            'token': token.key
+            'token': token.key,
+            'token_expires_at': token_expires_at_iso(token),
         })
         
     except Exception as e:
@@ -1180,6 +1179,19 @@ def change_password(request):
             {'error': 'An error occurred while changing password'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def session_status(request):
+    """
+    Idle-timeout keep-alive. Calling this while the user is active extends
+    the backend session (sliding TTL) and returns the new expiry.
+    """
+    expires = getattr(request, "session_expires_at", None)
+    if not expires and getattr(request, "auth", None) is not None:
+        expires = token_expires_at_iso(request.auth)
+    return Response({"token_expires_at": expires})
 
 
 # =====================================================

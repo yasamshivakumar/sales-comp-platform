@@ -37,7 +37,11 @@ import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import api, { clearAuthStorage, getAuthSessionValue } from "../../api";
+import api, {
+  clearAuthStorage,
+  enforceValidSession,
+  getAuthSessionValue,
+} from "../../api";
 import { useTheme as useAppTheme } from "../../ThemeContext";
 import { enterprise } from "../../theme/muiTheme";
 import AuthTextField from "../AuthTextField";
@@ -380,7 +384,29 @@ function AppLayout({ children }) {
   });
 
   useEffect(() => {
-    api.get("user-profile/").then((res) => setProfile(res.data)).catch(() => setProfile(null));
+    if (!enforceValidSession()) return undefined;
+    let cancelled = false;
+    api
+      .get("user-profile/")
+      .then((res) => {
+        if (!cancelled) setProfile(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setProfile(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const onSessionEnd = () => setProfile(null);
+    window.addEventListener("session-expired", onSessionEnd);
+    window.addEventListener("unauthorized", onSessionEnd);
+    return () => {
+      window.removeEventListener("session-expired", onSessionEnd);
+      window.removeEventListener("unauthorized", onSessionEnd);
+    };
   }, []);
 
   useEffect(() => {

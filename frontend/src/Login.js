@@ -61,7 +61,7 @@ function Login() {
       try {
         const res = await api.post("auth/oidc-exchange/", { code: ssoCode });
         if (cancelled) return;
-        saveAuthSession({ token: res.data.token });
+        saveAuthSession(res.data);
         success({
           title: "SSO sign-in complete",
           message: "Redirecting to your workspace…",

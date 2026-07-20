@@ -11,7 +11,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
-from .authentication import issue_user_token
+from rest_framework.authtoken.models import Token
+
+from .authentication import issue_user_token, token_expires_at_iso
 from .models import UserProfile
 from .tenants import get_default_organization
 
@@ -79,4 +81,8 @@ def oidc_token_exchange(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
     cache.delete(cache_key)
-    return Response({"token": token_key})
+    token = Token.objects.filter(key=token_key).first()
+    payload = {"token": token_key}
+    if token:
+        payload["token_expires_at"] = token_expires_at_iso(token)
+    return Response(payload)

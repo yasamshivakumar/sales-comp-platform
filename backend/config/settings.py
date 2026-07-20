@@ -368,7 +368,7 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
     "x-request-id",
 ]
-CORS_EXPOSE_HEADERS = ["X-Request-ID"]
+CORS_EXPOSE_HEADERS = ["X-Request-ID", "X-Session-Expires-At"]
 CORS_PREFLIGHT_MAX_AGE = 86400
 
 # Required if any cookie/session flows cross-origin (safe to mirror CORS origins)

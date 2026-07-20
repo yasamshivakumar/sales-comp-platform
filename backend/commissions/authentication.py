@@ -38,6 +38,26 @@ def token_expires_at_iso(token):
     return expires_at.isoformat() if expires_at else None
 
 
+def touch_token_for_activity(token):
+    """
+    Sliding idle timeout: each authenticated request can extend the session.
+    Writes are throttled so busy APIs do not update the row every call.
+    """
+    ttl_minutes = token_ttl_minutes()
+    if not ttl_minutes:
+        return token
+
+    now = timezone.now()
+    # Refresh at most every 2 minutes (or sooner for very short TTLs).
+    refresh_after = timedelta(minutes=min(2, max(ttl_minutes // 12, 1)))
+    if now - token.created < refresh_after:
+        return token
+
+    Token.objects.filter(pk=token.pk).update(created=now)
+    token.created = now
+    return token
+
+
 class TenantTokenAuthentication(TokenAuthentication):
     """Token auth that resolves the tenant after DRF authenticates the user."""
 
@@ -50,6 +70,9 @@ class TenantTokenAuthentication(TokenAuthentication):
         if is_token_expired(token):
             token.delete()
             raise AuthenticationFailed("Session expired. Please sign in again.")
+
+        token = touch_token_for_activity(token)
+        request.session_expires_at = token_expires_at_iso(token)
 
         profile = get_profile_for_user(user)
         request.organization = profile.organization if profile else None

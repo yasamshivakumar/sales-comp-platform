@@ -15,11 +15,13 @@ import MyStatement from "./Dashboard/MyStatement";
 import AuditLogs from "./Enterprise/AuditLogs";
 import Payouts from "./Enterprise/Payouts";
 import SalesByRegion from "./Dashboard/SalesByRegion";
-import { getAuthToken } from "./api";
+import { getAuthToken, enforceValidSession } from "./api";
 
 function PrivateRoute({ children }) {
-  const token = getAuthToken();
-  return token ? children : <Navigate to="/login" />;
+  if (!enforceValidSession() || !getAuthToken()) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
 }
 
 function Layout({ children }) {

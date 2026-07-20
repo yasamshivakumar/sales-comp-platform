@@ -33,6 +33,7 @@ from .views import (
     book_demo_request,
     email_login,
     change_password,
+    session_status,
     get_user_profile,
     employee_directory,
     employee_user_detail,
@@ -208,6 +209,7 @@ urlpatterns = [
     path("auth/email-login/", email_login, name="auth-email-login"),
     path("auth/oidc-exchange/", oidc_token_exchange, name="auth-oidc-exchange"),
     path("auth/change-password/", change_password, name="auth-change-password"),
+    path("auth/session/", session_status, name="auth-session"),
     path("user-profile/", get_user_profile, name="user-profile"),
     path(
         "compensation-plans/",

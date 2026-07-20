@@ -76,4 +76,7 @@ class RequestIdMiddleware:
         request.request_id = request_id
         response = self.get_response(request)
         response["X-Request-ID"] = request_id
+        expires_at = getattr(request, "session_expires_at", None)
+        if expires_at:
+            response["X-Session-Expires-At"] = expires_at
         return response
