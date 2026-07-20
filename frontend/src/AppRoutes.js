@@ -13,7 +13,6 @@ import Orders from "./Orders/Orders";
 import Commissions from "./Dashboard/Commissions";
 import MyStatement from "./Dashboard/MyStatement";
 import AuditLogs from "./Enterprise/AuditLogs";
-import Territories from "./Enterprise/Territories";
 import Payouts from "./Enterprise/Payouts";
 import SalesByRegion from "./Dashboard/SalesByRegion";
 import { getAuthToken } from "./api";
@@ -142,16 +141,7 @@ function AppRoutes() {
           }
         />
 
-        <Route
-          path="/territories"
-          element={
-            <PrivateRoute>
-              <Layout>
-                <Territories />
-              </Layout>
-            </PrivateRoute>
-          }
-        />
+        <Route path="/territories" element={<Navigate to="/user-setup" replace />} />
 
         <Route
           path="/payouts"

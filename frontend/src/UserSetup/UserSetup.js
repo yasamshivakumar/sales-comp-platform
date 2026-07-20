@@ -48,6 +48,9 @@ const TABS = [
 function UserSetup() {
   const [users, setUsers] = useState([]);
   const [territories, setTerritories] = useState([]);
+  const [newTerritoryName, setNewTerritoryName] = useState("");
+  const [newTerritoryCode, setNewTerritoryCode] = useState("");
+  const [creatingTerritory, setCreatingTerritory] = useState(false);
   const [file, setFile] = useState(null);
   const [activeTab, setActiveTab] = useState("User");
   const [form, setForm] = useState(INITIAL_FORM);
@@ -61,13 +64,50 @@ function UserSetup() {
       .catch(() => error("Failed to load users"));
   }, [error]);
 
-  useEffect(() => {
-    fetchUsers();
+  const fetchTerritories = useCallback(() => {
     api
       .get("territories/")
       .then((res) => setTerritories(res.data))
       .catch(() => error("Failed to load territories"));
-  }, [fetchUsers, error]);
+  }, [error]);
+
+  useEffect(() => {
+    fetchUsers();
+    fetchTerritories();
+  }, [fetchUsers, fetchTerritories]);
+
+  const createTerritory = async () => {
+    const name = newTerritoryName.trim();
+    const code = newTerritoryCode.trim();
+    if (!name || !code) {
+      warning("Territory name and code are required.");
+      return;
+    }
+    setCreatingTerritory(true);
+    try {
+      const res = await api.post("territories/", {
+        name,
+        code,
+        is_active: true,
+      });
+      setNewTerritoryName("");
+      setNewTerritoryCode("");
+      await fetchTerritories();
+      if (res.data?.id) {
+        setForm((current) => ({ ...current, territory: String(res.data.id) }));
+      }
+      success(`Territory “${name}” created and selected.`);
+    } catch (err) {
+      error(
+        err.response?.data?.detail ||
+          err.response?.data?.error ||
+          err.response?.data?.code?.[0] ||
+          "Failed to create territory."
+      );
+    } finally {
+      setCreatingTerritory(false);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -294,6 +334,12 @@ function UserSetup() {
                   })),
               ])
             }
+            newTerritoryName={newTerritoryName}
+            newTerritoryCode={newTerritoryCode}
+            onNewTerritoryNameChange={(e) => setNewTerritoryName(e.target.value)}
+            onNewTerritoryCodeChange={(e) => setNewTerritoryCode(e.target.value)}
+            onCreateTerritory={createTerritory}
+            creatingTerritory={creatingTerritory}
           />
         );
       case "Title":

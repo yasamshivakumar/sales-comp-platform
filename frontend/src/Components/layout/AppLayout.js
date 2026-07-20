@@ -29,7 +29,6 @@ import ShoppingBagOutlinedIcon from "@mui/icons-material/ShoppingBagOutlined";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import GavelOutlinedIcon from "@mui/icons-material/GavelOutlined";
 import ManageAccountsOutlinedIcon from "@mui/icons-material/ManageAccountsOutlined";
-import PublicOutlinedIcon from "@mui/icons-material/PublicOutlined";
 import MapOutlinedIcon from "@mui/icons-material/MapOutlined";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import SavingsOutlinedIcon from "@mui/icons-material/SavingsOutlined";
@@ -186,7 +185,6 @@ const adminMenu = [
   { name: "Comp Plans", path: "/comp-plans", icon: DescriptionOutlinedIcon },
   { name: "Commission Rules", path: "/commission-rules", icon: GavelOutlinedIcon },
   { name: "User Setup", path: "/user-setup", icon: ManageAccountsOutlinedIcon },
-  { name: "Territories", path: "/territories", icon: PublicOutlinedIcon },
   { name: "Audit Log", path: "/audit-logs", icon: FactCheckOutlinedIcon },
 ];
 
