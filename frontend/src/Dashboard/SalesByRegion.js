@@ -197,7 +197,7 @@ function SalesByRegion() {
               className="sbr-search-input"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="State…"
+              placeholder="Region…"
             />
           </div>
           <div className="sbr-toolbar__field sbr-toolbar__field--actions">
@@ -221,7 +221,7 @@ function SalesByRegion() {
         </div>
         {query && (
           <p className="sbr-search-hint">
-            Showing matches for “{query}” — {regionRows.length} state
+            Showing matches for “{query}” — {regionRows.length} region
             {regionRows.length === 1 ? "" : "s"}, {territoryRows.length} territor
             {territoryRows.length === 1 ? "y" : "ies"}.
           </p>
@@ -239,7 +239,7 @@ function SalesByRegion() {
           <span className="sbr-kpi__value">{loading ? "…" : data?.total_orders ?? 0}</span>
         </article>
         <article className="sbr-kpi sbr-kpi--amber">
-          <span className="sbr-kpi__label">States with sales</span>
+          <span className="sbr-kpi__label">Regions with sales</span>
           <span className="sbr-kpi__value">{loading ? "…" : data?.region_count ?? 0}</span>
         </article>
       </div>
@@ -247,8 +247,8 @@ function SalesByRegion() {
       <div className="sbr-grid">
         <section className="sbr-card">
           <div className="sbr-card__head">
-            <h2 className="sbr-card__title">By state</h2>
-            <span className="sbr-card__meta">Region</span>
+            <h2 className="sbr-card__title">By region</h2>
+            <span className="sbr-card__meta">Geography</span>
           </div>
           {loading ? (
             <p className="ra-empty">Loading…</p>
@@ -256,7 +256,7 @@ function SalesByRegion() {
             <BreakdownBars
               rows={regionRows}
               emptyMessage={
-                query ? `No states match “${query}”.` : "No sales in this period."
+                query ? `No regions match “${query}”.` : "No sales in this period."
               }
             />
           )}
@@ -290,7 +290,7 @@ function SalesByRegion() {
           <table className="sbr-table">
             <thead>
               <tr>
-                <th>Region / state</th>
+                <th>Region</th>
                 <th>Currency</th>
                 <th>Sales</th>
                 <th>Orders</th>
