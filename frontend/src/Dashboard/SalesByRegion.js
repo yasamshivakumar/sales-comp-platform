@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import api, { getApiErrorMessage } from "../api";
 import PageHeader from "../Components/PageHeader";
-import PeriodFilter from "../Components/PeriodFilter";
 import {
   formatDashboardAmount,
   formatMoney,
@@ -157,39 +156,60 @@ function SalesByRegion() {
       <PageHeader
         badge="Sales analysis"
         title="Sales analysis"
-        subtitle="Distribution performance by Indian state (region) and territory."
       />
 
       <div className="panel sbr-filters">
-        <PeriodFilter
-          startDate={startDate}
-          endDate={endDate}
-          onStartChange={setStartDate}
-          onEndChange={setEndDate}
-          onSubmit={load}
-          loading={loading}
-          submitLabel="Apply"
-        >
-          <label className="sbr-search">
-            <span>Search</span>
+        <div className="sbr-filter-bar">
+          <label className="sbr-filter-field">
+            <span className="sbr-filter-field__label">From</span>
             <input
-              className="input"
+              type="date"
+              className="sbr-filter-field__control"
+              value={startDate}
+              max={endDate || undefined}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+          </label>
+          <label className="sbr-filter-field">
+            <span className="sbr-filter-field__label">To</span>
+            <input
+              type="date"
+              className="sbr-filter-field__control"
+              value={endDate}
+              min={startDate || undefined}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+          </label>
+          <label className="sbr-filter-field sbr-filter-field--search">
+            <span className="sbr-filter-field__label">Search</span>
+            <input
               type="search"
+              className="sbr-filter-field__control"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="State or territory…"
               aria-label="Search states or territories"
             />
           </label>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={exportCsv}
-            disabled={!data || loading}
-          >
-            Export CSV
-          </button>
-        </PeriodFilter>
+          <div className="sbr-filter-actions">
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={load}
+              disabled={loading}
+            >
+              {loading ? "Loading…" : "Apply"}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={exportCsv}
+              disabled={!data || loading}
+            >
+              Export CSV
+            </button>
+          </div>
+        </div>
         {query && (
           <p className="sbr-search-hint">
             Showing matches for “{query}” — {regionRows.length} state

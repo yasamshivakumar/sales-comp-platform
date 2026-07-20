@@ -8,23 +8,80 @@
   padding: 1rem 1.25rem;
 }
 
-.sbr-search {
-  min-width: 200px;
-  flex: 1 1 200px;
+.sbr-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
 }
 
-.sbr-search .input {
-  min-width: 200px;
+.sbr-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.sbr-filter-field__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, #64748b);
+}
+
+.sbr-filter-field__control {
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color, #d0d7de);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  color: var(--text-primary, #0f172a);
+  font-size: 0.9rem;
+  line-height: 1.3;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sbr-filter-field__control:hover {
+  border-color: var(--border-strong, #94a3b8);
+}
+
+.sbr-filter-field__control:focus {
+  border-color: var(--primary, #0176d3);
+  box-shadow: 0 0 0 3px rgba(1, 118, 211, 0.16);
+}
+
+.sbr-filter-field:not(.sbr-filter-field--search) .sbr-filter-field__control {
+  width: 168px;
+}
+
+.sbr-filter-field--search {
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+
+.sbr-filter-field--search .sbr-filter-field__control {
+  width: 100%;
+}
+
+.sbr-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-left: auto;
 }
 
 .sbr-search-hint {
-  margin: 0.35rem 0 0;
+  margin: 0.65rem 0 0;
   font-size: 0.85rem;
   color: var(--text-muted, #64748b);
 }
 
 .sbr-error {
-  margin: 0.5rem 0 0;
+  margin: 0.65rem 0 0;
   color: #b91c1c;
   font-size: 0.9rem;
 }
@@ -55,9 +112,32 @@
   overflow-x: auto;
 }
 
+[data-theme="dark"] .sbr-filter-field__control {
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(148, 163, 184, 0.35);
+  color: #e2e8f0;
+  color-scheme: dark;
+}
+
+[data-theme="dark"] .sbr-filter-field__control:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+}
+
 @media (max-width: 900px) {
   .sbr-kpis,
   .sbr-grid {
     grid-template-columns: 1fr;
+  }
+
+  .sbr-filter-field:not(.sbr-filter-field--search) .sbr-filter-field__control,
+  .sbr-filter-field--search {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .sbr-filter-actions {
+    margin-left: 0;
+    width: 100%;
   }
 }
