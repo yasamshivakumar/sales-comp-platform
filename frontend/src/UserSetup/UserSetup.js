@@ -26,6 +26,7 @@ const INITIAL_FORM = {
   personal_currency: "INR",
   business_group: "India",
   territory: "",
+  region: "",
   title: "",
   pay_period_type: "Monthly",
   position_name: "",
@@ -163,6 +164,9 @@ function UserSetup() {
       } else {
         payload.territory = parseInt(payload.territory, 10);
       }
+      // Backend stores region on UserProfile.market
+      payload.market = String(payload.region || payload.market || "").trim();
+      delete payload.region;
       const res = await api.post("user-setup/", payload);
 
       if (form.parent_participant && form.child_participant && form.split_percentage) {

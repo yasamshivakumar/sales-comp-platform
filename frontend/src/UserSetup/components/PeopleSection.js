@@ -18,6 +18,7 @@ function PeopleSection({
       {renderBusinessGroupSelect
         ? renderBusinessGroupSelect()
         : renderField("business_group", "Business group")}
+      {renderField("region", "Region", "text", "e.g. Maharashtra")}
       {renderTerritorySelect && renderTerritorySelect()}
     </div>
   );

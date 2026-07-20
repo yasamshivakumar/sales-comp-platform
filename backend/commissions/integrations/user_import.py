@@ -183,6 +183,7 @@ def process_users_rows(
                 "personal_target": personal_target,
                 "personal_currency": personal_currency,
                 "business_group": business_group,
+                "market": str(row.get("region") or row.get("market") or "").strip(),
                 "title": str(row.get("title", "")).strip(),
                 "pay_period_type": str(row.get("pay_period_type", "Monthly")).strip(),
                 "position_name": str(row.get("position_name", "")).strip(),

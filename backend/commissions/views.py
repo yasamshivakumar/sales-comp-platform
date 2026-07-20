@@ -18,6 +18,7 @@ from .models import (
     Order,
     SCRateTable,
     SCFlatRateTable,
+    Territory,
 )
 from decimal import Decimal, InvalidOperation
 from .serializers import (
@@ -566,6 +567,11 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
                         data.get('business_group', 'India')
                     ).strip(),
 
+                    # Region (Indian state / market) — accept region or market
+                    'market': str(
+                        data.get('region') or data.get('market') or ''
+                    ).strip(),
+
                     # Title
                     'title': str(
                         data.get('title', '')
@@ -585,6 +591,28 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
                     ).strip(),
                 }
             )
+
+            territory_raw = data.get("territory") or data.get("territory_id")
+            if territory_raw not in ("", None):
+                try:
+                    territory_pk = int(territory_raw)
+                except (TypeError, ValueError):
+                    return Response(
+                        {"error": "Invalid territory."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if not Territory.objects.filter(
+                    pk=territory_pk, organization=org
+                ).exists():
+                    return Response(
+                        {"error": "Territory does not belong to this organization."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                profile.territory_id = territory_pk
+                profile.save(update_fields=["territory_id"])
+            elif "territory" in data or "territory_id" in data:
+                profile.territory = None
+                profile.save(update_fields=["territory"])
 
             # ---------------------------------------------------
             # Create Django Auth User
