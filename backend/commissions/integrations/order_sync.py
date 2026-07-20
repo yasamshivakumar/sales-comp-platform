@@ -121,22 +121,11 @@ def build_order_defaults(organization, row):
 
     territory_raw = row.get("territory") or row.get("territory_id")
     if territory_raw not in ("", None) and "territory" in order_model_fields:
-        from ..models import Territory
+        from .user_import import resolve_or_create_territory_id
 
-        text = str(territory_raw).strip()
-        qs = Territory.objects.filter(organization=organization)
-        territory = None
-        if text.isdigit():
-            territory = qs.filter(pk=int(text)).first()
-        if not territory:
-            territory = qs.filter(code__iexact=text).first()
-        if not territory:
-            territory = qs.filter(name__iexact=text).first()
-        if not territory:
-            raise ValueError(
-                f"Territory not found for this organization: {text}"
-            )
-        defaults["territory_id"] = territory.pk
+        defaults["territory_id"] = resolve_or_create_territory_id(
+            organization, territory_raw, create_if_missing=True
+        )
 
     if (
         "quantity" in row

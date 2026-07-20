@@ -18,7 +18,6 @@ from .models import (
     Order,
     SCRateTable,
     SCFlatRateTable,
-    Territory,
 )
 from decimal import Decimal, InvalidOperation
 from .serializers import (
@@ -594,18 +593,15 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
 
             territory_raw = data.get("territory") or data.get("territory_id")
             if territory_raw not in ("", None):
+                from .integrations.user_import import resolve_or_create_territory_id
+
                 try:
-                    territory_pk = int(territory_raw)
-                except (TypeError, ValueError):
-                    return Response(
-                        {"error": "Invalid territory."},
-                        status=status.HTTP_400_BAD_REQUEST,
+                    territory_pk = resolve_or_create_territory_id(
+                        org, territory_raw, create_if_missing=True
                     )
-                if not Territory.objects.filter(
-                    pk=territory_pk, organization=org
-                ).exists():
+                except ValueError as exc:
                     return Response(
-                        {"error": "Territory does not belong to this organization."},
+                        {"error": str(exc)},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 profile.territory_id = territory_pk

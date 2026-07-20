@@ -33,8 +33,19 @@ def _org_profile_filter(organization):
     return Q()
 
 
-def _resolve_territory_id(organization, raw_value):
-    """Resolve territory from CSV value: numeric id, code, or name."""
+def _territory_code_from_text(text):
+    """Build a short territory code from free text (e.g. West Zone → WEST-ZONE)."""
+    import re
+
+    code = re.sub(r"[^A-Za-z0-9]+", "-", text.strip().upper()).strip("-")
+    return (code or "TERR")[:64]
+
+
+def resolve_or_create_territory_id(organization, raw_value, *, create_if_missing=True):
+    """
+    Resolve territory from free text: numeric id, code, or name.
+    Optionally create a territory when the value is new text.
+    """
     if raw_value in ("", None):
         return None
     text = str(raw_value).strip()
@@ -51,9 +62,27 @@ def _resolve_territory_id(organization, raw_value):
     territory = qs.filter(name__iexact=text).first()
     if territory:
         return territory.pk
-    raise ValueError(
-        f"Territory not found for this organization: {text}"
+    if not create_if_missing:
+        raise ValueError(f"Territory not found for this organization: {text}")
+    code = _territory_code_from_text(text)
+    # Avoid unique collisions on code within org
+    base_code = code
+    suffix = 2
+    while qs.filter(code__iexact=code).exists():
+        code = f"{base_code[:60]}-{suffix}"
+        suffix += 1
+    territory = Territory.objects.create(
+        organization=organization,
+        name=text[:200],
+        code=code,
+        is_active=True,
     )
+    return territory.pk
+
+
+def _resolve_territory_id(organization, raw_value):
+    """Resolve or create territory from CSV / form free text."""
+    return resolve_or_create_territory_id(organization, raw_value, create_if_missing=True)
 
 
 def _find_existing_profile(organization, email, crm_user_id="", crm_alt_user_id=""):
