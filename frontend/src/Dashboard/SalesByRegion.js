@@ -157,7 +157,7 @@ function SalesByRegion() {
         <div className="sbr-hero__glow" aria-hidden="true" />
         <div className="sbr-hero__content">
           <span className="sbr-hero__eyebrow">Distribution insights</span>
-          <h1 className="sbr-hero__title">Sales analysis</h1>
+          <h1 className="sbr-hero__title">Sales insights</h1>
         </div>
       </header>
 

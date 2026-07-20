@@ -52,7 +52,7 @@ function AppRoutes() {
         />
 
         <Route
-          path="/sales-analysis"
+          path="/sales-insights"
           element={
             <PrivateRoute>
               <Layout>
@@ -62,8 +62,16 @@ function AppRoutes() {
           }
         />
         <Route
+          path="/regional-sales"
+          element={<Navigate to="/sales-insights" replace />}
+        />
+        <Route
+          path="/sales-analysis"
+          element={<Navigate to="/sales-insights" replace />}
+        />
+        <Route
           path="/sales-by-region"
-          element={<Navigate to="/sales-analysis" replace />}
+          element={<Navigate to="/sales-insights" replace />}
         />
 
         <Route

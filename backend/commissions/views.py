@@ -1568,7 +1568,7 @@ def _sales_breakdown(orders_qs, group_field, empty_label="Unspecified"):
 @permission_classes([IsAuthenticated])
 def sales_by_region_report(request):
     """
-    Sales analysis by Order.region (e.g. Indian state) and Territory.
+    Sales insights breakdown by Order.region (e.g. Indian state) and Territory.
 
     Admin / finance / manager only.
     Query: start_date, end_date
