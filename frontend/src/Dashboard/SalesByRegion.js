@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import api, { getApiErrorMessage } from "../api";
-import PageHeader from "../Components/PageHeader";
+import DatePickerField from "../Components/DatePickerField";
 import {
   formatDashboardAmount,
   formatMoney,
@@ -153,48 +153,60 @@ function SalesByRegion() {
 
   return (
     <div className="sbr-root">
-      <PageHeader
-        badge="Sales analysis"
-        title="Sales analysis"
-      />
+      <header className="sbr-hero">
+        <div className="sbr-hero__glow" aria-hidden="true" />
+        <div className="sbr-hero__content">
+          <span className="sbr-hero__eyebrow">Distribution insights</span>
+          <h1 className="sbr-hero__title">Sales analysis</h1>
+          <p className="sbr-hero__subtitle">
+            Compare performance across Indian states and territories.
+          </p>
+        </div>
+      </header>
 
-      <div className="panel sbr-filters">
-        <div className="sbr-filter-bar">
-          <label className="sbr-filter-field">
-            <span className="sbr-filter-field__label">From</span>
-            <input
-              type="date"
-              className="sbr-filter-field__control"
+      <div className="sbr-filters">
+        <div className="sbr-toolbar">
+          <div className="sbr-toolbar__field">
+            <DatePickerField
+              id="sbr-start-date"
+              label="From"
               value={startDate}
-              max={endDate || undefined}
-              onChange={(e) => setStartDate(e.target.value)}
+              onChange={setStartDate}
+              maxDate={endDate || undefined}
+              fullWidth
+              size="small"
+              className="sbr-date-field"
             />
-          </label>
-          <label className="sbr-filter-field">
-            <span className="sbr-filter-field__label">To</span>
-            <input
-              type="date"
-              className="sbr-filter-field__control"
+          </div>
+          <div className="sbr-toolbar__field">
+            <DatePickerField
+              id="sbr-end-date"
+              label="To"
               value={endDate}
-              min={startDate || undefined}
-              onChange={(e) => setEndDate(e.target.value)}
+              onChange={setEndDate}
+              minDate={startDate || undefined}
+              fullWidth
+              size="small"
+              className="sbr-date-field"
             />
-          </label>
-          <label className="sbr-filter-field sbr-filter-field--search">
-            <span className="sbr-filter-field__label">Search</span>
+          </div>
+          <div className="sbr-toolbar__field sbr-toolbar__field--search">
+            <label className="sbr-toolbar__label" htmlFor="sbr-search">
+              Search
+            </label>
             <input
+              id="sbr-search"
               type="search"
-              className="sbr-filter-field__control"
+              className="sbr-search-input"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="State or territory…"
-              aria-label="Search states or territories"
+              placeholder="State…"
             />
-          </label>
-          <div className="sbr-filter-actions">
+          </div>
+          <div className="sbr-toolbar__field sbr-toolbar__field--actions">
             <button
               type="button"
-              className="btn-primary"
+              className="btn-primary sbr-toolbar__btn"
               onClick={load}
               disabled={loading}
             >
@@ -202,11 +214,11 @@ function SalesByRegion() {
             </button>
             <button
               type="button"
-              className="btn-secondary"
+              className="btn-secondary sbr-toolbar__btn"
               onClick={exportCsv}
               disabled={!data || loading}
             >
-              Export CSV
+              Export
             </button>
           </div>
         </div>
@@ -221,30 +233,25 @@ function SalesByRegion() {
       </div>
 
       <div className="sbr-kpis">
-        <article className="ra-kpi ra-kpi--navy">
-          <div className="ra-kpi__top">
-            <span className="ra-kpi__label">Total sales</span>
-          </div>
-          <span className="ra-kpi__value">{loading ? "…" : salesTotal}</span>
+        <article className="sbr-kpi sbr-kpi--navy">
+          <span className="sbr-kpi__label">Total sales</span>
+          <span className="sbr-kpi__value">{loading ? "…" : salesTotal}</span>
         </article>
-        <article className="ra-kpi ra-kpi--teal">
-          <div className="ra-kpi__top">
-            <span className="ra-kpi__label">Orders</span>
-          </div>
-          <span className="ra-kpi__value">{loading ? "…" : data?.total_orders ?? 0}</span>
+        <article className="sbr-kpi sbr-kpi--teal">
+          <span className="sbr-kpi__label">Orders</span>
+          <span className="sbr-kpi__value">{loading ? "…" : data?.total_orders ?? 0}</span>
         </article>
-        <article className="ra-kpi ra-kpi--warm">
-          <div className="ra-kpi__top">
-            <span className="ra-kpi__label">States with sales</span>
-          </div>
-          <span className="ra-kpi__value">{loading ? "…" : data?.region_count ?? 0}</span>
+        <article className="sbr-kpi sbr-kpi--amber">
+          <span className="sbr-kpi__label">States with sales</span>
+          <span className="sbr-kpi__value">{loading ? "…" : data?.region_count ?? 0}</span>
         </article>
       </div>
 
       <div className="sbr-grid">
-        <div className="ra-panel">
-          <div className="ra-panel__head">
-            <h4 className="ra-panel__title">Sales by state (region)</h4>
+        <section className="sbr-card">
+          <div className="sbr-card__head">
+            <h2 className="sbr-card__title">By state</h2>
+            <span className="sbr-card__meta">Region</span>
           </div>
           {loading ? (
             <p className="ra-empty">Loading…</p>
@@ -256,10 +263,11 @@ function SalesByRegion() {
               }
             />
           )}
-        </div>
-        <div className="ra-panel ra-panel--warm">
-          <div className="ra-panel__head">
-            <h4 className="ra-panel__title">Sales by territory</h4>
+        </section>
+        <section className="sbr-card sbr-card--warm">
+          <div className="sbr-card__head">
+            <h2 className="sbr-card__title">By territory</h2>
+            <span className="sbr-card__meta">Zone</span>
           </div>
           {loading ? (
             <p className="ra-empty">Loading…</p>
@@ -273,13 +281,16 @@ function SalesByRegion() {
               }
             />
           )}
-        </div>
+        </section>
       </div>
 
-      <div className="panel sbr-table-panel">
-        <h3 className="sbr-table-title">Region detail</h3>
+      <section className="sbr-card sbr-card--table">
+        <div className="sbr-card__head">
+          <h2 className="sbr-card__title">Region detail</h2>
+          <span className="sbr-card__meta">{regionRows.length} rows</span>
+        </div>
         <div className="sbr-table-wrap">
-          <table className="enterprise-table">
+          <table className="sbr-table">
             <thead>
               <tr>
                 <th>Region / state</th>
@@ -292,7 +303,7 @@ function SalesByRegion() {
             <tbody>
               {!loading && regionRows.length === 0 && (
                 <tr>
-                  <td colSpan={5}>
+                  <td colSpan={5} className="sbr-table__empty">
                     {query
                       ? `No regions match “${query}”.`
                       : "No regional sales for this period. Set region on orders (e.g. Maharashtra)."}
@@ -301,17 +312,19 @@ function SalesByRegion() {
               )}
               {regionRows.map((row, index) => (
                 <tr key={`${row.label}-${row.currency}-${index}`}>
-                  <td>{row.label}</td>
+                  <td className="sbr-table__name">{row.label}</td>
                   <td>{row.currency || "—"}</td>
                   <td>{formatMoney(row.total_sales, row.currency || currency)}</td>
                   <td>{row.order_count}</td>
-                  <td>{row.pct_of_total != null ? `${row.pct_of_total}%` : "—"}</td>
+                  <td>
+                    <span className="sbr-pct">{row.pct_of_total != null ? `${row.pct_of_total}%` : "—"}</span>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
