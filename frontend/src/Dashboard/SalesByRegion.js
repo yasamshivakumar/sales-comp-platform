@@ -119,13 +119,20 @@ function SalesByRegion() {
 
   const exportCsv = () => {
     if (!data) return;
-    let csv = "Section,Label,Currency,Total Sales,Order Count,Pct of Total\n";
-    regionRows.forEach((row) => {
-      csv += `Region,"${row.label}",${row.currency || ""},${row.total_sales},${row.order_count},${row.pct_of_total || 0}\n`;
-    });
-    territoryRows.forEach((row) => {
-      csv += `Territory,"${row.label}",${row.currency || ""},${row.total_sales},${row.order_count},${row.pct_of_total || 0}\n`;
-    });
+    const combinedRows = (data.by_region_territory || []).filter(
+      (row) => matchesSearch(row.region, query) || matchesSearch(row.territory, query)
+    );
+    let csv = "Region,Territory,Currency,Total Sales,Order Count,Pct of Total\n";
+    if (combinedRows.length) {
+      combinedRows.forEach((row) => {
+        csv += `"${row.region}","${row.territory}",${row.currency || ""},${row.total_sales},${row.order_count},${row.pct_of_total || 0}\n`;
+      });
+    } else {
+      // Older backend without the combined breakdown: fall back to region rows.
+      regionRows.forEach((row) => {
+        csv += `"${row.label}",,${row.currency || ""},${row.total_sales},${row.order_count},${row.pct_of_total || 0}\n`;
+      });
+    }
     const blob = new Blob([csv], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");

@@ -1760,6 +1760,26 @@ def sales_by_region_report(request):
             }
         )
 
+    # Combined breakdown so exports can show each territory next to its region.
+    by_region_territory_raw = (
+        orders.values("region", "territory__name", "currency")
+        .annotate(
+            total_sales=Sum("sales_amount"),
+            order_count=Count("id"),
+        )
+        .order_by("region", "-total_sales")
+    )
+    by_region_territory = [
+        {
+            "region": (row["region"] or "").strip() or "Unspecified",
+            "territory": (row["territory__name"] or "").strip() or "Unspecified",
+            "currency": normalize_currency(row["currency"]),
+            "total_sales": float(row["total_sales"] or 0),
+            "order_count": row["order_count"],
+        }
+        for row in by_region_territory_raw
+    ]
+
     currency_rows = list(
         orders.values("currency").annotate(
             total=Sum("sales_amount"),
@@ -1792,6 +1812,8 @@ def sales_by_region_report(request):
         row["pct_of_total"] = round((row["total_sales"] / primary_total) * 100, 1) if primary_total else 0
     for row in by_territory:
         row["pct_of_total"] = round((row["total_sales"] / primary_total) * 100, 1) if primary_total else 0
+    for row in by_region_territory:
+        row["pct_of_total"] = round((row["total_sales"] / primary_total) * 100, 1) if primary_total else 0
 
     return Response(
         {
@@ -1801,6 +1823,7 @@ def sales_by_region_report(request):
             "totals_by_currency": totals_by_currency,
             "by_region": by_region,
             "by_territory": by_territory,
+            "by_region_territory": by_region_territory,
             "start_date": str(start_date) if start_date else None,
             "end_date": str(end_date) if end_date else None,
             "business_group": effective_group or "",

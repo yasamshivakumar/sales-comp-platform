@@ -464,35 +464,71 @@ function ReportsAnalytics({ compact = false }) {
       ? (parseFloat(topEarners[0].total) / parseFloat(summary.total_commission)) * 100
       : 0;
 
-  const exportCsv = () => {
-    let csv = "Section,Metric,Value\n";
-    csv += `Summary,Total Commission,${summary?.total_commission || 0}\n`;
-    csv += `Summary,Count,${summary?.total_count || 0}\n`;
-    csv += `Sales,Total Sales,${sales?.total_sales || 0}\n`;
-    (periodData?.data || []).forEach((row) => {
-      csv += `Period,${row.period},${row.total}\n`;
-    });
-    (advanced?.by_territory || []).forEach((row) => {
-      csv += `Territory,${row.label},${row.total_commission}\n`;
-    });
-    (advanced?.top_growth_reps || []).forEach((row) => {
-      csv += `Growth,${row.employee_name},${row.growth_pct}\n`;
-    });
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `analytics-dashboard-${new Date().toISOString().split("T")[0]}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-  };
-
   const tableRows =
     viewMode === "reporting"
       ? earnings?.earnings || []
       : leaderboard.length
         ? leaderboard
         : topEarners.slice(0, 15);
+
+  const exportCsv = () => {
+    const cell = (value) => {
+      const text = value == null ? "" : String(value);
+      const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
+      return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+    };
+    const line = (...values) => `${values.map(cell).join(",")}\n`;
+
+    let csv = "";
+    csv += line("Performance overview export");
+    csv += line("Date range", `${startDate || "All"} to ${endDate || "All"}`);
+    csv += line("Business group", trendScope);
+    csv += line("Period", periodLabels[period] || period);
+    if (debouncedEmployeeSearch.trim()) {
+      csv += line("Employee search", debouncedEmployeeSearch.trim());
+    }
+    csv += "\n";
+
+    csv += line("Summary");
+    csv += line("Total commission", summary?.total_commission || 0);
+    csv += line("Payout records", summary?.payout_record_count ?? summary?.total_count ?? 0);
+    csv += line("Total sales", sales?.total_sales || 0);
+    csv += line("Active reps", summary?.active_reps_count ?? "");
+    if (advanced?.avg_attainment_pct != null) {
+      csv += line("Avg attainment %", advanced.avg_attainment_pct);
+    }
+    csv += "\n";
+
+    csv += line(viewMode === "reporting" ? "All earnings" : "Leaderboard");
+    csv += line("Name", "Email / ID", "Territory", "Amount", "Currency", "Count");
+    tableRows.forEach((row) => {
+      csv += line(
+        row.employee_name || row.employee__name || row.employee_id || "",
+        row.employee_email || row.employee__email || row.employee_id || "",
+        row.territory || "",
+        row.total_commission ?? row.total ?? row.total_earnings ?? row.total_sales ?? 0,
+        row.currency || row.personal_currency || primaryCurrencyFromPayload(summary) || "",
+        row.deal_count ?? row.count ?? row.commission_count ?? row.order_count ?? ""
+      );
+    });
+    csv += "\n";
+
+    if ((periodData?.data || []).length) {
+      csv += line("Period breakdown");
+      csv += line("Period", "Commission", "Count");
+      periodData.data.forEach((row) => {
+        csv += line(row.period, row.total, row.count);
+      });
+    }
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `performance-overview-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
 
   const tableLimited =
     viewMode === "reporting"
