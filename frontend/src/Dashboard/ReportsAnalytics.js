@@ -419,8 +419,12 @@ function ReportsAnalytics({ compact = false }) {
 
   useEffect(() => {
     loadDashboard();
+  }, [loadDashboard]);
+
+  // Employee search only refreshes the tables, never the full dashboard.
+  useEffect(() => {
     loadEmployeeTables();
-  }, [loadDashboard, loadEmployeeTables]);
+  }, [loadEmployeeTables]);
 
   const handleRefresh = () => {
     loadDashboard();
