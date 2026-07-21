@@ -500,15 +500,14 @@ function ReportsAnalytics({ compact = false }) {
     csv += "\n";
 
     csv += line(viewMode === "reporting" ? "All earnings" : "Leaderboard");
-    csv += line("Name", "Email / ID", "Territory", "Amount", "Currency", "Count");
+    csv += line("Name", "Email / ID", "Territory", "Amount", "Currency");
     tableRows.forEach((row) => {
       csv += line(
         row.employee_name || row.employee__name || row.employee_id || "",
         row.employee_email || row.employee__email || row.employee_id || "",
         row.territory || "",
         row.total_commission ?? row.total ?? row.total_earnings ?? row.total_sales ?? 0,
-        row.currency || row.personal_currency || primaryCurrencyFromPayload(summary) || "",
-        row.deal_count ?? row.count ?? row.commission_count ?? row.order_count ?? ""
+        row.currency || row.personal_currency || primaryCurrencyFromPayload(summary) || ""
       );
     });
     csv += "\n";
@@ -924,13 +923,12 @@ function ReportsAnalytics({ compact = false }) {
                     <th>Email / ID</th>
                     {viewMode === "analytics" && leaderboard.length > 0 && <th>Territory</th>}
                     <th align="right">Amount</th>
-                    <th align="right">Count</th>
                   </tr>
                 </thead>
                 <tbody>
                   {tableRows.length === 0 ? (
                     <tr>
-                      <td colSpan={viewMode === "analytics" && leaderboard.length > 0 ? 6 : 4} style={{ color: "#64748b" }}>
+                      <td colSpan={viewMode === "analytics" && leaderboard.length > 0 ? 5 : 3} style={{ color: "#64748b" }}>
                         No data — adjust dates and refresh.
                       </td>
                     </tr>
@@ -962,9 +960,6 @@ function ReportsAnalytics({ compact = false }) {
                             row.currency || row.personal_currency || primaryCurrencyFromPayload(summary),
                             { compact }
                           )}
-                        </td>
-                        <td align="right">
-                          {row.deal_count || row.count || row.commission_count || row.order_count || "—"}
                         </td>
                       </tr>
                     ))
