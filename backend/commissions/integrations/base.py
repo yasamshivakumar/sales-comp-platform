@@ -12,10 +12,21 @@ class ConnectorError(Exception):
 
 
 def assert_http_url(url):
-    """Reject non-HTTP(S) schemes (file:, data:, etc.) before urlopen."""
+    """Reject non-HTTP(S) schemes and non-public hosts before urlopen.
+
+    Integration URLs are tenant-admin supplied, so without the host check a
+    tenant could point a connector at localhost, RFC1918 ranges, or the cloud
+    metadata endpoint (169.254.169.254) to read internal services (SSRF).
+    """
+    from ..security import is_public_host
+
     parsed = urllib.parse.urlparse(str(url or ""))
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         raise ConnectorError("Only http(s) URLs are allowed for CRM requests")
+    if not is_public_host(parsed.hostname):
+        raise ConnectorError(
+            "CRM URL host is not allowed (private, loopback, or unresolvable)"
+        )
     return url
 
 
@@ -35,6 +46,18 @@ class BaseConnector:
         raise NotImplementedError
 
 
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Re-validate every redirect target so a public URL cannot bounce
+    the request to an internal/private address."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        assert_http_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_opener = urllib.request.build_opener(_SafeRedirectHandler())
+
+
 def _http_request(method, url, headers=None, body=None, timeout=60):
     assert_http_url(url)
     data = None
@@ -47,7 +70,7 @@ def _http_request(method, url, headers=None, body=None, timeout=60):
         method=method.upper(),
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec B310
+        with _opener.open(request, timeout=timeout) as response:  # nosec B310
             raw = response.read().decode("utf-8")
             if not raw:
                 return {}

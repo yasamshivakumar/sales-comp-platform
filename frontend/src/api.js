@@ -69,6 +69,34 @@ export function clearAuthStorage() {
   window.dispatchEvent(new CustomEvent("auth-changed"));
 }
 
+/**
+ * Best-effort server-side token revocation so a copied token cannot be
+ * replayed after logout. keepalive lets it complete during navigation.
+ */
+export function revokeServerSession() {
+  const token = sessionStorage.getItem("token");
+  if (!token) return;
+  try {
+    fetch(`${apiBaseURL}/auth/logout/`, {
+      method: "POST",
+      keepalive: true,
+      headers: {
+        Authorization: `Token ${token}`,
+        "Content-Type": "application/json",
+      },
+    }).catch(() => {});
+  } catch {
+    // Network failure must never block the client-side logout.
+  }
+}
+
+/** Full logout: revoke the token server-side, clear storage, go to login. */
+export function performLogout() {
+  revokeServerSession();
+  clearAuthStorage();
+  window.location.href = "/login";
+}
+
 function clearLegacyLocalAuthStorage() {
   AUTH_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
 }
@@ -103,6 +131,7 @@ export function logoutDueToSessionExpiry(reason = "session-expired") {
     clearTimeout(logoutTimer);
     logoutTimer = null;
   }
+  revokeServerSession();
   clearAuthStorage();
   window.dispatchEvent(new CustomEvent(reason));
   if (!isPublicPath()) {

@@ -19,10 +19,19 @@ function OrderUpload({ onUploadSuccess }) {
   const inputRef = useRef(null);
   const { success, error, warning } = useToast();
 
+  const MAX_UPLOAD_MB = 10;
+
   const pickFile = (selected) => {
     if (!selected) return;
     if (!selected.name.endsWith(".csv")) {
       warning({ title: "Invalid file", message: "Please select a CSV file to import orders." });
+      return;
+    }
+    if (selected.size > MAX_UPLOAD_MB * 1024 * 1024) {
+      warning({
+        title: "File too large",
+        message: `CSV imports are limited to ${MAX_UPLOAD_MB} MB. Split the file and retry.`,
+      });
       return;
     }
     setFile(selected);

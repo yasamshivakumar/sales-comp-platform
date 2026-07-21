@@ -37,7 +37,11 @@ class DeployErrorMiddleware:
             return self.get_response(request)
         except Exception as exc:
             logger.exception("Unhandled request error on %s", request.path)
-            if os.getenv("SHOW_DEPLOY_ERRORS", "").lower() in ("true", "1", "yes"):
+            # Only ever return tracebacks when DEBUG is also on: prevents an
+            # accidentally-set env flag from leaking stack traces in prod.
+            from django.conf import settings
+
+            if settings.DEBUG and os.getenv("SHOW_DEPLOY_ERRORS", "").lower() in ("true", "1", "yes"):
                 return JsonResponse(
                     {
                         "error": str(exc),
@@ -79,4 +83,25 @@ class RequestIdMiddleware:
         expires_at = getattr(request, "session_expires_at", None)
         if expires_at:
             response["X-Session-Expires-At"] = expires_at
+        return response
+
+
+class SecurityHeadersMiddleware:
+    """Add security headers not covered by Django's SecurityMiddleware."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        response.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        # API responses are JSON; a restrictive CSP is safe there and stops
+        # any accidental HTML rendering from loading scripts. The Django
+        # admin is excluded because it relies on its own inline assets.
+        if request.path.startswith("/api/"):
+            response.setdefault(
+                "Content-Security-Policy",
+                "default-src 'self'; style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data:; frame-ancestors 'none'",
+            )
         return response

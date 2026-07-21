@@ -42,6 +42,7 @@ from .views import (
     email_login,
     change_password,
     session_status,
+    logout,
     get_user_profile,
     employee_directory,
     employee_user_detail,
@@ -218,6 +219,7 @@ urlpatterns = [
     path("auth/oidc-exchange/", oidc_token_exchange, name="auth-oidc-exchange"),
     path("auth/change-password/", change_password, name="auth-change-password"),
     path("auth/session/", session_status, name="auth-session"),
+    path("auth/logout/", logout, name="auth-logout"),
     path("user-profile/", get_user_profile, name="user-profile"),
     path(
         "compensation-plans/",

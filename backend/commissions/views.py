@@ -82,11 +82,37 @@ def _apply_onboarding_password(django_user, user_created):
 class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = Employee.objects.all()
     serializer_class = EmployeeSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return filter_queryset_by_organization(
+            Employee.objects.all(),
+            getattr(self.request, "organization", None),
+        )
+
+    def perform_create(self, serializer):
+        require_admin(self.request)
+        serializer.save(organization=getattr(self.request, "organization", None))
+
+    def perform_update(self, serializer):
+        require_admin(self.request)
+        serializer.save(organization=getattr(self.request, "organization", None))
+
+    def perform_destroy(self, instance):
+        require_admin(self.request)
+        instance.delete()
 
 
 class SaleViewSet(viewsets.ModelViewSet):
     queryset = Sale.objects.all()
     serializer_class = SaleSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return filter_queryset_by_organization(
+            Sale.objects.all(),
+            getattr(self.request, "organization", None),
+        )
 
 
 class CommissionViewSet(viewsets.ModelViewSet):
@@ -146,6 +172,20 @@ class CommissionViewSet(viewsets.ModelViewSet):
 
         return queryset.order_by("-calculated_at", "-id")
 
+    def perform_create(self, serializer):
+        # Commissions are engine-generated; manual writes are a finance/admin
+        # action. Without this a rep could POST arbitrary commission_amounts.
+        require_finance_or_admin(self.request)
+        serializer.save(organization=getattr(self.request, "organization", None))
+
+    def perform_update(self, serializer):
+        require_finance_or_admin(self.request)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        require_finance_or_admin(self.request)
+        instance.delete()
+
 
 # ====================================================
 # SC Rate Table ViewSet
@@ -166,7 +206,11 @@ class SCRateTableViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        queryset = SCRateTable.objects.all().order_by('compensation_plan', 'sequence', 'from_amount')
+        queryset = filter_queryset_by_organization(
+            SCRateTable.objects.all(),
+            getattr(self.request, "organization", None),
+            field="compensation_plan__organization",
+        ).order_by('compensation_plan', 'sequence', 'from_amount')
         
         # Filter by compensation plan if provided
         compensation_plan_id = self.request.query_params.get('compensation_plan', None)
@@ -201,7 +245,11 @@ class SCFlatRateTableViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        queryset = SCFlatRateTable.objects.all().order_by('compensation_plan')
+        queryset = filter_queryset_by_organization(
+            SCFlatRateTable.objects.all(),
+            getattr(self.request, "organization", None),
+            field="compensation_plan__organization",
+        ).order_by('compensation_plan')
         
         # Filter by compensation plan if provided
         compensation_plan_id = self.request.query_params.get('compensation_plan', None)
@@ -317,6 +365,18 @@ def invite_accept(request, token):
     if password != confirm_password:
         return Response(
             {"error": "Password and confirmation do not match."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Enforce the configured AUTH_PASSWORD_VALIDATORS on invite acceptance too.
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError as DjangoValidationError
+
+    try:
+        validate_password(password)
+    except DjangoValidationError as exc:
+        return Response(
+            {"error": " ".join(exc.messages)},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -461,7 +521,22 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
     serializer_class = UserProfileSerializer
     permission_classes = [IsAuthenticated]
 
+    def get_queryset(self):
+        # Tenant isolation: only ever list the caller's own organization.
+        return filter_queryset_by_organization(
+            UserProfile.objects.all().order_by('first_name'),
+            getattr(self.request, "organization", None),
+        )
+
+    def list(self, request, *args, **kwargs):
+        # User Setup is an admin screen; reps must not enumerate the org roster.
+        require_admin(request)
+        return super().list(request, *args, **kwargs)
+
     def create(self, request, *args, **kwargs):
+        # Only admins may create/update profiles. Without this, any user could
+        # POST their own email with role=Admin and escalate their privileges.
+        require_admin(request)
 
         try:
             data = request.data.copy()
@@ -479,7 +554,10 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            from .field_rules import validate_user_profile_fields
+            from .field_rules import (
+                find_user_profile_duplicates,
+                validate_user_profile_fields,
+            )
             from rest_framework.exceptions import ValidationError as DRFValidationError
 
             try:
@@ -521,83 +599,52 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
             if not username:
                 username = email
 
-            # ---------------------------------------------------
-            # Create / Update UserProfile
-            # ---------------------------------------------------
+            employee_id_val = str(data.get('employee_id', '')).strip()
             org = getattr(request, "organization", None)
-            lookup = {"email": email}
-            if org:
-                lookup["organization"] = org
 
-            profile, created = UserProfile.objects.update_or_create(
-                **lookup,
-                defaults={
-                    "organization": org,
-                    # User
-                    'enable_login': enable_login,
-                    'name': str(
-                        data.get('name', '')
-                    ).strip(),
-
-                    'role': str(
-                        data.get('role', 'Sales Rep')
-                    ).strip(),
-
-                    # People
-                    'username': username,
-
-                    'first_name': str(
-                        data.get('first_name', '')
-                    ).strip(),
-
-                    'last_name': str(
-                        data.get('last_name', '')
-                    ).strip(),
-
-                    'prefix': str(
-                        data.get('prefix', '')
-                    ).strip(),
-
-                    'employee_id': str(
-                        data.get('employee_id', '')
-                    ).strip(),
-
-                    'hire_date': data.get('hire_date'),
-
-                    'personal_target': personal_target,
-
-                    'personal_currency': str(
-                        data.get('personal_currency', 'INR')
-                    ).strip(),
-
-                    'business_group': str(
-                        data.get('business_group', 'India')
-                    ).strip(),
-
-                    # Region (Indian state / market) — accept region or market
-                    'market': str(
-                        data.get('region') or data.get('market') or ''
-                    ).strip(),
-
-                    # Title
-                    'title': str(
-                        data.get('title', '')
-                    ).strip(),
-
-                    'pay_period_type': str(
-                        data.get('pay_period_type', 'Monthly')
-                    ).strip(),
-
-                    # Position
-                    'position_name': str(
-                        data.get('position_name', '')
-                    ).strip(),
-
-                    'position_title': str(
-                        data.get('position_title', '')
-                    ).strip(),
-                }
+            # Reject duplicate email / employee_id within the org (create-only).
+            dup_errors = find_user_profile_duplicates(
+                org, email, employee_id_val
             )
+            if dup_errors:
+                return Response(
+                    {"error": " ".join(dup_errors)},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # ---------------------------------------------------
+            # Create UserProfile
+            # ---------------------------------------------------
+            profile = UserProfile.objects.create(
+                email=email,
+                organization=org,
+                enable_login=enable_login,
+                name=str(data.get('name', '')).strip(),
+                role=str(data.get('role', 'Sales Rep')).strip(),
+                username=username,
+                first_name=str(data.get('first_name', '')).strip(),
+                last_name=str(data.get('last_name', '')).strip(),
+                prefix=str(data.get('prefix', '')).strip(),
+                employee_id=employee_id_val,
+                hire_date=data.get('hire_date'),
+                personal_target=personal_target,
+                personal_currency=str(
+                    data.get('personal_currency', 'INR')
+                ).strip(),
+                business_group=str(
+                    data.get('business_group', 'India')
+                ).strip(),
+                market=str(
+                    data.get('region') or data.get('market') or ''
+                ).strip(),
+                title=str(data.get('title', '')).strip(),
+                pay_period_type=str(
+                    data.get('pay_period_type', 'Monthly')
+                ).strip(),
+                position_name=str(data.get('position_name', '')).strip(),
+                position_title=str(data.get('position_title', '')).strip(),
+            )
+            created = True
 
             territory_raw = data.get("territory") or data.get("territory_id")
             if territory_raw not in ("", None):
@@ -619,27 +666,24 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
                 profile.save(update_fields=["territory"])
 
             # ---------------------------------------------------
-            # Create Django Auth User
+            # Login: invite-only activation (no password until accepted)
             # ---------------------------------------------------
+            invite_status = ""
+            invite_link = ""
+            invite_error = ""
             if enable_login:
+                from .invites import build_invite_url, create_user_invite
 
-                django_user, user_created = User.objects.get_or_create(
-                    username=username,
-                    defaults={
-                        'email': email,
-                        'first_name': profile.first_name,
-                        'last_name': profile.last_name,
-                        'is_active': True,
-                    }
+                _invite, token, sent, invite_error = create_user_invite(
+                    profile, invited_by=request.user
                 )
-
-                django_user.email = email
-                django_user.first_name = profile.first_name
-                django_user.last_name = profile.last_name
-                django_user.is_active = True
-
-                _apply_onboarding_password(django_user, user_created)
-                django_user.save()
+                if sent:
+                    invite_status = "sent"
+                elif token:
+                    invite_status = "created"
+                    invite_link = build_invite_url(token)
+                else:
+                    invite_status = "email_failed"
 
             # ---------------------------------------------------
             # Hierarchy Relationship
@@ -654,12 +698,13 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
 
             if parent_participant and child_participant:
 
+                # Scope by org so hierarchy cannot reference another tenant's profiles.
                 parent_profile = UserProfile.objects.filter(
-                    id=parent_participant
+                    id=parent_participant, organization=org
                 ).first()
 
                 child_profile = UserProfile.objects.filter(
-                    id=child_participant
+                    id=child_participant, organization=org
                 ).first()
 
                 if parent_profile and child_profile:
@@ -674,9 +719,16 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
                     )
 
             serializer = self.get_serializer(profile)
+            payload = dict(serializer.data)
+            if invite_status:
+                payload["invite_status"] = invite_status
+            if invite_link:
+                payload["invite_link"] = invite_link
+            if invite_error:
+                payload["invite_error"] = invite_error
 
             return Response(
-                serializer.data,
+                payload,
                 status=status.HTTP_201_CREATED
                 if created
                 else status.HTTP_200_OK
@@ -696,6 +748,7 @@ class UserProfileUploadView(APIView):
     throttle_scope = "upload"
 
     def post(self, request):
+        require_admin(request)
         if "file" not in request.FILES:
             return Response(
                 {"error": "No file uploaded"},
@@ -716,14 +769,12 @@ class UserProfileUploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        from .security import CsvValidationError, read_csv_upload
+
         try:
-            decoded_file = uploaded_file.read().decode("utf-8")
-            rows = list(csv.DictReader(io.StringIO(decoded_file)))
-        except Exception as exc:
-            return Response(
-                {"error": f"Error reading CSV file: {exc}"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            decoded_file, rows = read_csv_upload(uploaded_file)
+        except CsvValidationError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         if should_use_async_import(len(rows)):
             from .tasks import process_import_job_task
@@ -780,18 +831,49 @@ class UserProfileUploadView(APIView):
 
 
 class HierarchyRelationshipListCreateView(generics.ListCreateAPIView):
-    queryset = HierarchyRelationship.objects.filter(
-        is_active=True
-    ).order_by('parent_participant') 
-
     serializer_class = HierarchyRelationshipSerializer
     permission_classes = [IsAuthenticated]
 
+    def get_queryset(self):
+        # HierarchyRelationship has no org FK; scope through the participants.
+        return filter_queryset_by_organization(
+            HierarchyRelationship.objects.filter(is_active=True),
+            getattr(self.request, "organization", None),
+            field="child_participant__organization",
+        ).order_by('parent_participant')
+
+    def perform_create(self, serializer):
+        require_admin(self.request)
+        org = getattr(self.request, "organization", None)
+        relationship = serializer.validated_data
+        for side in ("parent_participant", "child_participant"):
+            profile = relationship.get(side)
+            if profile is not None and org is not None and profile.organization_id != org.id:
+                raise PermissionDenied(
+                    "Hierarchy participants must belong to your organization"
+                )
+        serializer.save()
+
 
 class CompensationTierListCreateView(generics.ListCreateAPIView):
-    queryset = CompensationTier.objects.all().order_by('plan', 'min_sales')
     serializer_class = CompensationTierSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # CompensationTier has no org FK; scope through its plan.
+        return filter_queryset_by_organization(
+            CompensationTier.objects.all(),
+            getattr(self.request, "organization", None),
+            field="plan__organization",
+        ).order_by('plan', 'min_sales')
+
+    def perform_create(self, serializer):
+        require_admin(self.request)
+        org = getattr(self.request, "organization", None)
+        plan = serializer.validated_data.get("plan")
+        if plan is not None and org is not None and plan.organization_id != org.id:
+            raise PermissionDenied("Tier plan must belong to your organization")
+        serializer.save()
 
 
 def _orders_queryset_for_request(request):
@@ -855,35 +937,13 @@ class OrderListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        """
-        Filter orders based on user role:
-        - Admin: Can see all orders
-        - Regular employee: Can only see their own orders
-        """
-        user = self.request.user
-        queryset = filter_queryset_by_organization(
-            Order.objects.all().order_by("-order_date"),
-            getattr(self.request, "organization", None),
-        )
-
-        try:
-            user_profile = UserProfile.objects.get(email=user.email)
-            is_admin = user_profile.role.lower() in ['admin', 'administrator']
-            
-            if is_admin:
-                # Admin can see all orders
-                return queryset
-            else:
-                # Employee can only see their own orders
-                if user_profile.employee_id:
-                    return queryset.filter(employee_id=user_profile.employee_id)
-                else:
-                    return queryset.filter(employee_email=user.email)
-        except UserProfile.DoesNotExist:
-            # Fallback: show nothing if profile doesn't exist
-            return queryset.none()
+        return _orders_queryset_for_request(self.request)
 
     def perform_create(self, serializer):
+        # Matches the documented access control (and OrderDetailView updates):
+        # only admins create orders; reps would otherwise be able to inject
+        # orders that generate commissions for themselves.
+        require_admin(self.request)
         order = serializer.save(
             organization=getattr(self.request, "organization", None)
         )
@@ -947,16 +1007,14 @@ class OrderUploadView(APIView):
             )
 
         # ---------------------------------------------------
-        # Read CSV file
+        # Read CSV file (size/row limits enforced)
         # ---------------------------------------------------
+        from .security import CsvValidationError, read_csv_upload
+
         try:
-            decoded_file = uploaded_file.read().decode("utf-8")
-            rows = list(csv.DictReader(io.StringIO(decoded_file)))
-        except Exception as e:
-            return Response(
-                {"error": f"Error reading CSV file: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            decoded_file, rows = read_csv_upload(uploaded_file)
+        except CsvValidationError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         organization = getattr(request, "organization", None)
         if not organization:
@@ -1052,40 +1110,77 @@ def email_login(request):
         "user_id": 1
     }
     """
+    from .security import (
+        clear_login_failures,
+        client_ip,
+        login_locked_out,
+        record_login_failure,
+    )
+
     email = request.data.get('email', '').strip().lower()
     password = request.data.get('password')
-    
+    ip = client_ip(request)
+    user_agent = (request.META.get("HTTP_USER_AGENT") or "")[:200]
+
     if not email or not password:
         return Response(
             {'error': 'Email and password are required'},
             status=status.HTTP_400_BAD_REQUEST
         )
-    
-    try:
-        # Try to get user by email field first
-        user = User.objects.get(email=email)
-        
-    except User.DoesNotExist:
-        # Fallback: try to get user by username (which might be email)
-        try:
-            user = User.objects.get(username=email)
-        except User.DoesNotExist:
-            logger.warning(f"Login attempt with non-existent email: {email}")
-            record_audit(request, "login_failed", {"email": email})
+
+    # Account lockout: block after repeated failures for this email or IP.
+    if login_locked_out(email, ip):
+        logger.warning("Login locked out for %s from %s", email, ip)
+        record_audit(
+            request,
+            "login_locked_out",
+            {"email": email, "ip": ip, "user_agent": user_agent},
+        )
+        return Response(
+            {'error': 'Too many failed attempts. Try again in a few minutes.'},
+            status=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+
+    user = (
+        User.objects.filter(email=email).first()
+        or User.objects.filter(username=email).first()
+    )
+
+    # Pending invite: block login until the invite is accepted / password set.
+    if user is not None:
+        from .invites import user_has_pending_invite
+
+        if user_has_pending_invite(user):
             return Response(
-                {'error': 'Invalid credentials'},
-                status=status.HTTP_401_UNAUTHORIZED
+                {
+                    "error": (
+                        "Please accept your invite and set a password "
+                        "before signing in."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
-    
-    # Check password
-    if not user.check_password(password):
-        logger.warning(f"Failed login attempt for email: {email}")
-        record_audit(request, "login_failed", {"email": email})
+
+    # Uniform failure path for unknown user and wrong password so responses
+    # (and password hashing time) cannot be used to enumerate accounts.
+    if user is None or not user.check_password(
+        password if user is not None else "-"
+    ):
+        if user is None:
+            # Burn a hash to equalize timing with the wrong-password branch.
+            User().set_password(password)
+        record_login_failure(email, ip)
+        logger.warning("Failed login for %s from %s", email, ip)
+        record_audit(
+            request,
+            "login_failed",
+            {"email": email, "ip": ip, "user_agent": user_agent},
+        )
         return Response(
             {'error': 'Invalid credentials'},
             status=status.HTTP_401_UNAUTHORIZED
         )
-    
+
     # Check if user is active
     if not user.is_active:
         return Response(
@@ -1095,12 +1190,17 @@ def email_login(request):
     
     try:
         token = issue_user_token(user)
+        clear_login_failures(email, ip)
 
         # Get user profile for additional info
         user_profile = UserProfile.objects.filter(email=user.email).first()
 
-        logger.info(f"Successful login for email: {email}")
-        record_audit(request, "login_success", {"user_id": user.id, "email": email})
+        logger.info("Successful login for %s from %s", email, ip)
+        record_audit(
+            request,
+            "login_success",
+            {"user_id": user.id, "email": email, "ip": ip, "user_agent": user_agent},
+        )
 
         return Response({
             'message': 'Login successful',
@@ -1155,7 +1255,19 @@ def change_password(request):
             {'error': 'Password must be at least 8 characters long'},
             status=status.HTTP_400_BAD_REQUEST
         )
-    
+
+    # Enforce the configured AUTH_PASSWORD_VALIDATORS (common/numeric/similarity).
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError as DjangoValidationError
+
+    try:
+        validate_password(new_password, user=user)
+    except DjangoValidationError as exc:
+        return Response(
+            {'error': ' '.join(exc.messages)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     try:
         # Verify old password
         if not user.check_password(old_password):
@@ -1199,6 +1311,18 @@ def session_status(request):
     if not expires and getattr(request, "auth", None) is not None:
         expires = token_expires_at_iso(request.auth)
     return Response({"token_expires_at": expires})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def logout(request):
+    """
+    Server-side logout: revoke the caller's API token so it cannot be
+    replayed after the client clears its own storage.
+    """
+    Token.objects.filter(user=request.user).delete()
+    record_audit(request, "logout", {"user_id": request.user.id})
+    return Response({"message": "Logged out"})
 
 
 # =====================================================
@@ -1694,18 +1818,18 @@ def employee_earnings_report(request):
     from django.db.models import Sum, Count
     
     user = request.user
-    try:
-        user_profile = UserProfile.objects.get(email=user.email)
-        is_admin = user_profile.role.lower() in ['admin', 'administrator']
-    except:
-        is_admin = False
-    
-    # Get commissions
-    commissions = Commission.objects.all()
-    
+    user_profile = get_request_user_profile(request)
+    is_admin = user_is_admin(request)
+
+    # Tenant isolation: earnings only ever cover the caller's organization.
+    commissions = filter_queryset_by_organization(
+        Commission.objects.all(),
+        getattr(request, "organization", None),
+    )
+
     if not is_admin:
         possible_emails = [user.email]
-        if user_profile.employee_id:
+        if user_profile and user_profile.employee_id:
             possible_emails.append(f"{user_profile.employee_id}@company.com")
         commissions = commissions.filter(employee__email__in=possible_emails)
     
@@ -1829,13 +1953,22 @@ def period_analytics_report(request):
 # =====================================================
 
 def _commission_queryset_for_export(request):
-    """Base queryset for payroll export (admin/finance: all; employee: own)."""
+    """Base queryset for payroll export (admin/finance: own org; employee: own rows)."""
+    from django.db.models import Q
+
+    org = getattr(request, "organization", None)
     queryset = Commission.objects.select_related(
         "employee",
         "sale",
         "sale__order",
         "compensation_plan",
     )
+    if org is None:
+        return queryset.none()
+    # Tenant isolation first: finance/admin only ever export their own org.
+    queryset = queryset.filter(
+        Q(organization=org) | Q(sale__order__organization=org)
+    ).distinct()
     if user_can_view_finance_data(request):
         return queryset
     profile = get_request_user_profile(request)
@@ -1938,10 +2071,12 @@ def commission_payroll_export(request):
         "approved_at",
     ])
 
+    from .security import sanitize_csv_row
+
     for comm in queryset.order_by("sale__order__order_date", "employee__name"):
         order = comm.sale.order if comm.sale_id and comm.sale.order_id else None
         profile = UserProfile.objects.filter(email=comm.employee.email).first()
-        writer.writerow([
+        writer.writerow(sanitize_csv_row([
             comm.id,
             profile.employee_id if profile else "",
             comm.employee.name,
@@ -1954,7 +2089,7 @@ def commission_payroll_export(request):
             comm.compensation_plan.plan_name if comm.compensation_plan_id else "",
             comm.calculated_at.isoformat() if comm.calculated_at else "",
             comm.approved_at.isoformat() if comm.approved_at else "",
-        ])
+        ]))
 
     response = HttpResponse(buffer.getvalue(), content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="payroll_commissions.csv"'
@@ -1979,7 +2114,11 @@ def recalculate_commissions_view(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    force = bool(request.data.get("force", False))
+    force_raw = request.data.get("force", False)
+    if isinstance(force_raw, str):
+        force = force_raw.strip().lower() in ("true", "1", "yes")
+    else:
+        force = bool(force_raw)
     stats = recalculate_orders_in_range(
         start_date,
         end_date,

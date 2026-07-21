@@ -204,6 +204,10 @@ function UserSetup() {
       warning("Please select a CSV or Excel file");
       return;
     }
+    if (file.size > 10 * 1024 * 1024) {
+      warning("CSV imports are limited to 10 MB. Split the file and retry.");
+      return;
+    }
 
     const formData = new FormData();
     formData.append("file", file);

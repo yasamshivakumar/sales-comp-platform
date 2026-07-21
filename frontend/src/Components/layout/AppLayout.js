@@ -38,9 +38,9 @@ import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import api, {
-  clearAuthStorage,
   enforceValidSession,
   getAuthSessionValue,
+  performLogout,
 } from "../../api";
 import { useTheme as useAppTheme } from "../../ThemeContext";
 import { enterprise } from "../../theme/muiTheme";
@@ -449,8 +449,7 @@ function AppLayout({ children }) {
   }, [location.pathname, menuItems]);
 
   const logout = () => {
-    clearAuthStorage();
-    window.location.href = "/login";
+    performLogout();
   };
 
   const openProfileDialog = () => {

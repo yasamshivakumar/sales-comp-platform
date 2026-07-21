@@ -495,7 +495,9 @@ def employee_statement_export(request):
             and comm.employee.email == profile.email
             else "order"
         )
-        writer.writerow([
+        from .security import sanitize_csv_row
+
+        writer.writerow(sanitize_csv_row([
             comm.id,
             order.order_id if order else "Monthly summary",
             order.order_date if order else (comm.period_start or ""),
@@ -510,7 +512,7 @@ def employee_statement_export(request):
             comm.manager_approved_at,
             comm.approved_at,
             comm.paid_at,
-        ])
+        ]))
 
     from django.http import HttpResponse
 

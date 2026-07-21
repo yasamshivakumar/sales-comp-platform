@@ -3,7 +3,10 @@ function UserSection({ form, handleChange, renderField, renderSelect }) {
     <div className="form-grid">
       <p className="section-heading">Account & access</p>
 
-      <div className="checkbox-field">
+      <label
+        className={`checkbox-field${form.enable_login ? " checkbox-field--enabled" : ""}`}
+        htmlFor="enable_login"
+      >
         <input
           type="checkbox"
           id="enable_login"
@@ -11,13 +14,26 @@ function UserSection({ form, handleChange, renderField, renderSelect }) {
           checked={form.enable_login}
           onChange={handleChange}
         />
-        <div>
-          <label htmlFor="enable_login">Send invite and enable employee login</label>
-          <p className="checkbox-field__hint">
+        <span className="checkbox-field__box" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M13.5 4.5 6.5 11.5 3 8"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
+        <span className="checkbox-field__copy">
+          <span className="checkbox-field__title">
+            Send invite and enable employee login
+          </span>
+          <span className="checkbox-field__hint">
             The employee must open the invite link and set a password before signing in.
-          </p>
-        </div>
-      </div>
+          </span>
+        </span>
+      </label>
 
       {renderField("name", "Display name *")}
       {renderField("email", "Email *", "email")}

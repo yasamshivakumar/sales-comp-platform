@@ -228,6 +228,40 @@ def process_users_rows(
                     "Login email is already used in another organization."
                 )
 
+            from ..field_rules import find_user_profile_duplicates
+
+            if existing_profile:
+                # Same email with a different employee_id is a duplicate
+                # identity (CSV cannot re-key a person); same identity updates.
+                existing_eid = (existing_profile.employee_id or "").strip()
+                if (
+                    employee_id_val
+                    and existing_eid
+                    and employee_id_val.lower() != existing_eid.lower()
+                ):
+                    label = (
+                        existing_profile.name
+                        or existing_profile.employee_id
+                        or existing_profile.email
+                    )
+                    raise ValueError(
+                        f"Email '{email}' is already used by {label}."
+                    )
+                dup_errors = find_user_profile_duplicates(
+                    organization,
+                    email,
+                    employee_id_val,
+                    exclude_pk=existing_profile.pk,
+                )
+            else:
+                dup_errors = find_user_profile_duplicates(
+                    organization,
+                    email,
+                    employee_id_val,
+                )
+            if dup_errors:
+                raise ValueError(" ".join(dup_errors))
+
             if allow_updates and existing_profile:
                 for key, value in defaults.items():
                     setattr(existing_profile, key, value)
@@ -245,15 +279,6 @@ def process_users_rows(
                     defaults=defaults,
                 )
             else:
-                from ..field_rules import find_user_profile_duplicates
-
-                dup_errors = find_user_profile_duplicates(
-                    organization,
-                    email,
-                    employee_id_val,
-                )
-                if dup_errors:
-                    raise ValueError(" ".join(dup_errors))
                 profile = UserProfile.objects.create(email=email, **defaults)
                 created = True
 

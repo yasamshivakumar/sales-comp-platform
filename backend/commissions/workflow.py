@@ -78,36 +78,46 @@ def approve_commissions_admin_shortcut(queryset, approved_by_user):
 
 
 def mark_payout_run_paid(payout_run, payment_reference="", paid_by_user=None):
-    """Attach finance-approved commissions in range and mark as paid."""
-    if payout_run.status == PayoutRun.STATUS_PAID:
-        return 0
+    """Attach finance-approved commissions in range and mark as paid.
 
-    now = timezone.now()
-    commissions = Commission.objects.filter(
-        status=Commission.STATUS_APPROVED,
-    ).filter(
-        Q(sale__order__order_date__range=[payout_run.start_date, payout_run.end_date])
-        | Q(period_start__lte=payout_run.end_date, period_end__gte=payout_run.start_date)
-    ).exclude(id__in=_open_dispute_commission_ids())
+    Runs inside a transaction with the payout run row locked so two
+    concurrent mark-paid requests cannot both pass the status check.
+    """
+    from django.db import transaction
 
-    org = payout_run.organization_id
-    if org:
-        commissions = commissions.filter(organization_id=org)
+    with transaction.atomic():
+        payout_run = (
+            PayoutRun.objects.select_for_update().get(pk=payout_run.pk)
+        )
+        if payout_run.status == PayoutRun.STATUS_PAID:
+            return 0
 
-    if payment_reference:
-        payout_run.payment_reference = payment_reference
+        now = timezone.now()
+        commissions = Commission.objects.filter(
+            status=Commission.STATUS_APPROVED,
+        ).filter(
+            Q(sale__order__order_date__range=[payout_run.start_date, payout_run.end_date])
+            | Q(period_start__lte=payout_run.end_date, period_end__gte=payout_run.start_date)
+        ).exclude(id__in=_open_dispute_commission_ids())
 
-    payout_run.status = PayoutRun.STATUS_PAID
-    payout_run.paid_at = now
-    payout_run.save(
-        update_fields=["status", "paid_at", "payment_reference"]
-    )
+        org = payout_run.organization_id
+        if org:
+            commissions = commissions.filter(organization_id=org)
 
-    count = commissions.update(
-        status=Commission.STATUS_PAID,
-        paid_at=now,
-        payout_run=payout_run,
-    )
+        if payment_reference:
+            payout_run.payment_reference = payment_reference
+
+        payout_run.status = PayoutRun.STATUS_PAID
+        payout_run.paid_at = now
+        payout_run.save(
+            update_fields=["status", "paid_at", "payment_reference"]
+        )
+
+        count = commissions.update(
+            status=Commission.STATUS_PAID,
+            paid_at=now,
+            payout_run=payout_run,
+        )
     logger.info(
         "Payout run %s marked paid: %s commission(s)",
         payout_run.pk,

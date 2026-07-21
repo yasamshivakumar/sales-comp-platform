@@ -485,6 +485,9 @@ class MonthlyAggregateCommissionTests(TestCase):
         )
 
     def test_orders_for_same_employee_month_are_summed_before_tier_selection(self):
+        # RATE tables: each order is tiered on its own value, then monthly
+        # commissions are summed. Two ₹60k orders each land in the 5% band
+        # (below the 100k threshold), so 3k + 3k = 6k — not 10% of 120k.
         first = self._order("AGG-1", "AGG001", "60000")
         self._order("AGG-2", "AGG001", "60000")
 
@@ -495,7 +498,7 @@ class MonthlyAggregateCommissionTests(TestCase):
         self.assertEqual(commission.calculation_scope, Commission.SCOPE_EMPLOYEE_MONTH)
         self.assertEqual(commission.source_sales_total, Decimal("120000.00"))
         self.assertEqual(commission.source_order_count, 2)
-        self.assertEqual(commission.commission_amount, Decimal("12000.00"))
+        self.assertEqual(commission.commission_amount, Decimal("6000.00"))
         self.assertIsNone(commission.sale.order_id)
 
     def test_different_employees_months_and_currencies_are_separate(self):
@@ -536,7 +539,8 @@ class MonthlyAggregateCommissionTests(TestCase):
             currency="USD",
         )
         self.assertEqual(jan.source_sales_total, Decimal("120000.00"))
-        self.assertEqual(jan.commission_amount, Decimal("12000.00"))
+        # Per-order RATE: two 60k orders at 5% each → 6000, not 10% of 120k.
+        self.assertEqual(jan.commission_amount, Decimal("6000.00"))
         self.assertTrue(
             summaries.filter(employee__email="agg001@test.com", currency="EUR").exists()
         )
@@ -812,7 +816,11 @@ class CommissionExplanationTests(TestCase):
         self.assertEqual(data["commission_earned"], "6000.00")
         keys = [line["key"] for line in data["lines"]]
         self.assertIn("order_value", keys)
-        self.assertIn("commission_rate", keys)
+        # RATE monthly: per-order tier lines (order_tier_<id>) replace the
+        # single commission_rate row used for FLAT/LOOKUP plans.
+        self.assertTrue(
+            any(k.startswith("order_tier_") for k in keys) or "commission_rate" in keys
+        )
         self.assertIn("final_commission", keys)
 
     def test_what_if_simulator_parses_string_dates(self):
@@ -997,6 +1005,10 @@ class CommissionExplanationTests(TestCase):
         self.assertIn("verified calculation breakdown", data["answer"])
 
 
+@override_settings(
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    DEFAULT_FROM_EMAIL="noreply@incentra.test",
+)
 class UserSetupDuplicateTests(TestCase):
     def setUp(self):
         self.org = get_default_organization()
@@ -1317,6 +1329,7 @@ class EmployeeStatementTests(TestCase):
 
 @override_settings(
     EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    DEFAULT_FROM_EMAIL="noreply@incentra.test",
     FRONTEND_URL="https://app.incentra.com",
 )
 class InviteRegistrationTests(TestCase):

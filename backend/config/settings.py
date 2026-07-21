@@ -142,6 +142,7 @@ MIDDLEWARE = [
     "commissions.middleware.DeployErrorMiddleware",
     "commissions.middleware.LivenessMiddleware",
     "commissions.middleware.RequestIdMiddleware",
+    "commissions.middleware.SecurityHeadersMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -204,6 +205,27 @@ REST_FRAMEWORK = {
 WEBHOOK_SECRET_MIN_LENGTH = int(os.getenv("WEBHOOK_SECRET_MIN_LENGTH", "24"))
 
 TOKEN_TTL_MINUTES = int(os.getenv("TOKEN_TTL_MINUTES", "60"))
+
+# --- Upload limits (CSV imports) ---
+MAX_IMPORT_FILE_BYTES = int(os.getenv("MAX_IMPORT_FILE_BYTES", str(10 * 1024 * 1024)))
+MAX_IMPORT_ROWS = int(os.getenv("MAX_IMPORT_ROWS", "50000"))
+DATA_UPLOAD_MAX_MEMORY_SIZE = int(
+    os.getenv("DATA_UPLOAD_MAX_MEMORY_SIZE", str(12 * 1024 * 1024))
+)
+
+# --- Login lockout (brute-force protection) ---
+LOGIN_LOCKOUT_THRESHOLD = int(os.getenv("LOGIN_LOCKOUT_THRESHOLD", "8"))
+LOGIN_LOCKOUT_WINDOW_SECONDS = int(os.getenv("LOGIN_LOCKOUT_WINDOW_SECONDS", "900"))
+LOGIN_LOCKOUT_DURATION_SECONDS = int(os.getenv("LOGIN_LOCKOUT_DURATION_SECONDS", "900"))
+
+# --- SSRF guard for CRM integrations ---
+# Local dev may point connectors at localhost mocks; production must not.
+INTEGRATIONS_ALLOW_PRIVATE_URLS = _env_bool(
+    "INTEGRATIONS_ALLOW_PRIVATE_URLS", "True" if _env_bool("DEBUG", "True") else "False"
+)
+
+# Modern referrer policy (Django default is same-origin; set explicitly).
+SECURE_REFERRER_POLICY = os.getenv("SECURE_REFERRER_POLICY", "same-origin")
 
 ROOT_URLCONF = "config.urls"
 
