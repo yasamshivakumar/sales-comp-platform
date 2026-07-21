@@ -27,7 +27,9 @@ from .plan_periods import parse_date
 from .currencies import format_currency_amount, normalize_currency
 from .services import (
     _calculate_amount_for_plan,
+    _eligible_orders_for_employee_month,
     _get_user_profile_for_order,
+    _rate_qs_for,
     find_sc_lookup_tier,
     resolve_compensation_plan,
 )
@@ -41,12 +43,19 @@ def _pct(value) -> str:
     return f"{_decimal(value):.2f}%"
 
 
-def _tier_breakdown(plan, sales_amount, order=None):
+def _tier_breakdown(plan, sales_amount, order=None, version=None):
     sales_amount = _decimal(sales_amount)
-    if plan.commission_table_type == "RATE":
+    source = version or plan
+    if version is not None:
+        rate_qs = SCRateTable.objects.filter(plan_version=version)
+        flat_qs = SCFlatRateTable.objects.filter(plan_version=version)
+    else:
+        rate_qs = SCRateTable.objects.filter(compensation_plan=plan)
+        flat_qs = SCFlatRateTable.objects.filter(compensation_plan=plan)
+
+    if source.commission_table_type == "RATE":
         tier = (
-            SCRateTable.objects.filter(
-                compensation_plan=plan,
+            rate_qs.filter(
                 is_active=True,
                 from_amount__lte=sales_amount,
             )
@@ -65,9 +74,8 @@ def _tier_breakdown(plan, sales_amount, order=None):
             "from_amount": tier.from_amount,
             "to_amount": to_label,
         }
-    if plan.commission_table_type == "FLAT":
-        flat = SCFlatRateTable.objects.filter(
-            compensation_plan=plan,
+    if source.commission_table_type == "FLAT":
+        flat = flat_qs.filter(
             is_active=True,
             minimum_sales_threshold__lte=sales_amount,
         ).first()
@@ -81,8 +89,8 @@ def _tier_breakdown(plan, sales_amount, order=None):
             "from_amount": flat.minimum_sales_threshold,
             "to_amount": None,
         }
-    if plan.commission_table_type == "LOOKUP":
-        tier = find_sc_lookup_tier(plan, order, sales_amount)
+    if source.commission_table_type == "LOOKUP":
+        tier = find_sc_lookup_tier(plan, order, sales_amount, version=version)
         if not tier:
             return None, Decimal("0"), {}
         base = sales_amount * tier.commission_rate / Decimal("100") + tier.bonus_amount
@@ -114,6 +122,63 @@ def _tier_breakdown(plan, sales_amount, order=None):
     return None, Decimal("0"), {}
 
 
+def _per_order_rate_lines(plan, representative_order, currency, version=None):
+    """Per-order breakdown for RATE plans: each order's value picks the tier
+    band it falls into, that rate applies to the whole order amount, and the
+    month's base commission is the sum of the per-order commissions."""
+    from .currencies import currency_meta
+
+    rate_qs = _rate_qs_for(plan, version)
+    symbol = currency_meta(currency)["symbol"]
+    total = Decimal("0.00")
+    out = []
+    orders = _eligible_orders_for_employee_month(representative_order).order_by(
+        "order_date", "id"
+    )
+    for o in orders:
+        amount = _decimal(o.sales_amount)
+        tier = (
+            rate_qs.filter(is_active=True, from_amount__lte=amount)
+            .filter(Q(to_amount__gte=amount) | Q(to_amount__isnull=True))
+            .order_by("sequence")
+            .first()
+        )
+        if not tier:
+            out.append(
+                {
+                    "key": f"order_tier_{o.id}",
+                    "label": f"Order {o.order_id} ({_inr(amount, currency)})",
+                    "display": "No tier matched",
+                    "detail": (
+                        "This order's value falls outside every rate band, "
+                        "so it earned no commission."
+                    ),
+                    "checked": False,
+                }
+            )
+            continue
+        piece = (
+            amount * tier.commission_rate / Decimal("100")
+        ) + (tier.bonus_amount or Decimal("0.00"))
+        total += piece
+        band = f"{symbol}{tier.from_amount:,.0f} – "
+        band += (
+            f"{symbol}{tier.to_amount:,.0f}"
+            if tier.to_amount is not None
+            else "no upper limit"
+        )
+        out.append(
+            {
+                "key": f"order_tier_{o.id}",
+                "label": f"Order {o.order_id} ({_inr(amount, currency)})",
+                "display": f"{_pct(tier.commission_rate)} → {_inr(piece, currency)}",
+                "detail": f"Falls in band {band}.",
+                "checked": True,
+            }
+        )
+    return total, out
+
+
 def _describe_rule_adjustment(rule, result, before, after, sales_amount, currency=None):
     rate_type = result.result_rate_type
     rate = _decimal(result.rate_value)
@@ -136,12 +201,16 @@ def _describe_rule_adjustment(rule, result, before, after, sales_amount, currenc
     return f"Rule “{rule.name}” adjusted commission ({_inr(before, currency)} → {_inr(after, currency)})."
 
 
-def _rule_steps(plan, order, user_profile, base_amount, currency=None):
+def _rule_steps(plan, order, user_profile, base_amount, currency=None, version=None):
     steps = []
     amount = _decimal(base_amount)
     context = build_rule_context(order, user_profile, plan)
+    if version is not None:
+        rule_filter = {"plan_version": version, "is_active": True}
+    else:
+        rule_filter = {"compensation_plan": plan, "is_active": True}
     rules = (
-        CommissionRule.objects.filter(compensation_plan=plan, is_active=True)
+        CommissionRule.objects.filter(**rule_filter)
         .prefetch_related("conditions", "results")
         .order_by("sequence", "id")
     )
@@ -241,6 +310,7 @@ def build_commission_explanation(commission: Commission) -> dict:
             "sale__order",
             "sale__order__territory",
             "compensation_plan",
+            "plan_version",
             "commission_rule",
         )
         .filter(pk=commission.pk)
@@ -349,15 +419,40 @@ def build_commission_explanation(commission: Commission) -> dict:
 
     base_amount = Decimal("0")
     tier_meta = {}
+    plan_version = getattr(comm, "plan_version", None)
     if plan:
-        tier, base_amount, tier_meta = _tier_breakdown(
-            plan,
-            sales_amount,
-            representative_order,
+        table_type = (plan_version or plan).commission_table_type
+        is_per_order_rate = (
+            table_type == "RATE"
+            and comm.calculation_scope == Commission.SCOPE_EMPLOYEE_MONTH
+            and representative_order is not None
         )
+        if is_per_order_rate:
+            # RATE tables: each order is tiered on its own value, then the
+            # per-order commissions are summed for the month.
+            base_amount, per_order_lines = _per_order_rate_lines(
+                plan, representative_order, currency, version=plan_version
+            )
+            lines.extend(per_order_lines)
+            lines.append(
+                {
+                    "key": "base_commission",
+                    "label": "Base commission (before rules)",
+                    "display": _inr(base_amount, currency),
+                    "detail": "Sum of the per-order commissions above.",
+                    "checked": True,
+                }
+            )
+        else:
+            tier, base_amount, tier_meta = _tier_breakdown(
+                plan,
+                sales_amount,
+                representative_order,
+                version=plan_version,
+            )
         if tier_meta:
             to_amt = tier_meta.get("to_amount")
-            if plan.commission_table_type == "LOOKUP":
+            if table_type == "LOOKUP":
                 band = tier_meta.get("lookup_band", "")
                 match = tier_meta.get("lookup_match", "")
                 detail = f"{match} · Sales band {band}."
@@ -398,7 +493,11 @@ def build_commission_explanation(commission: Commission) -> dict:
             {
                 "key": "plan",
                 "label": "Compensation plan",
-                "display": plan.plan_name,
+                "display": (
+                    f"{plan.plan_name} (v{comm.plan_version.version_number})"
+                    if getattr(comm, "plan_version_id", None)
+                    else plan.plan_name
+                ),
                 "checked": True,
             }
         )
@@ -415,6 +514,7 @@ def build_commission_explanation(commission: Commission) -> dict:
             user_profile,
             base_amount,
             currency,
+            version=plan_version,
         )
         lines.extend(rule_steps)
 

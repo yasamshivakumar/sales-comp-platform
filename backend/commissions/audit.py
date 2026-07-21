@@ -17,7 +17,7 @@ def get_request_id(request):
     return getattr(request, "request_id", None) or request.META.get("HTTP_X_REQUEST_ID", "")
 
 
-def record_audit(request, action, detail=None):
+def record_audit(request, action, detail=None, plan_version=None):
     """Persist an audit row; never raises to callers."""
     try:
         user = getattr(request, "user", None)
@@ -34,6 +34,7 @@ def record_audit(request, action, detail=None):
             user_id=user_id,
             user_email=user_email,
             action=action,
+            plan_version=plan_version,
             detail=detail or {},
             ip_address=get_client_ip(request) or None,
             request_id=get_request_id(request) or str(uuid.uuid4()),

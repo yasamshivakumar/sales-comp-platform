@@ -373,7 +373,7 @@ class CompensationPlanListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        qs = CompensationPlan.objects.all().order_by("-created_at")
+        qs = CompensationPlan.objects.prefetch_related("versions").order_by("-created_at")
         return filter_queryset_by_organization(
             qs, getattr(self.request, "organization", None)
         )
@@ -419,6 +419,13 @@ class CompensationPlanDetailView(generics.RetrieveUpdateAPIView):
 
     def get_queryset(self):
         qs = CompensationPlan.objects.prefetch_related(
+            "versions",
+            "versions__sc_rate_tables",
+            "versions__sc_flat_rate_tables",
+            "versions__sc_lookup_tables",
+            "versions__commission_rules",
+            "versions__commission_rules__conditions",
+            "versions__commission_rules__results",
             "sc_rate_tables",
             "sc_flat_rate_tables",
             "sc_lookup_tables",

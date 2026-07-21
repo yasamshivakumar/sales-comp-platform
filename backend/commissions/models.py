@@ -159,6 +159,15 @@ class Commission(models.Model):
         related_name="commissions",
     )
 
+    plan_version = models.ForeignKey(
+        "CommissionPlanVersion",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="commissions",
+        help_text="Immutable plan version used for this calculation.",
+    )
+
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
@@ -243,6 +252,10 @@ class Commission(models.Model):
                 ],
                 name="comm_org_scope_period_idx",
             ),
+            models.Index(
+                fields=["plan_version", "period_start"],
+                name="comm_plan_version_period_idx",
+            ),
         ]
 
     def __str__(self):
@@ -323,11 +336,29 @@ class CompensationPlan(models.Model):
         ('LOOKUP', 'SC Lookup Table'),
     ]
 
+    TIER_CALCULATION_FLAT = 'flat'
+    TIER_CALCULATION_MARGINAL = 'marginal'
+    TIER_CALCULATION_CHOICES = [
+        (TIER_CALCULATION_FLAT, 'Flat (whole amount at the landing tier rate)'),
+        (TIER_CALCULATION_MARGINAL, 'Marginal (each slice at its own tier rate)'),
+    ]
+
     commission_table_type = models.CharField(
         max_length=10,
         choices=COMMISSION_TABLE_TYPE_CHOICES,
         default='RATE',
         help_text='Select which commission table type this plan uses.'
+    )
+
+    tier_calculation_method = models.CharField(
+        max_length=10,
+        choices=TIER_CALCULATION_CHOICES,
+        default=TIER_CALCULATION_FLAT,
+        help_text=(
+            'Flat applies the landing tier rate to the whole amount. '
+            'Marginal applies each tier rate only to the portion of sales '
+            'that falls within that tier (like tax brackets).'
+        ),
     )
 
     # Assignment Criteria
@@ -380,6 +411,178 @@ class CompensationPlan(models.Model):
 
 
 # =====================================================
+# Commission Plan Version
+# Immutable, effective-dated snapshot of a compensation plan.
+# Draft -> editable; Published -> immutable; Archived -> read-only history.
+# The calculation engine always resolves the Published version whose
+# effective range contains the order date.
+# =====================================================
+class CommissionPlanVersion(models.Model):
+    STATUS_DRAFT = "Draft"
+    STATUS_PUBLISHED = "Published"
+    STATUS_ARCHIVED = "Archived"
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, "Draft"),
+        (STATUS_PUBLISHED, "Published"),
+        (STATUS_ARCHIVED, "Archived"),
+    ]
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="commission_plan_versions",
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+    compensation_plan = models.ForeignKey(
+        CompensationPlan,
+        on_delete=models.CASCADE,
+        related_name="versions",
+    )
+    version_number = models.PositiveIntegerField()
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_DRAFT,
+        db_index=True,
+    )
+    effective_from = models.DateField()
+    effective_to = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Leave blank for open-ended effectivity.",
+    )
+    published_at = models.DateTimeField(null=True, blank=True)
+    published_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="published_plan_versions",
+    )
+    created_from_version = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="derived_versions",
+    )
+    description = models.TextField(blank=True, default="")
+
+    # Snapshot of calculation/assignment config (copied from the plan and
+    # frozen once the version is published).
+    pay_period_type = models.CharField(
+        max_length=20,
+        choices=CompensationPlan.PAY_PERIOD_CHOICES,
+        default="Monthly",
+    )
+    plan_basis = models.CharField(
+        max_length=50,
+        choices=CompensationPlan.PLAN_BASIS_CHOICES,
+        default="Individual",
+    )
+    commission_table_type = models.CharField(
+        max_length=10,
+        choices=CompensationPlan.COMMISSION_TABLE_TYPE_CHOICES,
+        default="RATE",
+    )
+    tier_calculation_method = models.CharField(
+        max_length=10,
+        choices=CompensationPlan.TIER_CALCULATION_CHOICES,
+        default=CompensationPlan.TIER_CALCULATION_FLAT,
+    )
+    position_name = models.CharField(max_length=200, blank=True, null=True)
+    role = models.CharField(max_length=100, blank=True, null=True)
+    territory = models.ForeignKey(
+        Territory,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="plan_versions",
+    )
+    title = models.CharField(max_length=100, blank=True, null=True)
+    business_group = models.CharField(max_length=100, blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["compensation_plan_id", "-version_number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["compensation_plan", "version_number"],
+                name="uniq_plan_version_number",
+            ),
+            models.UniqueConstraint(
+                fields=["compensation_plan"],
+                condition=models.Q(status="Draft"),
+                name="uniq_one_draft_version_per_plan",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(effective_to__isnull=True)
+                    | models.Q(effective_to__gte=models.F("effective_from"))
+                ),
+                name="plan_version_effective_range_valid",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["organization", "status", "effective_from"],
+                name="cpv_org_status_from_idx",
+            ),
+            models.Index(
+                fields=["compensation_plan", "status", "effective_from"],
+                name="cpv_plan_status_from_idx",
+            ),
+        ]
+
+    @property
+    def is_editable(self):
+        return self.status == self.STATUS_DRAFT
+
+    def __str__(self):
+        return (
+            f"{self.compensation_plan.plan_name} v{self.version_number} "
+            f"({self.status})"
+        )
+
+
+class PlanVersionQuota(models.Model):
+    """Monthly quota attached to a plan version (quota changes do not require
+    a new plan or a new version)."""
+
+    plan_version = models.ForeignKey(
+        CommissionPlanVersion,
+        on_delete=models.CASCADE,
+        related_name="quotas",
+    )
+    year = models.PositiveIntegerField()
+    month = models.PositiveSmallIntegerField()
+    quota_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    currency = models.CharField(max_length=10, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["year", "month"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["plan_version", "year", "month"],
+                name="uniq_quota_per_version_month",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(month__gte=1) & models.Q(month__lte=12),
+                name="quota_month_valid",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.plan_version} — {self.year}-{self.month:02d}: {self.quota_amount}"
+
+
+# =====================================================
 # SC Rate Table
 # Tiered commission rates
 # Example:
@@ -392,6 +595,14 @@ class SCRateTable(models.Model):
         CompensationPlan,
         on_delete=models.CASCADE,
         related_name='sc_rate_tables'
+    )
+
+    plan_version = models.ForeignKey(
+        CommissionPlanVersion,
+        on_delete=models.CASCADE,
+        related_name="sc_rate_tables",
+        null=True,
+        blank=True,
     )
 
     tier_name = models.CharField(
@@ -460,6 +671,14 @@ class SCFlatRateTable(models.Model):
         related_name='sc_flat_rate_tables'
     )
 
+    plan_version = models.ForeignKey(
+        CommissionPlanVersion,
+        on_delete=models.CASCADE,
+        related_name="sc_flat_rate_tables",
+        null=True,
+        blank=True,
+    )
+
     flat_rate = models.DecimalField(
         max_digits=8,
         decimal_places=4,
@@ -503,6 +722,14 @@ class SCLookupTable(models.Model):
         CompensationPlan,
         on_delete=models.CASCADE,
         related_name="sc_lookup_tables",
+    )
+
+    plan_version = models.ForeignKey(
+        CommissionPlanVersion,
+        on_delete=models.CASCADE,
+        related_name="sc_lookup_tables",
+        null=True,
+        blank=True,
     )
 
     tier_name = models.CharField(max_length=100, blank=True, default="")
@@ -725,6 +952,11 @@ class UserProfile(models.Model):
             models.UniqueConstraint(
                 fields=["organization", "email"],
                 name="uniq_profile_email_per_org",
+            ),
+            models.UniqueConstraint(
+                fields=["organization", "crm_user_id"],
+                condition=models.Q(crm_user_id__gt=""),
+                name="uniq_crm_user_id_per_org",
             ),
         ]
 
@@ -1087,6 +1319,13 @@ class AuditLog(models.Model):
     )
     user_email = models.EmailField(blank=True, db_index=True)
     action = models.CharField(max_length=64, db_index=True)
+    plan_version = models.ForeignKey(
+        "CommissionPlanVersion",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_logs",
+    )
     detail = models.JSONField(default=dict, blank=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     request_id = models.CharField(max_length=36, blank=True, db_index=True)
@@ -1244,6 +1483,13 @@ class CommissionRule(models.Model):
     )
     compensation_plan = models.ForeignKey(
         CompensationPlan,
+        on_delete=models.CASCADE,
+        related_name="commission_rules",
+        null=True,
+        blank=True,
+    )
+    plan_version = models.ForeignKey(
+        "CommissionPlanVersion",
         on_delete=models.CASCADE,
         related_name="commission_rules",
         null=True,

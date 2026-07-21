@@ -12,6 +12,14 @@ from .rule_views import (
     CommissionRuleDetailView,
     commission_rule_choices,
 )
+from .plan_version_views import (
+    PlanVersionListView,
+    PlanVersionDetailView,
+    clone_plan_version,
+    publish_plan_version,
+    archive_plan_version,
+    compare_plan_versions,
+)
 from .explanation_views import (
     commission_explanation_view,
     commission_explanation_ask_view,
@@ -220,6 +228,36 @@ urlpatterns = [
         "compensation-plans/<int:pk>/",
         CompensationPlanDetailView.as_view(),
         name="compensation-plan-detail",
+    ),
+    path(
+        "compensation-plans/<int:plan_id>/versions/",
+        PlanVersionListView.as_view(),
+        name="plan-versions",
+    ),
+    path(
+        "compensation-plans/<int:plan_id>/versions/compare/",
+        compare_plan_versions,
+        name="plan-versions-compare",
+    ),
+    path(
+        "compensation-plans/<int:plan_id>/versions/<int:version_id>/",
+        PlanVersionDetailView.as_view(),
+        name="plan-version-detail",
+    ),
+    path(
+        "compensation-plans/<int:plan_id>/versions/<int:version_id>/clone/",
+        clone_plan_version,
+        name="plan-version-clone",
+    ),
+    path(
+        "compensation-plans/<int:plan_id>/versions/<int:version_id>/publish/",
+        publish_plan_version,
+        name="plan-version-publish",
+    ),
+    path(
+        "compensation-plans/<int:plan_id>/versions/<int:version_id>/archive/",
+        archive_plan_version,
+        name="plan-version-archive",
     ),
     path(
         "commission-rules/",

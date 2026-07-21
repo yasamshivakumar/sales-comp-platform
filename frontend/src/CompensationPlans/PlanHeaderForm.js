@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import api, { getApiErrorMessage } from "../api";
 import { useToast } from "../Components/Toast";
-import MonthPickerField from "../Components/MonthPickerField";
 import { BUSINESS_GROUP_OPTIONS } from "../utils/businessGroups";
 
 const INITIAL_FORM = {
   plan_name: "",
   description: "",
-  comp_period: "",
+  effective_from: "",
+  effective_to: "",
   status: "Active",
   pay_period_type: "Monthly",
   plan_basis: "Role",
@@ -19,9 +19,9 @@ const INITIAL_FORM = {
   default_commission_rate: "",
 };
 
-function monthFromDate(dateValue) {
+function dateFromValue(dateValue) {
   if (!dateValue) return "";
-  return String(dateValue).slice(0, 7);
+  return String(dateValue).slice(0, 10);
 }
 
 function tableTypeFromPlan(plan) {
@@ -33,10 +33,16 @@ function tableTypeFromPlan(plan) {
 
 function formFromPlan(plan) {
   if (!plan) return INITIAL_FORM;
+  const version = plan.current_version;
   return {
     plan_name: plan.plan_name || "",
     description: plan.description || "",
-    comp_period: monthFromDate(plan.effective_start_date),
+    effective_from: dateFromValue(
+      version?.effective_from || plan.effective_start_date
+    ),
+    effective_to: dateFromValue(
+      version?.effective_to || plan.effective_end_date
+    ),
     status: plan.status || "Active",
     pay_period_type: plan.pay_period_type || "Monthly",
     plan_basis: plan.plan_basis || "Role",
@@ -72,8 +78,12 @@ function PlanHeaderForm({ initialPlan = null, onPlanCreated, onPlanUpdated, onCa
       error("Role is required (must match employee role in User Setup)");
       return;
     }
-    if (!form.comp_period) {
-      error("Compensation month is required");
+    if (!form.effective_from) {
+      error("Effective from date is required");
+      return;
+    }
+    if (form.effective_to && form.effective_to < form.effective_from) {
+      error("Effective to cannot be before effective from");
       return;
     }
 
@@ -84,8 +94,9 @@ function PlanHeaderForm({ initialPlan = null, onPlanCreated, onPlanUpdated, onCa
         role: form.role.trim(),
         status: form.status || "Active",
         plan_basis: form.plan_basis || "Role",
-        comp_period: form.comp_period,
-        pay_period_type: "Monthly",
+        effective_start_date: form.effective_from,
+        effective_end_date: form.effective_to || null,
+        pay_period_type: form.pay_period_type || "Monthly",
         commission_table_type:
           form.table_type === "flat"
             ? "FLAT"
@@ -116,6 +127,8 @@ function PlanHeaderForm({ initialPlan = null, onPlanCreated, onPlanUpdated, onCa
         payload.sc_flat_rate_tables = [
           {
             flat_rate: defaultRate,
+            minimum_sales_threshold: 0,
+            bonus_amount: 0,
             is_active: true,
           },
         ];
@@ -140,34 +153,72 @@ function PlanHeaderForm({ initialPlan = null, onPlanCreated, onPlanUpdated, onCa
   const req = { color: "var(--danger-color)" };
 
   return (
-    <div className="panel">
+    <div className="panel cp-form-card">
       <h2 className="panel__title">
         {editing ? "Edit compensation plan" : "Create new compensation plan"}
       </h2>
-      <p style={{ color: "var(--text-muted)", marginTop: 0, marginBottom: 20, fontSize: 14 }}>
+      <p className="cp-toolbar__hint" style={{ marginTop: 0, marginBottom: 12 }}>
         {editing
-          ? "Update the plan header fields. Commission rates and lookup rows stay unchanged here; use the rate management section below to edit rate tables."
-          : "Required fields are marked with *. Role must match User Setup. Pick the month this plan applies to — orders only match plans in the same calendar month."}
+          ? "Update plan identity and the draft version’s effective dates. Published versions are read-only — clone a version to change rates."
+          : "Create one plan for a role/position. Set the first version’s effective date range (can be a quarter or full year). You do not need a new plan every month."}
       </p>
+      <div className="plan-workflow-callout">
+        <strong>Plan vs month:</strong> the plan is the identity (e.g. “Sales Executive”).
+        Dates belong to a <em>version</em>. Monthly quotas go on the version later —
+        not as a separate plan per month.
+      </div>
 
+      <div className="cp-form-section">
+        <h3 className="cp-form-section__title">Identity</h3>
       <div className="form-grid">
         <div className="form-field">
           <label>Plan name <span style={req}>*</span></label>
-          <input name="plan_name" value={form.plan_name} onChange={handleChange} placeholder="Sales Rep — June 2026" />
+          <input name="plan_name" value={form.plan_name} onChange={handleChange} placeholder="Sales Executive Plan" />
         </div>
         <div className="form-field">
           <label>Role <span style={req}>*</span></label>
           <input name="role" value={form.role} onChange={handleChange} placeholder="Sales Rep" />
         </div>
         <div className="form-field">
-          <MonthPickerField
-            label="Compensation month *"
-            value={form.comp_period}
-            onChange={(value) => setForm({ ...form, comp_period: value })}
+          <label>Position name (optional)</label>
+          <input name="position_name" value={form.position_name} onChange={handleChange} placeholder="Leave blank for role-wide plan" />
+        </div>
+        <div className="form-field">
+          <label>Description (optional)</label>
+          <input name="description" value={form.description} onChange={handleChange} />
+        </div>
+      </div>
+      </div>
+
+      <div className="cp-form-section">
+        <h3 className="cp-form-section__title">Effective period</h3>
+      <div className="form-grid">
+        <div className="form-field">
+          <label>Effective from <span style={req}>*</span></label>
+          <input
+            type="date"
+            name="effective_from"
+            value={form.effective_from}
+            onChange={handleChange}
             disabled={loading}
             required
-            helperText="Plan applies only to orders in this month (1st through last day)."
           />
+          <small style={{ color: "var(--text-muted)", fontSize: 12 }}>
+            First day Version 1 applies to orders.
+          </small>
+        </div>
+        <div className="form-field">
+          <label>Effective to</label>
+          <input
+            type="date"
+            name="effective_to"
+            value={form.effective_to}
+            onChange={handleChange}
+            disabled={loading}
+          />
+          <small style={{ color: "var(--text-muted)", fontSize: 12 }}>
+            Leave blank for open-ended (until you publish a newer version).
+          </small>
         </div>
         <div className="form-field">
           <label>Status <span style={req}>*</span></label>
@@ -188,6 +239,12 @@ function PlanHeaderForm({ initialPlan = null, onPlanCreated, onPlanUpdated, onCa
             <option>Customer Segment</option>
           </select>
         </div>
+      </div>
+      </div>
+
+      <div className="cp-form-section">
+        <h3 className="cp-form-section__title">Commission table</h3>
+      <div className="form-grid">
         <div className="form-field">
           <label>Commission table <span style={req}>*</span></label>
           <select name="table_type" value={form.table_type} onChange={handleChange}>
@@ -230,14 +287,7 @@ function PlanHeaderForm({ initialPlan = null, onPlanCreated, onPlanUpdated, onCa
           </small>
         </div>
         )}
-        <div className="form-field">
-          <label>Position name (optional)</label>
-          <input name="position_name" value={form.position_name} onChange={handleChange} placeholder="Leave blank for role-wide plan" />
-        </div>
-        <div className="form-field">
-          <label>Description (optional)</label>
-          <input name="description" value={form.description} onChange={handleChange} />
-        </div>
+      </div>
       </div>
 
       <div className="form-actions">

@@ -3,7 +3,9 @@ from rest_framework import serializers
 from .models import Employee, Sale, Commission, UserProfile, HierarchyRelationship, CompensationTier, Order
 
 from .models import (
+    CommissionPlanVersion,
     CompensationPlan,
+    PlanVersionQuota,
     SCRateTable,
     SCFlatRateTable,
     SCLookupTable,
@@ -57,6 +59,11 @@ class CommissionSerializer(serializers.ModelSerializer):
         read_only=True,
         default=None,
     )
+    plan_version_number = serializers.IntegerField(
+        source='plan_version.version_number',
+        read_only=True,
+        default=None,
+    )
     approved_by_email = serializers.EmailField(
         source='approved_by.email',
         read_only=True,
@@ -81,6 +88,7 @@ class CommissionSerializer(serializers.ModelSerializer):
             'paid_at',
             'payout_run',
             'compensation_plan',
+            'plan_version',
             'status',
         ]
 
@@ -182,7 +190,7 @@ class SCRateTableSerializer(serializers.ModelSerializer):
     class Meta:
         model = SCRateTable
         fields = '__all__'
-        read_only_fields = ['compensation_plan']
+        read_only_fields = ['compensation_plan', 'plan_version']
 
 
 # ------------------------------------------
@@ -192,14 +200,14 @@ class SCFlatRateTableSerializer(serializers.ModelSerializer):
     class Meta:
         model = SCFlatRateTable
         fields = '__all__'
-        read_only_fields = ['compensation_plan']
+        read_only_fields = ['compensation_plan', 'plan_version']
 
 
 class SCLookupTableSerializer(serializers.ModelSerializer):
     class Meta:
         model = SCLookupTable
         fields = '__all__'
-        read_only_fields = ['compensation_plan']
+        read_only_fields = ['compensation_plan', 'plan_version']
 
 
 class CommissionRuleConditionSerializer(serializers.ModelSerializer):
@@ -229,6 +237,15 @@ class CommissionRuleSerializer(serializers.ModelSerializer):
         model = CommissionRule
         fields = "__all__"
         read_only_fields = ["organization", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        version = attrs.get("plan_version") or getattr(self.instance, "plan_version", None)
+        if version is not None and version.status != CommissionPlanVersion.STATUS_DRAFT:
+            raise serializers.ValidationError(
+                f"Cannot modify rules on {version.status} version "
+                f"{version.version_number}. Clone the version to edit."
+            )
+        return attrs
 
     def _sync_children(self, rule, conditions=None, results=None):
         if conditions is not None:
@@ -261,6 +278,123 @@ class CommissionRuleSerializer(serializers.ModelSerializer):
                 conditions if conditions is not None else None,
                 results if results is not None else None,
             )
+        return instance
+
+
+# ------------------------------------------
+# Commission Plan Version Serializers
+# ------------------------------------------
+class PlanVersionQuotaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PlanVersionQuota
+        fields = "__all__"
+        read_only_fields = ["plan_version", "created_at", "updated_at"]
+
+
+class CommissionPlanVersionSerializer(serializers.ModelSerializer):
+    sc_rate_tables = SCRateTableSerializer(many=True, required=False)
+    sc_flat_rate_tables = SCFlatRateTableSerializer(many=True, required=False)
+    sc_lookup_tables = SCLookupTableSerializer(many=True, required=False)
+    commission_rules = CommissionRuleSerializer(many=True, read_only=True)
+    quotas = PlanVersionQuotaSerializer(many=True, required=False)
+    plan_name = serializers.CharField(
+        source="compensation_plan.plan_name", read_only=True
+    )
+    published_by_email = serializers.EmailField(
+        source="published_by.email", read_only=True, default=None
+    )
+    created_from_version_number = serializers.IntegerField(
+        source="created_from_version.version_number", read_only=True, default=None
+    )
+    is_editable = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = CommissionPlanVersion
+        fields = "__all__"
+        read_only_fields = [
+            "organization",
+            "compensation_plan",
+            "version_number",
+            "status",
+            "published_at",
+            "published_by",
+            "created_from_version",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate(self, attrs):
+        instance = getattr(self, "instance", None)
+        if instance is not None and not instance.is_editable:
+            # Quota updates are allowed on non-archived versions (quotas are
+            # period data, not plan logic); everything else is immutable.
+            non_quota_changes = {k: v for k, v in attrs.items() if k != "quotas"}
+            if non_quota_changes:
+                raise serializers.ValidationError(
+                    f"Version {instance.version_number} is {instance.status} and "
+                    "immutable. Clone it to create an editable draft."
+                )
+            if instance.status == CommissionPlanVersion.STATUS_ARCHIVED:
+                raise serializers.ValidationError(
+                    "Archived versions are read-only, including quotas."
+                )
+        effective_from = attrs.get(
+            "effective_from", getattr(instance, "effective_from", None)
+        )
+        effective_to = attrs.get(
+            "effective_to", getattr(instance, "effective_to", None)
+        )
+        if effective_from and effective_to and effective_to < effective_from:
+            raise serializers.ValidationError(
+                {"effective_to": "effective_to cannot be before effective_from."}
+            )
+        return attrs
+
+    def _sync_version_tables(
+        self, version, rate_tables=None, flat_rate_tables=None, lookup_tables=None
+    ):
+        plan = version.compensation_plan
+        if rate_tables is not None:
+            version.sc_rate_tables.all().delete()
+            for row in rate_tables:
+                SCRateTable.objects.create(
+                    compensation_plan=plan, plan_version=version, **row
+                )
+        if flat_rate_tables is not None:
+            version.sc_flat_rate_tables.all().delete()
+            for row in flat_rate_tables:
+                SCFlatRateTable.objects.create(
+                    compensation_plan=plan, plan_version=version, **row
+                )
+        if lookup_tables is not None:
+            version.sc_lookup_tables.all().delete()
+            for row in lookup_tables:
+                SCLookupTable.objects.create(
+                    compensation_plan=plan, plan_version=version, **row
+                )
+
+    def _sync_quotas(self, version, quotas):
+        version.quotas.all().delete()
+        for row in quotas:
+            PlanVersionQuota.objects.create(plan_version=version, **row)
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        rate_tables = validated_data.pop("sc_rate_tables", None)
+        flat_rate_tables = validated_data.pop("sc_flat_rate_tables", None)
+        lookup_tables = validated_data.pop("sc_lookup_tables", None)
+        quotas = validated_data.pop("quotas", None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if instance.is_editable:
+            self._sync_version_tables(
+                instance, rate_tables, flat_rate_tables, lookup_tables
+            )
+        if quotas is not None:
+            self._sync_quotas(instance, quotas)
         return instance
 
 
@@ -313,7 +447,10 @@ class CompensationPlanSerializer(serializers.ModelSerializer):
         raw = getattr(self, "initial_data", None) or {}
         if hasattr(raw, "dict"):
             raw = raw.dict()
-        merged = normalize_compensation_plan_payload({**raw, **attrs})
+        try:
+            merged = normalize_compensation_plan_payload({**raw, **attrs})
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
         validate_compensation_plan_fields(merged, partial=self.partial)
         org = _request_organization(self)
         _validate_tenant_owned(attrs.get("territory"), org, "territory")
@@ -325,27 +462,123 @@ class CompensationPlanSerializer(serializers.ModelSerializer):
 
         return merged
 
-    def _sync_tables(self, plan, rate_tables=None, flat_rate_tables=None, lookup_tables=None):
+    # Header fields that may change without editing version content
+    # (operational metadata, not calculation logic).
+    _NON_VERSIONED_FIELDS = {"plan_name", "description", "status"}
+
+    def _display_version(self, plan):
+        from .plan_versions import display_version_for_plan
+
+        return display_version_for_plan(plan)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        version = self._display_version(instance)
+
+        if version is not None:
+            # Scope nested collections to the display version so cloned
+            # versions never leak rows into the legacy plan payload.
+            data["sc_rate_tables"] = SCRateTableSerializer(
+                version.sc_rate_tables.all(), many=True
+            ).data
+            data["sc_flat_rate_tables"] = SCFlatRateTableSerializer(
+                version.sc_flat_rate_tables.all(), many=True
+            ).data
+            data["sc_lookup_tables"] = SCLookupTableSerializer(
+                version.sc_lookup_tables.all(), many=True
+            ).data
+            data["commission_rules"] = CommissionRuleSerializer(
+                version.commission_rules.all(), many=True
+            ).data
+
+        versions = list(instance.versions.all())
+        data["versions_count"] = len(versions)
+        data["current_version"] = (
+            {
+                "id": version.id,
+                "version_number": version.version_number,
+                "status": version.status,
+                "effective_from": str(version.effective_from)
+                if version.effective_from
+                else None,
+                "effective_to": str(version.effective_to)
+                if version.effective_to
+                else None,
+                "is_editable": version.is_editable,
+            }
+            if version is not None
+            else None
+        )
+        return data
+
+    def _sync_tables(self, plan, rate_tables=None, flat_rate_tables=None,
+                     lookup_tables=None, version=None):
+        def _clean(row):
+            row = dict(row)
+            row.pop("plan_version", None)
+            return row
+
         if rate_tables is not None:
-            plan.sc_rate_tables.all().delete()
+            (version.sc_rate_tables if version else plan.sc_rate_tables).all().delete()
             for row in rate_tables:
-                SCRateTable.objects.create(compensation_plan=plan, **row)
+                SCRateTable.objects.create(
+                    compensation_plan=plan, plan_version=version, **_clean(row)
+                )
         if flat_rate_tables is not None:
-            plan.sc_flat_rate_tables.all().delete()
+            (
+                version.sc_flat_rate_tables if version else plan.sc_flat_rate_tables
+            ).all().delete()
             for row in flat_rate_tables:
-                SCFlatRateTable.objects.create(compensation_plan=plan, **row)
+                SCFlatRateTable.objects.create(
+                    compensation_plan=plan, plan_version=version, **_clean(row)
+                )
         if lookup_tables is not None:
-            plan.sc_lookup_tables.all().delete()
+            (
+                version.sc_lookup_tables if version else plan.sc_lookup_tables
+            ).all().delete()
             for row in lookup_tables:
-                SCLookupTable.objects.create(compensation_plan=plan, **row)
+                SCLookupTable.objects.create(
+                    compensation_plan=plan, plan_version=version, **_clean(row)
+                )
+
+    def _mirror_plan_to_version(self, plan, version):
+        from .plan_versions import VERSION_SNAPSHOT_FIELDS
+
+        for field in VERSION_SNAPSHOT_FIELDS:
+            setattr(version, field, getattr(plan, field))
+        version.effective_from = plan.effective_start_date
+        version.effective_to = plan.effective_end_date
+        version.save()
+
+    def _request_user(self):
+        request = self.context.get("request")
+        return getattr(request, "user", None) if request else None
 
     @transaction.atomic
     def create(self, validated_data):
+        from .plan_versions import (
+            _has_rate_configuration,
+            create_initial_version,
+            publish_version,
+        )
+
         rate_tables = validated_data.pop("sc_rate_tables", [])
         flat_rate_tables = validated_data.pop("sc_flat_rate_tables", [])
         lookup_tables = validated_data.pop("sc_lookup_tables", [])
         plan = CompensationPlan.objects.create(**validated_data)
-        self._sync_tables(plan, rate_tables, flat_rate_tables, lookup_tables)
+
+        version = create_initial_version(plan)
+        self._sync_tables(
+            plan, rate_tables, flat_rate_tables, lookup_tables, version=version
+        )
+
+        # Legacy flow auto-publishes Active plans, but only once rate rows
+        # exist. Publishing an empty version would block calculations (the
+        # engine only uses Published versions) while later rate edits land
+        # on a new draft — leaving the plan silently unable to pay.
+        if plan.status == "Active" and _has_rate_configuration(version):
+            publish_version(version, user=self._request_user())
+
         return plan
 
     @transaction.atomic
@@ -353,11 +586,65 @@ class CompensationPlanSerializer(serializers.ModelSerializer):
         rate_tables = validated_data.pop("sc_rate_tables", None)
         flat_rate_tables = validated_data.pop("sc_flat_rate_tables", None)
         lookup_tables = validated_data.pop("sc_lookup_tables", None)
+
+        version = self._display_version(instance)
+        has_table_changes = any(
+            tables is not None
+            for tables in (rate_tables, flat_rate_tables, lookup_tables)
+        )
+        versioned_field_changes = {
+            attr: value
+            for attr, value in validated_data.items()
+            if attr not in self._NON_VERSIONED_FIELDS
+            and getattr(instance, attr) != value
+        }
+
+        if (
+            version is not None
+            and not version.is_editable
+            and (has_table_changes or versioned_field_changes)
+        ):
+            raise serializers.ValidationError(
+                f"Version {version.version_number} of this plan is "
+                f"{version.status} and immutable. Clone it to create an "
+                "editable draft, make changes there, then publish."
+            )
+
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
-        self._sync_tables(instance, rate_tables, flat_rate_tables, lookup_tables)
+
+        if version is not None and version.is_editable:
+            self._sync_tables(
+                instance, rate_tables, flat_rate_tables, lookup_tables,
+                version=version,
+            )
+            self._mirror_plan_to_version(instance, version)
+            self._maybe_autopublish_initial_version(instance, version)
+        elif version is None:
+            # Pre-versioning plans (legacy data) keep the old behavior.
+            self._sync_tables(instance, rate_tables, flat_rate_tables, lookup_tables)
         return instance
+
+    def _maybe_autopublish_initial_version(self, plan, version):
+        """Complete the legacy setup flow: a plan is created Active first and
+        rate rows are added afterwards. Once the first rates land on the
+        initial draft — and no version has ever been published — publish it so
+        calculations start working without requiring the version UI."""
+        from .models import CommissionPlanVersion
+        from .plan_versions import _has_rate_configuration, publish_version
+
+        if plan.status != "Active":
+            return
+        if not _has_rate_configuration(version):
+            return
+        has_published = CommissionPlanVersion.objects.filter(
+            compensation_plan=plan,
+            status=CommissionPlanVersion.STATUS_PUBLISHED,
+        ).exists()
+        if has_published:
+            return
+        publish_version(version, user=self._request_user())
 
 class OrderSerializer(serializers.ModelSerializer):
     has_commission = serializers.SerializerMethodField()

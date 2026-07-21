@@ -8,7 +8,7 @@ import TierForm from "./TierForm";
 import TierList from "./TierList";
 import LookupTierForm from "./LookupTierForm";
 import LookupTierList from "./LookupTierList";
-import MonthPickerField from "../Components/MonthPickerField";
+import PlanVersionHistory, { VersionBadge } from "./PlanVersionHistory";
 import { BUSINESS_GROUP_OPTIONS } from "../utils/businessGroups";
 import "./compPlans.css";
 
@@ -20,15 +20,33 @@ function formatPlanMonth(plan) {
   return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
 
-function monthStart(month) {
-  return month ? `${month}-01` : "";
+function planRateCount(plan) {
+  return (
+    (plan.sc_rate_tables?.length || 0) +
+    (plan.sc_flat_rate_tables?.length || 0) +
+    (plan.sc_lookup_tables?.length || 0)
+  );
 }
 
-function monthEnd(month) {
-  if (!month) return "";
-  const [year, monthNumber] = month.split("-").map(Number);
-  const lastDay = new Date(year, monthNumber, 0).getDate();
-  return `${month}-${String(lastDay).padStart(2, "0")}`;
+function planStatusClass(status) {
+  const s = String(status || "").toLowerCase();
+  if (s === "active") return "cp-plan-status--active";
+  if (s === "draft") return "cp-plan-status--draft";
+  return "cp-plan-status--inactive";
+}
+
+function computePlanKpis(plans) {
+  const total = plans.length;
+  let publishedDisplay = 0;
+  let draftPending = 0;
+  let missingRates = 0;
+  for (const plan of plans) {
+    const cv = plan.current_version;
+    if (cv?.status === "Published") publishedDisplay += 1;
+    if (cv?.status === "Draft") draftPending += 1;
+    if (planRateCount(plan) === 0) missingRates += 1;
+  }
+  return { total, publishedDisplay, draftPending, missingRates };
 }
 
 function AiPlanBuilder({ onPlanCreated, onCancel }) {
@@ -39,7 +57,8 @@ function AiPlanBuilder({ onPlanCreated, onCancel }) {
     prompt: "",
     role: "Sales Rep",
     business_group: "USA",
-    comp_period: "",
+    effective_from: "",
+    effective_to: "",
     commission_table_type: "RATE",
     position_name: "",
     sample_orders: "25000, 75000, 150000",
@@ -54,8 +73,12 @@ function AiPlanBuilder({ onPlanCreated, onCancel }) {
       error("Describe the plan you want AI to build.");
       return;
     }
-    if (!form.comp_period) {
-      error("Compensation month is required.");
+    if (!form.effective_from) {
+      error("Effective from date is required.");
+      return;
+    }
+    if (form.effective_to && form.effective_to < form.effective_from) {
+      error("Effective to cannot be before effective from.");
       return;
     }
     setLoading(true);
@@ -70,8 +93,8 @@ function AiPlanBuilder({ onPlanCreated, onCancel }) {
         prompt: form.prompt.trim(),
         role: form.role.trim() || "Sales Rep",
         business_group: form.business_group,
-        effective_start_date: monthStart(form.comp_period),
-        effective_end_date: monthEnd(form.comp_period),
+        effective_start_date: form.effective_from,
+        effective_end_date: form.effective_to || null,
         commission_table_type: form.commission_table_type,
         position_name: form.position_name.trim(),
         sample_orders: sampleOrders,
@@ -88,7 +111,7 @@ function AiPlanBuilder({ onPlanCreated, onCancel }) {
   };
 
   return (
-    <div className="panel ai-plan-builder">
+    <div className="panel ai-plan-builder cp-form-card">
       <div className="ai-plan-builder__head">
         <div>
           <p className="ai-plan-builder__eyebrow">Production AI</p>
@@ -99,8 +122,8 @@ function AiPlanBuilder({ onPlanCreated, onCancel }) {
         </button>
       </div>
       <p className="ai-plan-builder__hint">
-        Describe the compensation logic. Incentra validates the AI JSON, simulates sample orders,
-        creates the plan/rules, and records an audit log.
+        Describe the compensation logic. Incentra creates one plan with Version 1 covering
+        your effective date range (not one plan per month).
       </p>
 
       <div className="form-grid">
@@ -111,7 +134,7 @@ function AiPlanBuilder({ onPlanCreated, onCancel }) {
             value={form.prompt}
             onChange={handleChange}
             rows={4}
-            placeholder="Example: Build a monthly USA Sales Rep plan with 5% up to $50k, 7% up to $100k, and 10% above $100k. Add a $500 bonus for enterprise product deals."
+            placeholder="Example: Build a USA Sales Rep plan with 5% up to $50k, 7% up to $100k, and 10% above $100k. Add a $500 bonus for enterprise product deals."
           />
         </div>
         <div className="form-field">
@@ -119,13 +142,28 @@ function AiPlanBuilder({ onPlanCreated, onCancel }) {
           <input name="role" value={form.role} onChange={handleChange} />
         </div>
         <div className="form-field">
-          <MonthPickerField
-            label="Compensation month *"
-            value={form.comp_period}
-            onChange={(value) => setForm({ ...form, comp_period: value })}
+          <label>Effective from *</label>
+          <input
+            type="date"
+            name="effective_from"
+            value={form.effective_from}
+            onChange={handleChange}
             disabled={loading}
             required
           />
+        </div>
+        <div className="form-field">
+          <label>Effective to</label>
+          <input
+            type="date"
+            name="effective_to"
+            value={form.effective_to}
+            onChange={handleChange}
+            disabled={loading}
+          />
+          <small style={{ color: "var(--text-muted)", fontSize: 12 }}>
+            Optional. Leave blank for open-ended.
+          </small>
         </div>
         <div className="form-field">
           <label>Business group</label>
@@ -270,26 +308,26 @@ function CompensationPlans() {
     }
   };
 
-  const gridStyle = {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-    gap: "24px",
-    marginBottom: "24px",
-  };
+  const kpis = computePlanKpis(plans);
 
   return (
-    <div>
+    <div className="cp-module">
       <PageHeader badge="Configuration" title="Compensation Plans" />
 
-      <div className="comp-plans-toolbar">
-        <p className="comp-plans-toolbar__hint">
-          Each plan applies to one calendar month. Create a new plan per month and role/position.
-        </p>
+      <div className="cp-toolbar">
+        <div className="cp-toolbar__text">
+          <p className="cp-toolbar__title">Plan library</p>
+          <p className="cp-toolbar__hint">
+            One plan per role/position. Versions hold rates and effective dates.
+            Quotas are monthly rows on a version — not a new plan every month.
+          </p>
+        </div>
+        <div className="cp-toolbar__actions">
         {view === "list" ? (
           <>
             <button
               type="button"
-              className="btn-secondary"
+              className="cp-btn-ghost"
               onClick={() => setView("ai")}
             >
               AI Plan Builder
@@ -315,6 +353,7 @@ function CompensationPlans() {
             ← Back to plans list
           </button>
         )}
+        </div>
       </div>
 
       {view === "create" && (
@@ -346,7 +385,7 @@ function CompensationPlans() {
       {view === "list" && (
         <>
           {loading && plans.length === 0 ? (
-            <p style={{ color: "var(--text-muted)" }}>Loading plans…</p>
+            <p className="cp-loading">Loading plans…</p>
           ) : plans.length === 0 ? (
             <div className="comp-plans-empty">
               <p>No compensation plans yet.</p>
@@ -359,12 +398,33 @@ function CompensationPlans() {
               </button>
             </div>
           ) : (
-            <div className="comp-plans-table-wrap panel" style={{ padding: 0 }}>
+            <>
+            <div className="cp-kpis">
+              <article className="cp-kpi">
+                <span className="cp-kpi__label">Total plans</span>
+                <span className="cp-kpi__value">{kpis.total}</span>
+              </article>
+              <article className="cp-kpi cp-kpi--success">
+                <span className="cp-kpi__label">Published (current)</span>
+                <span className="cp-kpi__value">{kpis.publishedDisplay}</span>
+              </article>
+              <article className="cp-kpi cp-kpi--warning">
+                <span className="cp-kpi__label">Draft pending</span>
+                <span className="cp-kpi__value">{kpis.draftPending}</span>
+              </article>
+              <article className="cp-kpi cp-kpi--teal">
+                <span className="cp-kpi__label">Missing rates</span>
+                <span className="cp-kpi__value">{kpis.missingRates}</span>
+              </article>
+            </div>
+            <div className="cp-table-card">
+            <div className="comp-plans-table-wrap">
               <table className="comp-plans-table enterprise-table">
                 <thead>
                   <tr>
                     <th>Plan name</th>
-                    <th>Month</th>
+                    <th>Version</th>
+                    <th>Effective</th>
                     <th>Role</th>
                     <th>Position</th>
                     <th>Status</th>
@@ -376,28 +436,46 @@ function CompensationPlans() {
                 </thead>
                 <tbody>
                   {plans.map((plan) => {
-                    const rateCount =
-                      (plan.sc_rate_tables?.length || 0) +
-                      (plan.sc_flat_rate_tables?.length || 0) +
-                      (plan.sc_lookup_tables?.length || 0);
+                    const rateCount = planRateCount(plan);
                     const ruleCount = plan.commission_rules?.length || 0;
                     const isSelected = selectedPlan?.id === plan.id;
                     return (
                       <tr
                         key={plan.id}
-                        style={
-                          isSelected
-                            ? { background: "rgba(99, 102, 241, 0.1)" }
-                            : undefined
-                        }
+                        className={isSelected ? "cp-row--selected" : undefined}
                       >
                         <td>
-                          <strong>{plan.plan_name}</strong>
+                          <span className="cp-plan-cell__name">{plan.plan_name}</span>
+                          <span className="cp-plan-cell__meta">{plan.role || "No role"}</span>
                         </td>
-                        <td>{formatPlanMonth(plan)}</td>
+                        <td>
+                          {plan.current_version ? (
+                            <>
+                              <span className="cp-version-tag">
+                                v{plan.current_version.version_number}
+                              </span>
+                              <VersionBadge status={plan.current_version.status} />
+                            </>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td>
+                          {plan.current_version
+                            ? `${plan.current_version.effective_from || "—"} → ${
+                                plan.current_version.effective_to || "open"
+                              }`
+                            : formatPlanMonth(plan)}
+                        </td>
                         <td>{plan.role || "—"}</td>
                         <td>{plan.position_name || "—"}</td>
-                        <td>{plan.status}</td>
+                        <td>
+                          <span
+                            className={`cp-plan-status ${planStatusClass(plan.status)}`}
+                          >
+                            {plan.status}
+                          </span>
+                        </td>
                         <td>{plan.commission_table_type || "—"}</td>
                         <td>{rateCount}</td>
                         <td>{ruleCount}</td>
@@ -407,6 +485,16 @@ function CompensationPlans() {
                               type="button"
                               className="btn-secondary"
                               onClick={() => handleEditPlan(plan)}
+                              disabled={
+                                plan.current_version &&
+                                !plan.current_version.is_editable
+                              }
+                              title={
+                                plan.current_version &&
+                                !plan.current_version.is_editable
+                                  ? "Published versions are read-only. Clone a version to edit."
+                                  : "Edit plan details"
+                              }
                             >
                               Edit details
                             </button>
@@ -425,14 +513,35 @@ function CompensationPlans() {
                 </tbody>
               </table>
             </div>
+            </div>
+            </>
           )}
 
           {selectedPlan && (
             <div className="comp-plans-manage">
-              <h2 className="panel__title" style={{ marginBottom: 16 }}>
-                Commission rates — {selectedPlan.plan_name} ({formatPlanMonth(selectedPlan)})
+              <h2 className="cp-manage__title panel__title">
+                Commission rates — {selectedPlan.plan_name}
+                {selectedPlan.current_version ? (
+                  <>
+                    {" "}
+                    <VersionBadge status={selectedPlan.current_version.status} />{" "}
+                    <span className="muted-mini">
+                      v{selectedPlan.current_version.version_number}
+                    </span>
+                  </>
+                ) : (
+                  <> ({formatPlanMonth(selectedPlan)})</>
+                )}
               </h2>
-              <div style={gridStyle}>
+              {selectedPlan.current_version &&
+              !selectedPlan.current_version.is_editable ? (
+                <p className="plan-readonly-banner">
+                  This version is {selectedPlan.current_version.status} and read-only.
+                  Use <strong>Clone</strong> in Version history below to create an editable
+                  draft, then publish when ready.
+                </p>
+              ) : null}
+              <div className="cp-manage__grid">
                 {selectedPlan.commission_table_type === "LOOKUP" ? (
                   <>
                     <LookupTierForm
@@ -461,18 +570,22 @@ function CompensationPlans() {
                   </>
                 )}
               </div>
-              <div style={{ marginTop: 16 }}>
+              <div className="cp-manage__rules">
                 <Link
                   to={`/commission-rules?plan=${selectedPlan.id}`}
                   className="btn-secondary"
                 >
                   Manage commission rules →
                 </Link>
-                <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>
+                <p className="cp-manage__rules-hint">
                   Rules run after rate tables: conditions filter orders, results apply bonuses,
                   overrides, holds, and earning classification.
                 </p>
               </div>
+              <PlanVersionHistory
+                plan={selectedPlan}
+                onVersionsChanged={() => refreshSelectedPlan(selectedPlan.id)}
+              />
             </div>
           )}
         </>

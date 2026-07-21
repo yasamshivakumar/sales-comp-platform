@@ -108,10 +108,15 @@ def validate_compensation_plan_fields(data, partial=False):
 
 
 def normalize_compensation_plan_payload(data):
-    """Map API/UI aliases to model fields and snap dates to a single month."""
+    """Map API/UI aliases to model fields and normalize effective date ranges.
+
+    Versions may span any date range (quarter, year, etc.). A legacy
+    ``comp_period=YYYY-MM`` still expands to that calendar month for
+    backward compatibility.
+    """
     from datetime import date as date_cls
 
-    from .plan_periods import normalize_monthly_plan_dates
+    from .plan_periods import month_bounds, parse_date
 
     normalized = dict(data)
     if "table_type" in normalized and "commission_table_type" not in normalized:
@@ -127,26 +132,31 @@ def normalize_compensation_plan_payload(data):
         if raw not in ("RATE", "FLAT", "LOOKUP"):
             raw = "RATE"
         normalized["commission_table_type"] = raw
+
     if not normalized.get("status"):
         normalized["status"] = "Active"
     if not normalized.get("plan_basis"):
         normalized["plan_basis"] = "Role"
 
-    # UI may send comp_period=YYYY-MM from month picker
+    # Legacy UI may send comp_period=YYYY-MM from month picker
     comp_period = normalized.pop("comp_period", None) or normalized.pop("plan_month", None)
     if comp_period and not normalized.get("effective_start_date"):
         text = str(comp_period).strip()
         if len(text) == 7 and text[4] == "-":
             y, m = int(text[:4]), int(text[5:7])
-            normalized["effective_start_date"] = date_cls(y, m, 1)
+            start, end = month_bounds(y, m)
+            normalized["effective_start_date"] = start
+            if not normalized.get("effective_end_date"):
+                normalized["effective_end_date"] = end
 
-    if normalized.get("effective_start_date"):
-        start, end = normalize_monthly_plan_dates(
-            normalized.get("effective_start_date"),
-            normalized.get("effective_end_date"),
-        )
+    start = parse_date(normalized.get("effective_start_date"))
+    end = parse_date(normalized.get("effective_end_date"))
+    if start:
         normalized["effective_start_date"] = start
-        normalized["effective_end_date"] = end
+        if end is not None:
+            if end < start:
+                raise ValueError("effective_end_date cannot be before effective_start_date")
+            normalized["effective_end_date"] = end
         normalized["pay_period_type"] = normalized.get("pay_period_type") or "Monthly"
 
     return normalized

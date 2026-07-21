@@ -19,6 +19,7 @@ admin.site.register(Order)
 
 from .models import CompensationPlan, CompensationTier
 from .models import CompensationPlan, SCRateTable, SCFlatRateTable
+from .models import CommissionPlanVersion, PlanVersionQuota
 
 
 # ---------------------------------------------------
@@ -51,6 +52,21 @@ class SCFlatRateTableInline(admin.TabularInline):
         'minimum_sales_threshold',
         'is_active'
     )
+
+
+class PlanVersionInline(admin.TabularInline):
+    model = CommissionPlanVersion
+    extra = 0
+    fields = (
+        "version_number",
+        "status",
+        "effective_from",
+        "effective_to",
+        "published_at",
+    )
+    readonly_fields = fields
+    can_delete = False
+    show_change_link = True
 
 
 # ---------------------------------------------------
@@ -87,9 +103,38 @@ class CompensationPlanAdmin(admin.ModelAdmin):
     )
 
     inlines = [
+        PlanVersionInline,
         SCRateTableInline,
         SCFlatRateTableInline,
     ]
+
+
+@admin.register(CommissionPlanVersion)
+class CommissionPlanVersionAdmin(admin.ModelAdmin):
+    list_display = (
+        "compensation_plan",
+        "version_number",
+        "status",
+        "effective_from",
+        "effective_to",
+        "published_at",
+        "organization",
+    )
+    list_filter = ("status", "commission_table_type", "organization")
+    search_fields = (
+        "compensation_plan__plan_name",
+        "description",
+        "position_name",
+        "role",
+    )
+    readonly_fields = ("published_at", "published_by", "created_at", "updated_at")
+
+
+@admin.register(PlanVersionQuota)
+class PlanVersionQuotaAdmin(admin.ModelAdmin):
+    list_display = ("plan_version", "year", "month", "quota_amount", "currency")
+    list_filter = ("year", "month")
+    search_fields = ("plan_version__compensation_plan__plan_name",)
 
 
 # ---------------------------------------------------
@@ -231,13 +276,14 @@ class CompensationTierAdmin(admin.ModelAdmin):
 # ---------------------------------------------------
 @admin.register(AuditLog)
 class AuditLogAdmin(admin.ModelAdmin):
-    list_display = ("action", "user_email", "ip_address", "created_at")
+    list_display = ("action", "user_email", "plan_version", "ip_address", "created_at")
     list_filter = ("action",)
     search_fields = ("user_email", "action", "request_id")
     readonly_fields = (
         "user",
         "user_email",
         "action",
+        "plan_version",
         "detail",
         "ip_address",
         "request_id",

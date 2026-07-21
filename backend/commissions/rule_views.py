@@ -2,11 +2,16 @@ from .currencies import currency_choices_for_api
 
 from rest_framework import generics
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import CommissionRule, CommissionRuleCondition, CommissionRuleResult
+from .models import (
+    CommissionPlanVersion,
+    CommissionRule,
+    CommissionRuleCondition,
+    CommissionRuleResult,
+)
 from .permissions import user_is_admin
 from .serializers import CommissionRuleSerializer
 from .tenants import filter_queryset_by_organization
@@ -21,21 +26,34 @@ def _choice_list(choices):
     return [{"value": value, "label": label} for value, label in choices]
 
 
+def _assert_version_editable(version):
+    if version is None:
+        return
+    if version.status != CommissionPlanVersion.STATUS_DRAFT:
+        raise ValidationError(
+            f"Cannot modify rules on {version.status} version "
+            f"{version.version_number}. Clone the version to edit."
+        )
+
+
 class CommissionRuleListCreateView(generics.ListCreateAPIView):
     serializer_class = CommissionRuleSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         _require_admin(self.request)
-        qs = CommissionRule.objects.select_related("compensation_plan").prefetch_related(
-            "conditions", "results"
-        )
+        qs = CommissionRule.objects.select_related(
+            "compensation_plan", "plan_version"
+        ).prefetch_related("conditions", "results")
         qs = filter_queryset_by_organization(
             qs, getattr(self.request, "organization", None)
         )
         plan_id = self.request.query_params.get("plan_id")
         if plan_id:
             qs = qs.filter(compensation_plan_id=plan_id)
+        version_id = self.request.query_params.get("plan_version_id")
+        if version_id:
+            qs = qs.filter(plan_version_id=version_id)
         q = (self.request.query_params.get("q") or "").strip()
         if q:
             qs = qs.filter(name__icontains=q)
@@ -43,7 +61,38 @@ class CommissionRuleListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         _require_admin(self.request)
-        serializer.save(organization=getattr(self.request, "organization", None))
+        from .plan_versions import clone_version
+
+        plan = serializer.validated_data.get("compensation_plan")
+        version = serializer.validated_data.get("plan_version")
+
+        if version is None and plan is not None:
+            version = plan.versions.filter(
+                status=CommissionPlanVersion.STATUS_DRAFT
+            ).first()
+            if version is None:
+                source = (
+                    plan.versions.filter(
+                        status=CommissionPlanVersion.STATUS_PUBLISHED
+                    )
+                    .order_by("-version_number")
+                    .first()
+                    or plan.versions.order_by("-version_number").first()
+                )
+                if source is None:
+                    raise ValidationError(
+                        "This plan has no versions. Recreate the plan or contact support."
+                    )
+                version = clone_version(
+                    source,
+                    user=self.request.user,
+                    description="Auto-created draft for rule edit.",
+                )
+        _assert_version_editable(version)
+        serializer.save(
+            organization=getattr(self.request, "organization", None),
+            plan_version=version,
+        )
 
 
 class CommissionRuleDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -52,10 +101,20 @@ class CommissionRuleDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         _require_admin(self.request)
-        qs = CommissionRule.objects.prefetch_related("conditions", "results")
+        qs = CommissionRule.objects.select_related("plan_version").prefetch_related(
+            "conditions", "results"
+        )
         return filter_queryset_by_organization(
             qs, getattr(self.request, "organization", None)
         )
+
+    def perform_update(self, serializer):
+        _assert_version_editable(serializer.instance.plan_version)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        _assert_version_editable(instance.plan_version)
+        instance.delete()
 
 
 @api_view(["GET"])

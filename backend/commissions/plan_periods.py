@@ -1,4 +1,8 @@
-"""Monthly compensation plan period helpers — one plan per calendar month."""
+"""Plan period helpers.
+
+Plan *versions* use free-form effective date ranges (quarter, year, etc.).
+Commission *payout aggregation* is still monthly (employee-month totals).
+"""
 
 import calendar
 from datetime import date, datetime
@@ -24,8 +28,10 @@ def month_bounds(year: int, month: int) -> tuple[date, date]:
 
 def normalize_monthly_plan_dates(start_value, end_value=None):
     """
-    Snap plan effective dates to a single calendar month (1st through last day).
-    Returns (start_date, end_date).
+    Legacy helper: snap dates to a single calendar month.
+
+    Prefer free-form ranges for new versioned plans. Kept for older callers
+    that still expect month windows.
     """
     start = parse_date(start_value)
     if not start:
@@ -44,8 +50,9 @@ def normalize_monthly_plan_dates(start_value, end_value=None):
 
 def monthly_plan_filter(order_date) -> models.Q:
     """
-    Order commissions use only plans whose effective_start falls in the
-    same calendar month and year as the order (each month has its own plan).
+    Legacy plan filter: match plans whose effective_start is in the same
+    calendar month as the order. Used only as a fallback when a plan has
+    no Published versions.
     """
     if not order_date:
         return models.Q()

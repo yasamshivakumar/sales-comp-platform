@@ -173,9 +173,12 @@ def _apply_result(result, rule, base_amount, credit_amount, sales_amount):
     return amount, credit, metadata
 
 
-def apply_commission_rules(plan, order, user_profile, base_amount):
+def apply_commission_rules(plan, order, user_profile, base_amount, version=None):
     """
     Evaluate plan rules after SCRateTable base calculation.
+
+    When a plan version is supplied, only rules owned by that immutable
+    version apply; otherwise legacy plan-level rules are used.
 
     Returns (final_amount, credit_amount, matched_rule, metadata).
     """
@@ -189,8 +192,12 @@ def apply_commission_rules(plan, order, user_profile, base_amount):
         return amount, credit, matched_rule, metadata
 
     context = build_rule_context(order, user_profile, plan)
+    if version is not None:
+        rule_filter = {"plan_version": version, "is_active": True}
+    else:
+        rule_filter = {"compensation_plan": plan, "is_active": True}
     rules = (
-        CommissionRule.objects.filter(compensation_plan=plan, is_active=True)
+        CommissionRule.objects.filter(**rule_filter)
         .prefetch_related("conditions", "results")
         .order_by("sequence", "id")
     )

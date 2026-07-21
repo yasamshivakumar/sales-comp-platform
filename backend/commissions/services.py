@@ -6,6 +6,7 @@ import logging
 from .currencies import normalize_currency
 from .models import (
     Order,
+    CommissionPlanVersion,
     CompensationPlan,
     SCRateTable,
     SCFlatRateTable,
@@ -293,6 +294,81 @@ def _order_has_approved_commissions(order):
     return order_has_locked_commissions(order)
 
 
+def _version_queryset_for_order(order):
+    """Published plan versions visible to this order's org/territory."""
+    qs = CommissionPlanVersion.objects.filter(
+        status=CommissionPlanVersion.STATUS_PUBLISHED,
+        compensation_plan__status="Active",
+    ).select_related("compensation_plan")
+
+    org_id = getattr(order, "organization_id", None)
+    if org_id:
+        qs = qs.filter(organization_id=org_id)
+    else:
+        qs = qs.filter(organization__isnull=True)
+
+    order_territory_id = getattr(order, "territory_id", None)
+    if not order_territory_id:
+        user_profile = _get_user_profile_for_order(order)
+        if user_profile:
+            order_territory_id = user_profile.territory_id
+    if order_territory_id:
+        qs = qs.filter(
+            models.Q(territory_id=order_territory_id)
+            | models.Q(territory__isnull=True)
+        )
+
+    order_date = getattr(order, "order_date", None)
+    if order_date:
+        qs = qs.filter(effective_from__lte=order_date).filter(
+            models.Q(effective_to__gte=order_date)
+            | models.Q(effective_to__isnull=True)
+        )
+    return qs
+
+
+def resolve_compensation_plan_version(order):
+    """
+    Resolve the Published plan version whose effective range contains the
+    order date (effective_from <= order_date <= effective_to).
+
+    Priority mirrors legacy plan resolution:
+      1. Position-specific version (order.position_name, then profile)
+      2. Role-based version (profile.role) — only versions without position_name
+
+    Returns (version, lookup_source) or (None, None). Draft versions never match.
+    """
+    user_profile = _get_user_profile_for_order(order)
+    empty_position = models.Q(position_name__isnull=True) | models.Q(position_name="")
+    version_base = _version_queryset_for_order(order)
+    ordering = ("-effective_from", "-version_number", "-id")
+
+    for pos_name in _position_names_to_try(order, user_profile):
+        version = (
+            version_base.filter(position_name__iexact=pos_name)
+            .exclude(position_name__isnull=True)
+            .exclude(position_name="")
+            .order_by(*ordering)
+            .first()
+        )
+        if version:
+            return version, f"position_name:{pos_name}"
+
+    if user_profile and user_profile.role:
+        role = str(user_profile.role).strip()
+        if role:
+            version = (
+                version_base.filter(role__iexact=role)
+                .filter(empty_position)
+                .order_by(*ordering)
+                .first()
+            )
+            if version:
+                return version, f"role:{role}"
+
+    return None, None
+
+
 def resolve_compensation_plan(order):
     """
     Resolve which Active compensation plan applies to an order.
@@ -348,7 +424,7 @@ def explain_plan_resolution_failure(order):
     profile = _get_user_profile_for_order(order)
     position = (getattr(order, "position_name", None) or "").strip()
     order_date = getattr(order, "order_date", None)
-    month_label = order_date.strftime("%B %Y") if order_date else "that month"
+    date_label = order_date.strftime("%d %b %Y") if order_date else "that date"
 
     if not profile and not position:
         return (
@@ -371,8 +447,9 @@ def explain_plan_resolution_failure(order):
             continue
         if pos_plans.exists():
             return (
-                f"Position '{pos_name}' has compensation plan(s) but none active for "
-                f"{month_label}. Create an Active plan for that month (1st–last day)."
+                f"Position '{pos_name}' has compensation plan(s) but no Published "
+                f"version covers {date_label}. Publish or extend a version’s "
+                "effective date range."
             )
 
     if profile and profile.role:
@@ -381,9 +458,9 @@ def explain_plan_resolution_failure(order):
             role_plans = plan_base.filter(role__iexact=role).filter(empty_position)
             if role_plans.exists() and not role_plans.filter(effective).exists():
                 return (
-                    f"Role '{role}' has compensation plan(s) but none active for "
-                    f"{month_label}. Create an Active plan for {month_label} (1st–last day) "
-                    f"with role '{role}' and rate tiers."
+                    f"Role '{role}' has compensation plan(s) but no Published "
+                    f"version covers {date_label}. Clone/publish a version whose "
+                    f"effective range includes {date_label}."
                 )
             if not role_plans.filter(effective).exists():
                 month_plans = plan_base.filter(effective)
@@ -398,14 +475,14 @@ def explain_plan_resolution_failure(order):
                 if roles:
                     role_list = ", ".join(f"'{r}'" for r in roles[:6])
                     return (
-                        f"User '{user_label}' has role '{role}' but no matching compensation "
-                        f"plan for {month_label}. Active plans this month use role(s): "
-                        f"{role_list}. Change the user's role in User Setup or create a "
-                        f"{month_label} plan for '{role}' (commission rules attach to plans)."
+                        f"User '{user_label}' has role '{role}' but no matching "
+                        f"plan version for {date_label}. Active plans use role(s): "
+                        f"{role_list}."
                     )
                 return (
-                    f"No active compensation plan for role '{role}' in {month_label}. "
-                    "Create an Active plan for that month (1st–last day)."
+                    f"No Published plan version for role '{role}' on {date_label}. "
+                    "Create a plan and publish Version 1 with an effective range "
+                    "covering this date."
                 )
 
     if not profile:
@@ -415,8 +492,8 @@ def explain_plan_resolution_failure(order):
         )
 
     return (
-        f"No active compensation plan for {month_label}. "
-        "Check plan status=Active, effective dates, and role/position match."
+        f"No Published plan version covers {date_label}. "
+        "Check plan status, version status=Published, and effective_from/to."
     )
 
 
@@ -459,16 +536,19 @@ def _lookup_row_in_sales_band(row, sales_amount) -> bool:
     return True
 
 
-def find_sc_lookup_tier(plan, order, sales_amount):
+def find_sc_lookup_tier(plan, order, sales_amount, version=None):
     """Best matching SC Lookup row for an order and sales amount."""
-    if not plan or plan.commission_table_type != "LOOKUP" or not order:
+    source = version or plan
+    if not source or source.commission_table_type != "LOOKUP" or not order:
         return None
 
+    if version is not None:
+        row_qs = SCLookupTable.objects.filter(plan_version=version, is_active=True)
+    else:
+        row_qs = SCLookupTable.objects.filter(compensation_plan=plan, is_active=True)
+
     candidates = []
-    for row in SCLookupTable.objects.filter(
-        compensation_plan=plan,
-        is_active=True,
-    ).order_by("sequence", "id"):
+    for row in row_qs.order_by("sequence", "id"):
         if not _lookup_row_matches_order(row, order):
             continue
         if not _lookup_row_in_sales_band(row, sales_amount):
@@ -484,31 +564,68 @@ def find_sc_lookup_tier(plan, order, sales_amount):
     )
 
 
-def _calculate_amount_for_plan(plan, sales_amount, order=None):
-    """Apply RATE, FLAT, or LOOKUP table rules; returns Decimal commission or zero."""
-    commission_amount = Decimal("0.00")
+def _rate_qs_for(plan, version):
+    if version is not None:
+        return SCRateTable.objects.filter(plan_version=version)
+    return SCRateTable.objects.filter(compensation_plan=plan)
 
-    if plan.commission_table_type == "RATE":
-        tier = (
-            SCRateTable.objects.filter(
-                compensation_plan=plan,
-                is_active=True,
-                from_amount__lte=sales_amount,
-            )
-            .filter(
-                models.Q(to_amount__gte=sales_amount) | models.Q(to_amount__isnull=True)
-            )
-            .order_by("sequence")
-            .first()
+
+def _landing_tier_amount(rate_qs, sales_amount):
+    """Commission for one amount: find the tier band the amount falls into
+    and apply that tier's rate to the whole amount."""
+    tier = (
+        rate_qs.filter(
+            is_active=True,
+            from_amount__lte=sales_amount,
         )
-        if tier:
-            commission_amount = (
-                sales_amount * tier.commission_rate / Decimal("100")
-            ) + tier.bonus_amount
+        .filter(
+            models.Q(to_amount__gte=sales_amount)
+            | models.Q(to_amount__isnull=True)
+        )
+        .order_by("sequence")
+        .first()
+    )
+    if not tier:
+        return Decimal("0.00")
+    return (sales_amount * tier.commission_rate / Decimal("100")) + tier.bonus_amount
 
-    elif plan.commission_table_type == "FLAT":
-        flat = SCFlatRateTable.objects.filter(
-            compensation_plan=plan,
+
+def _rate_commission_per_order(plan, orders, version=None):
+    """RATE tables are calculated per order: each order's value picks the
+    tier band it falls into, that tier's rate applies to the whole order
+    amount, and the monthly commission is the sum of per-order commissions.
+
+    Example (10k-50k @ 0.5%, 50k-100k @ 1%): orders of 15,000 and 55,000
+    earn 75 + 550 = 625 — the orders are never added together first.
+    """
+    rate_qs = _rate_qs_for(plan, version)
+    total = Decimal("0.00")
+    for order in orders:
+        amount = order.sales_amount or Decimal("0.00")
+        total += _landing_tier_amount(rate_qs, amount)
+    return total
+
+
+def _calculate_amount_for_plan(plan, sales_amount, order=None, version=None):
+    """Apply RATE, FLAT, or LOOKUP table rules; returns Decimal commission or zero.
+
+    When a plan version is given, only rows belonging to that immutable
+    version are used; otherwise legacy plan-level rows apply.
+    """
+    commission_amount = Decimal("0.00")
+    source = version or plan
+
+    rate_qs = _rate_qs_for(plan, version)
+    if version is not None:
+        flat_qs = SCFlatRateTable.objects.filter(plan_version=version)
+    else:
+        flat_qs = SCFlatRateTable.objects.filter(compensation_plan=plan)
+
+    if source.commission_table_type == "RATE":
+        commission_amount = _landing_tier_amount(rate_qs, sales_amount)
+
+    elif source.commission_table_type == "FLAT":
+        flat = flat_qs.filter(
             is_active=True,
             minimum_sales_threshold__lte=sales_amount,
         ).first()
@@ -517,8 +634,8 @@ def _calculate_amount_for_plan(plan, sales_amount, order=None):
                 sales_amount * flat.flat_rate / Decimal("100")
             ) + flat.bonus_amount
 
-    elif plan.commission_table_type == "LOOKUP":
-        tier = find_sc_lookup_tier(plan, order, sales_amount)
+    elif source.commission_table_type == "LOOKUP":
+        tier = find_sc_lookup_tier(plan, order, sales_amount, version=version)
         if tier:
             commission_amount = (
                 sales_amount * tier.commission_rate / Decimal("100")
@@ -665,7 +782,27 @@ def calculate_commission_for_order(order, replace_existing=True, force=False):
     )
     source_order_count = eligible_orders.count()
 
-    plan, lookup_source = resolve_compensation_plan(representative_order)
+    # Enterprise path: resolve the immutable Published version whose
+    # effective range contains the order date. Legacy fallback covers
+    # plans created before versioning (no version rows).
+    plan_version, lookup_source = resolve_compensation_plan_version(
+        representative_order
+    )
+    if plan_version:
+        plan = plan_version.compensation_plan
+    else:
+        plan, lookup_source = resolve_compensation_plan(representative_order)
+        if plan and plan.versions.exists():
+            # Plan has versions but none Published for this date — versioned
+            # plans must never calculate from mutable plan-level data.
+            logger.warning(
+                "Plan %s matched for order %s but has no Published version "
+                "covering %s; skipping calculation.",
+                plan.id,
+                representative_order.order_id,
+                representative_order.order_date,
+            )
+            plan = None
 
     if not plan:
         user_profile = _get_user_profile_for_order(representative_order)
@@ -685,30 +822,71 @@ def calculate_commission_for_order(order, replace_existing=True, force=False):
         return None
 
     logger.info(
-        "Plan matched for employee-month %s/%s: plan_id=%s lookup=%s type=%s",
+        "Plan matched for employee-month %s/%s: plan_id=%s version=%s lookup=%s type=%s",
         representative_order.employee_id,
         period_start,
         plan.id,
+        getattr(plan_version, "version_number", None),
         lookup_source,
-        plan.commission_table_type,
+        (plan_version or plan).commission_table_type,
     )
 
     original_sales_amount = representative_order.sales_amount
     representative_order.sales_amount = total_sales
-    commission_amount = _calculate_amount_for_plan(
-        plan,
-        total_sales,
-        order=representative_order,
-    )
+    if (plan_version or plan).commission_table_type == "RATE":
+        # RATE tables: each order picks the tier band its own value falls
+        # into; the monthly commission is the sum of per-order commissions.
+        commission_amount = _rate_commission_per_order(
+            plan, eligible_orders, version=plan_version
+        )
+    else:
+        commission_amount = _calculate_amount_for_plan(
+            plan,
+            total_sales,
+            order=representative_order,
+            version=plan_version,
+        )
     if commission_amount <= 0:
         representative_order.sales_amount = original_sales_amount
+        if plan_version is not None:
+            from .plan_versions import _has_rate_configuration
+
+            if not _has_rate_configuration(plan_version):
+                logger.warning(
+                    "No commission for %s/%s: matched Published version %s of "
+                    "plan %s (id=%s) has no active %s rate rows. Rates added "
+                    "later may be sitting on an unpublished Draft — publish "
+                    "that draft (and archive the empty version) to fix.",
+                    representative_order.employee_id,
+                    period_start,
+                    plan_version.version_number,
+                    plan.plan_name,
+                    plan.id,
+                    plan_version.commission_table_type,
+                )
+                return None
+        logger.warning(
+            "No commission for %s/%s: no order matched a tier of plan %s "
+            "(id=%s, version=%s, type=%s, monthly sales %s). Check that the "
+            "rate table bands cover typical order values — the top tier "
+            "usually needs an open-ended (blank) To Amount. Any previously "
+            "calculated commission for this month was replaced with nothing.",
+            representative_order.employee_id,
+            period_start,
+            plan.plan_name,
+            plan.id,
+            getattr(plan_version, "version_number", None),
+            (plan_version or plan).commission_table_type,
+            total_sales,
+        )
         return None
 
     from .commission_rules import apply_commission_rules
 
     user_profile = _get_user_profile_for_order(representative_order)
     commission_amount, credit_amount, matched_rule, rule_meta = apply_commission_rules(
-        plan, representative_order, user_profile, commission_amount
+        plan, representative_order, user_profile, commission_amount,
+        version=plan_version,
     )
     representative_order.sales_amount = original_sales_amount
     if commission_amount <= 0:
@@ -734,6 +912,7 @@ def calculate_commission_for_order(order, replace_existing=True, force=False):
         sale=sale,
         commission_amount=employee_amount,
         compensation_plan=plan,
+        plan_version=plan_version,
         commission_rule=matched_rule,
         credit_amount=credit_amount,
         result_classification=rule_meta.get("result_classification", ""),
@@ -757,6 +936,7 @@ def calculate_commission_for_order(order, replace_existing=True, force=False):
             sale=sale,
             commission_amount=parent_amount,
             compensation_plan=plan,
+            plan_version=plan_version,
             status=Commission.STATUS_CALCULATED,
             calculation_scope=Commission.SCOPE_EMPLOYEE_MONTH,
             period_start=period_start,
