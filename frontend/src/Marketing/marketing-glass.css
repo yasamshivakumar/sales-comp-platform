@@ -1,0 +1,198 @@
+/* Marketing glassmorphism — aligned with login + app shell */
+
+.marketing-site {
+  --mkt-navy: #032d60;
+  --mkt-navy-deep: #001639;
+  --mkt-brand-dark: #032d60;
+  --mkt-brand-dark-mid: #014486;
+  --mkt-blue: #0176d3;
+  --mkt-blue-mid: #014486;
+  --mkt-blue-light: #1b96ff;
+  --mkt-blue-soft: rgba(1, 118, 211, 0.1);
+
+  --mkt-indigo-wash: rgba(255, 255, 255, 0.28);
+  --mkt-sky-wash: rgba(255, 255, 255, 0.22);
+  --mkt-slate-wash: rgba(255, 255, 255, 0.18);
+
+  --mkt-border: rgba(255, 255, 255, 0.45);
+  --mkt-surface: rgba(255, 255, 255, 0.55);
+  --mkt-bg: transparent;
+
+  --mkt-glass-bg: rgba(255, 255, 255, 0.55);
+  --mkt-glass-strong: rgba(255, 255, 255, 0.72);
+  --mkt-glass-border: rgba(255, 255, 255, 0.5);
+  --mkt-glass-shadow: 0 16px 48px rgba(3, 45, 96, 0.14);
+  --mkt-glass-blur: 18px;
+
+  --bg-dark: transparent;
+  --bg-white: rgba(255, 255, 255, 0.72);
+  --border-color: rgba(255, 255, 255, 0.45);
+
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse 70% 50% at 8% 0%, rgba(27, 150, 255, 0.3) 0%, transparent 55%),
+    radial-gradient(ellipse 55% 45% at 92% 18%, rgba(1, 118, 211, 0.22) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 40% at 70% 100%, rgba(3, 45, 96, 0.16) 0%, transparent 55%),
+    linear-gradient(165deg, #d7e6f6 0%, #c5daf0 45%, #a8c8e8 100%) !important;
+}
+
+.marketing-site::before,
+.marketing-site::after {
+  content: "";
+  position: fixed;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 50%;
+  filter: blur(42px);
+  opacity: 0.5;
+}
+
+.marketing-site::before {
+  width: min(440px, 60vw);
+  height: min(440px, 60vw);
+  top: -100px;
+  right: -80px;
+  background: radial-gradient(circle, rgba(91, 184, 255, 0.55), transparent 70%);
+}
+
+.marketing-site::after {
+  width: min(400px, 55vw);
+  height: min(400px, 55vw);
+  bottom: -120px;
+  left: 40px;
+  background: radial-gradient(circle, rgba(1, 118, 211, 0.35), transparent 70%);
+}
+
+.marketing-site > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Nav */
+.marketing-site .marketing-nav--scrolled {
+  background: var(--mkt-glass-strong) !important;
+  border-bottom-color: var(--mkt-glass-border) !important;
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  box-shadow: 0 8px 28px rgba(3, 45, 96, 0.08) !important;
+}
+
+.marketing-site .marketing-nav--transparent {
+  background: transparent !important;
+}
+
+.marketing-site .marketing-nav__menu,
+.marketing-site .marketing-nav__dropdown-panel {
+  background: var(--mkt-glass-strong) !important;
+  border: 1px solid var(--mkt-glass-border) !important;
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  box-shadow: var(--mkt-glass-shadow) !important;
+}
+
+/* Hero + sections */
+.marketing-site .mkt-hero {
+  background: transparent !important;
+}
+
+.marketing-site .mkt-hero__copy,
+.marketing-site .mkt-section--white,
+.marketing-site .mkt-section--soft,
+.marketing-site .mkt-section--slate,
+.marketing-site .mkt-section--muted,
+.marketing-site .marketing-section--white,
+.marketing-site .marketing-section--soft {
+  background: transparent !important;
+}
+
+.marketing-site .mkt-hero__copy {
+  background: var(--mkt-glass-bg) !important;
+  border: 1px solid var(--mkt-glass-border) !important;
+  border-radius: 24px !important;
+  box-shadow: var(--mkt-glass-shadow) !important;
+  backdrop-filter: blur(var(--mkt-glass-blur)) saturate(1.25);
+  -webkit-backdrop-filter: blur(var(--mkt-glass-blur)) saturate(1.25);
+}
+
+.marketing-site .mkt-hero__badge {
+  background: rgba(255, 255, 255, 0.65) !important;
+  border: 1px solid rgba(255, 255, 255, 0.55) !important;
+  backdrop-filter: blur(8px);
+}
+
+/* Cards / tiles / panels */
+.marketing-site .mkt-benefit-card,
+.marketing-site .mkt-feature-card,
+.marketing-site .mkt-step,
+.marketing-site .mkt-testimonial,
+.marketing-site .mkt-trust__metric,
+.marketing-site .mkt-team-card,
+.marketing-site .mkt-split__copy,
+.marketing-site .mkt-split__visual,
+.marketing-site .mkt-cta__inner,
+.marketing-site .marketing-card,
+.marketing-site .marketing-pillar,
+.marketing-site .marketing-feature-card,
+.marketing-site .marketing-pricing-card,
+.marketing-site .marketing-faq-item,
+.marketing-site .marketing-testimonial,
+.marketing-site .browser-frame,
+.marketing-site .mkt-demo-panel,
+.marketing-site .book-demo-form,
+.marketing-site .mkt-faq .faq-item,
+.marketing-site .faq-accordion__item {
+  background: var(--mkt-glass-bg) !important;
+  border: 1px solid var(--mkt-glass-border) !important;
+  box-shadow: var(--mkt-glass-shadow) !important;
+  backdrop-filter: blur(var(--mkt-glass-blur)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--mkt-glass-blur)) saturate(1.2);
+}
+
+.marketing-site .mkt-cta {
+  background: transparent !important;
+}
+
+.marketing-site .mkt-cta__inner {
+  border-radius: 24px !important;
+  padding: clamp(28px, 4vw, 40px) !important;
+}
+
+/* Keep form fields readable */
+.marketing-site input,
+.marketing-site textarea,
+.marketing-site select {
+  background: rgba(255, 255, 255, 0.92) !important;
+}
+
+/* Primary CTAs — Incentra accent */
+.marketing-site .mkt-btn--primary,
+.marketing-site .marketing-btn--primary,
+.marketing-site .marketing-nav__cta {
+  background: linear-gradient(180deg, #1b96ff 0%, #0176d3 55%, #014486 100%) !important;
+  border-color: #014486 !important;
+}
+
+.marketing-site .mkt-btn--secondary,
+.marketing-site .marketing-btn--secondary {
+  background: rgba(255, 255, 255, 0.7) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Footer */
+.marketing-site .marketing-footer,
+.marketing-site .mkt-footer {
+  background: rgba(3, 45, 96, 0.88) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marketing-site::before,
+  .marketing-site::after {
+    filter: none;
+    opacity: 0.3;
+  }
+}
