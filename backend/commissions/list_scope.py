@@ -40,15 +40,26 @@ def commission_employee_search_q(term: str, organization=None) -> Q:
     profiles = UserProfile.objects.filter(profile_search_q(term))
     if organization is not None:
         profiles = profiles.filter(organization=organization)
-    profile_emails = profiles.values_list(
-        "email", flat=True
+    profile_emails = list(profiles.values_list("email", flat=True))
+    profile_employee_ids = list(
+        profiles.exclude(employee_id="")
+        .exclude(employee_id__isnull=True)
+        .values_list("employee_id", flat=True)
     )
+    # Legacy employee rows sometimes use "{employee_id}@company.com" instead
+    # of the User Setup email; monthly aggregate commissions also have no
+    # sale.order, so match those synthetic emails and profile employee IDs.
+    synthetic_emails = [
+        f"{eid}@company.com" for eid in profile_employee_ids if eid
+    ]
     q = (
         Q(employee__name__icontains=term)
         | Q(employee__email__icontains=term)
         | Q(employee__email__in=profile_emails)
+        | Q(employee__email__in=synthetic_emails)
         | Q(sale__order__order_id__icontains=term)
         | Q(sale__order__employee_id__icontains=term)
+        | Q(sale__order__employee_id__in=profile_employee_ids)
     )
     if term.isdigit():
         q = q | Q(pk=int(term))

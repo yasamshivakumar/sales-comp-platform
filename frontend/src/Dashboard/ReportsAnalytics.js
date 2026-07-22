@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import api, { getApiErrorMessage } from "../api";
 import {
   activeCurrencyTotals,
@@ -313,10 +313,13 @@ function ReportsAnalytics({ compact = false }) {
   const [earnings, setEarnings] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
   const [leaderboardMeta, setLeaderboardMeta] = useState({ limited: false, count: null });
+  const [employeeTablesReady, setEmployeeTablesReady] = useState(false);
+  const [employeeTablesLoading, setEmployeeTablesLoading] = useState(false);
   const [advanced, setAdvanced] = useState(null);
   const [aiInsights, setAiInsights] = useState(null);
   const [aiInsightsLoading, setAiInsightsLoading] = useState(false);
   const [aiInsightsError, setAiInsightsError] = useState("");
+  const employeeTableRequestId = useRef(0);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedEmployeeSearch(employeeSearch), 300);
@@ -401,19 +404,29 @@ function ReportsAnalytics({ compact = false }) {
 
   const loadEmployeeTables = useCallback(async () => {
     const employeeQs = employeeTableQuery();
+    const requestId = ++employeeTableRequestId.current;
+    setEmployeeTablesLoading(true);
     try {
       const [earningsRes, leaderboardRes] = await Promise.all([
         api.get(`reports/employee-earnings/${employeeQs}`),
         api.get(`leaderboard/${employeeQs}`),
       ]);
+      // Ignore stale responses when the user typed another search term.
+      if (requestId !== employeeTableRequestId.current) return;
       setEarnings(earningsRes.data);
       setLeaderboard(leaderboardRes.data.results || []);
       setLeaderboardMeta({
         limited: Boolean(leaderboardRes.data.limited),
         count: leaderboardRes.data.count ?? null,
       });
+      setEmployeeTablesReady(true);
     } catch (err) {
+      if (requestId !== employeeTableRequestId.current) return;
       setError(getApiErrorMessage(err, "Failed to refresh employee tables"));
+    } finally {
+      if (requestId === employeeTableRequestId.current) {
+        setEmployeeTablesLoading(false);
+      }
     }
   }, [employeeTableQuery]);
 
@@ -464,10 +477,13 @@ function ReportsAnalytics({ compact = false }) {
       ? (parseFloat(topEarners[0].total) / parseFloat(summary.total_commission)) * 100
       : 0;
 
+  const isSearchingEmployees = Boolean(debouncedEmployeeSearch.trim());
+  // Never fall back to unfiltered top earners while searching — that made the
+  // search bar look broken (empty matches still showed the full top list).
   const tableRows =
     viewMode === "reporting"
       ? earnings?.earnings || []
-      : leaderboard.length
+      : employeeTablesReady || isSearchingEmployees
         ? leaderboard
         : topEarners.slice(0, 15);
 
@@ -531,8 +547,8 @@ function ReportsAnalytics({ compact = false }) {
 
   const tableLimited =
     viewMode === "reporting"
-      ? Boolean(earnings?.limited)
-      : leaderboardMeta.limited && !debouncedEmployeeSearch.trim();
+      ? Boolean(earnings?.limited) && !isSearchingEmployees
+      : leaderboardMeta.limited && !isSearchingEmployees;
 
   const tableTotalCount =
     viewMode === "reporting" ? earnings?.count : leaderboardMeta.count;
@@ -906,12 +922,21 @@ function ReportsAnalytics({ compact = false }) {
                   value={employeeSearch}
                   onChange={(e) => setEmployeeSearch(e.target.value)}
                   placeholder="Name, email, or employee ID…"
+                  aria-busy={employeeTablesLoading}
                 />
               </label>
             </div>
             {tableLimited && (
               <p className="ra-list-hint">
                 Showing 15 of {tableTotalCount ?? "many"} employees. Search to find others.
+              </p>
+            )}
+            {isSearchingEmployees && employeeTablesLoading && (
+              <p className="ra-list-hint">Searching employees…</p>
+            )}
+            {isSearchingEmployees && !employeeTablesLoading && tableRows.length === 0 && (
+              <p className="ra-list-hint">
+                No employees match “{debouncedEmployeeSearch.trim()}”.
               </p>
             )}
             <div className="ra-table-wrap">
@@ -929,7 +954,9 @@ function ReportsAnalytics({ compact = false }) {
                   {tableRows.length === 0 ? (
                     <tr>
                       <td colSpan={viewMode === "analytics" && leaderboard.length > 0 ? 5 : 3} style={{ color: "#64748b" }}>
-                        No data — adjust dates and refresh.
+                        {isSearchingEmployees
+                          ? "No matching employees for this search."
+                          : "No data — adjust dates and refresh."}
                       </td>
                     </tr>
                   ) : (

@@ -1836,37 +1836,84 @@ def sales_by_region_report(request):
 def employee_earnings_report(request):
     """
     Employee Earnings Report
-    Detailed breakdown of commissions by employee
+    Detailed breakdown of commissions by employee.
+    Supports the same date / business-group / employee search filters as
+    the Performance dashboard leaderboard.
     """
-    from django.db.models import Sum, Count
-    
-    user = request.user
-    user_profile = get_request_user_profile(request)
-    is_admin = user_is_admin(request)
+    from django.db.models import Count, Sum
 
-    # Tenant isolation: earnings only ever cover the caller's organization.
-    commissions = filter_queryset_by_organization(
-        Commission.objects.all(),
-        getattr(request, "organization", None),
+    from .currencies import normalize_currency
+    from .enterprise_views import (
+        _apply_commission_filters,
+        _commission_base_queryset,
+        _commissions_for_user,
+        with_commission_currency,
+    )
+    from .list_scope import commission_employee_search_q, list_limit_for_request
+
+    is_admin = user_is_admin(request)
+    org = getattr(request, "organization", None)
+
+    commissions = _commission_base_queryset(request)
+    if org:
+        commissions = commissions.filter(organization=org)
+
+    if not user_can_view_finance_data(request) and not user_is_manager(request):
+        commissions = _commissions_for_user(request)
+
+    commissions, start_date, end_date = _apply_commission_filters(
+        commissions, request
+    )
+    commissions = with_commission_currency(commissions)
+
+    q = (request.query_params.get("q") or "").strip()
+    if q:
+        commissions = commissions.filter(
+            commission_employee_search_q(q, organization=org)
+        )
+
+    ranked = (
+        commissions.values(
+            "employee_id",
+            "employee__name",
+            "employee__email",
+            "report_currency",
+        )
+        .annotate(
+            total_earnings=Sum("commission_amount"),
+            commission_count=Count("id"),
+        )
+        .order_by("-total_earnings")
     )
 
-    if not is_admin:
-        possible_emails = [user.email]
-        if user_profile and user_profile.employee_id:
-            possible_emails.append(f"{user_profile.employee_id}@company.com")
-        commissions = commissions.filter(employee__email__in=possible_emails)
-    
-    # Group by employee
-    earnings_data = commissions.values('employee__name', 'employee__email', 'employee_id').annotate(
-        total_earnings=Sum('commission_amount'),
-        commission_count=Count('id'),
-        avg_commission=Sum('commission_amount')
-    ).order_by('-total_earnings')
-    
-    return Response({
-        'earnings': list(earnings_data),
-        'is_admin': is_admin,
-    })
+    limit = list_limit_for_request(request, searching=bool(q))
+    total_count = ranked.count()
+    earnings_data = []
+    for row in ranked[:limit]:
+        earnings_data.append(
+            {
+                "employee_id": row["employee_id"],
+                "employee__name": row["employee__name"],
+                "employee_name": row["employee__name"],
+                "employee__email": row["employee__email"],
+                "employee_email": row["employee__email"],
+                "total_earnings": str(row["total_earnings"] or 0),
+                "total_commission": str(row["total_earnings"] or 0),
+                "commission_count": row["commission_count"],
+                "currency": normalize_currency(row.get("report_currency")),
+            }
+        )
+
+    return Response(
+        {
+            "earnings": earnings_data,
+            "is_admin": is_admin,
+            "start_date": str(start_date) if start_date else None,
+            "end_date": str(end_date) if end_date else None,
+            "count": total_count,
+            "limited": total_count > limit,
+        }
+    )
 
 
 @api_view(['GET'])
