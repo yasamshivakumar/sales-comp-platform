@@ -26,28 +26,6 @@ def month_bounds(year: int, month: int) -> tuple[date, date]:
     return date(year, month, 1), date(year, month, last_day)
 
 
-def normalize_monthly_plan_dates(start_value, end_value=None):
-    """
-    Legacy helper: snap dates to a single calendar month.
-
-    Prefer free-form ranges for new versioned plans. Kept for older callers
-    that still expect month windows.
-    """
-    start = parse_date(start_value)
-    if not start:
-        raise ValueError("effective_start_date is required")
-
-    if end_value:
-        end = parse_date(end_value)
-        if end and (end.year != start.year or end.month != start.month):
-            raise ValueError(
-                "Compensation plans must fit within one calendar month. "
-                "Use the 1st through last day of that month only."
-            )
-
-    return month_bounds(start.year, start.month)
-
-
 def monthly_plan_filter(order_date) -> models.Q:
     """
     Legacy plan filter: match plans whose effective_start is in the same

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import api from "../api";
 import ReportsAnalytics from "./ReportsAnalytics";
+import LoadingCenter from "../Components/LoadingCenter";
 import "./dashboard.css";
 
 function Dashboard() {
@@ -17,7 +18,11 @@ function Dashboard() {
   }, []);
 
   if (!loaded) {
-    return <div className="unified-dashboard">Loading dashboard...</div>;
+    return (
+      <div className="unified-dashboard unified-dashboard--loading">
+        <LoadingCenter label="Loading dashboard…" minHeight={360} />
+      </div>
+    );
   }
 
   const canViewDashboard =

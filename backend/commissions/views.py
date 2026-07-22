@@ -9,33 +9,26 @@ from rest_framework.response import Response
 from rest_framework import viewsets
 from .models import (
     Employee,
-    Sale,
     Commission,
     UserProfile,
     HierarchyRelationship,
     CompensationPlan,
     CompensationTier,
     Order,
-    SCRateTable,
-    SCFlatRateTable,
 )
 from decimal import Decimal, InvalidOperation
 from .serializers import (
     EmployeeSerializer,
-    SaleSerializer,
     CommissionSerializer,
     CompensationPlanSerializer,
     CompensationTierSerializer,
     OrderSerializer,
-    SCRateTableSerializer,
-    SCFlatRateTableSerializer,
 )
 from django.contrib.auth.models import User
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import AllowAny
-from django.contrib.auth import authenticate
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
@@ -73,12 +66,6 @@ from django.utils.dateparse import parse_date
 logger = logging.getLogger("commissions")
 
 
-def _apply_onboarding_password(django_user, user_created):
-    """Set initial password only when DEFAULT_ONBOARDING_PASSWORD is configured."""
-    pwd = getattr(settings, "DEFAULT_ONBOARDING_PASSWORD", "") or ""
-    if user_created and pwd:
-        django_user.set_password(pwd)
-
 class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = Employee.objects.all()
     serializer_class = EmployeeSerializer
@@ -101,18 +88,6 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         require_admin(self.request)
         instance.delete()
-
-
-class SaleViewSet(viewsets.ModelViewSet):
-    queryset = Sale.objects.all()
-    serializer_class = SaleSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        return filter_queryset_by_organization(
-            Sale.objects.all(),
-            getattr(self.request, "organization", None),
-        )
 
 
 class CommissionViewSet(viewsets.ModelViewSet):
@@ -186,83 +161,6 @@ class CommissionViewSet(viewsets.ModelViewSet):
         require_finance_or_admin(self.request)
         instance.delete()
 
-
-# ====================================================
-# SC Rate Table ViewSet
-# ====================================================
-class SCRateTableViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for SC Rate Table (Tiered Commission Rates)
-    
-    Endpoints:
-    - GET /sc-rate-tables/ - List all rate tables
-    - GET /sc-rate-tables/?compensation_plan=<id> - Filter by compensation plan
-    - POST /sc-rate-tables/ - Create new rate table
-    - GET /sc-rate-tables/<id>/ - Get specific rate table
-    - PUT/PATCH /sc-rate-tables/<id>/ - Update rate table
-    - DELETE /sc-rate-tables/<id>/ - Delete rate table
-    """
-    serializer_class = SCRateTableSerializer
-    permission_classes = [IsAuthenticated]
-    
-    def get_queryset(self):
-        queryset = filter_queryset_by_organization(
-            SCRateTable.objects.all(),
-            getattr(self.request, "organization", None),
-            field="compensation_plan__organization",
-        ).order_by('compensation_plan', 'sequence', 'from_amount')
-        
-        # Filter by compensation plan if provided
-        compensation_plan_id = self.request.query_params.get('compensation_plan', None)
-        if compensation_plan_id:
-            queryset = queryset.filter(compensation_plan_id=compensation_plan_id)
-        
-        # Filter by active status
-        is_active = self.request.query_params.get('is_active', None)
-        if is_active is not None:
-            is_active = is_active.lower() == 'true'
-            queryset = queryset.filter(is_active=is_active)
-        
-        return queryset
-
-
-# ====================================================
-# SC Flat Rate Table ViewSet
-# ====================================================
-class SCFlatRateTableViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for SC Flat Rate Table (Fixed Commission Rates)
-    
-    Endpoints:
-    - GET /sc-flat-rate-tables/ - List all flat rate tables
-    - GET /sc-flat-rate-tables/?compensation_plan=<id> - Filter by compensation plan
-    - POST /sc-flat-rate-tables/ - Create new flat rate table
-    - GET /sc-flat-rate-tables/<id>/ - Get specific flat rate table
-    - PUT/PATCH /sc-flat-rate-tables/<id>/ - Update flat rate table
-    - DELETE /sc-flat-rate-tables/<id>/ - Delete flat rate table
-    """
-    serializer_class = SCFlatRateTableSerializer
-    permission_classes = [IsAuthenticated]
-    
-    def get_queryset(self):
-        queryset = filter_queryset_by_organization(
-            SCFlatRateTable.objects.all(),
-            getattr(self.request, "organization", None),
-            field="compensation_plan__organization",
-        ).order_by('compensation_plan')
-        
-        # Filter by compensation plan if provided
-        compensation_plan_id = self.request.query_params.get('compensation_plan', None)
-        if compensation_plan_id:
-            queryset = queryset.filter(compensation_plan_id=compensation_plan_id)
-        
-        # Filter by active status
-        is_active = self.request.query_params.get('is_active', None)
-        if is_active is not None:
-            is_active = is_active.lower() == 'true'
-            queryset = queryset.filter(is_active=is_active)
-        
-        return queryset
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -396,42 +294,6 @@ def invite_accept(request, token):
 
 invite_accept.throttle_scope = "login"
 
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
-@throttle_classes([ScopedRateThrottle])
-def login(request):
-    username = request.data.get('username')
-    password = request.data.get('password')
-
-    # Authenticate user
-    user = authenticate(
-        username=username,
-        password=password
-    )
-
-    if not user:
-        record_audit(request, "login_failed", {"username": username})
-        return Response(
-            {'error': 'Invalid credentials'},
-            status=400
-        )
-
-    token = issue_user_token(user)
-    record_audit(
-        request,
-        "login_success",
-        {"user_id": user.pk, "username": username},
-        user=user,
-    )
-
-    # Return success response
-    return Response({
-        'message': 'Login successful',
-        'token': token.key,
-        'token_expires_at': token_expires_at_iso(token),
-        'username': user.username
-    })
 
 class CompensationPlanListCreateView(generics.ListCreateAPIView):
     serializer_class = CompensationPlanSerializer
@@ -1168,10 +1030,6 @@ class OrderUploadView(APIView):
             "async": False,
             **summary,
         })
-
-
-signup.throttle_scope = "login"
-login.throttle_scope = "login"
 
 
 # =====================================================

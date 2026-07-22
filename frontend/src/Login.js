@@ -4,7 +4,6 @@ import {
   Box,
   Button,
   Card,
-  CircularProgress,
   IconButton,
   InputAdornment,
   Stack,
@@ -18,6 +17,7 @@ import api, { getApiErrorMessage, getAuthToken, isSessionExpired, saveAuthSessio
 import { useToast } from "./Components/Toast";
 import AuthTextField from "./Components/AuthTextField";
 import AuthPageLayout, { authFormCardSx } from "./Components/AuthPageLayout";
+import LoadingCenter from "./Components/LoadingCenter";
 
 const apiHost = process.env.REACT_APP_API_HOST || "http://localhost:8000";
 const oidcEnabled = process.env.REACT_APP_OIDC_ENABLED === "true";
@@ -165,93 +165,102 @@ function Login() {
 
   return (
     <AuthPageLayout brand={brandPanel}>
-      <Card elevation={0} sx={authFormCardSx}>
-        <Typography variant="h4" fontWeight={800} gutterBottom>
-          Sign in
-        </Typography>
-        <Typography color="text.secondary" sx={{ mb: 3 }}>
-          Access your Incentra workspace
-        </Typography>
+      <Card
+        elevation={0}
+        sx={{
+          ...authFormCardSx,
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        {loading ? (
+          <LoadingCenter label="Signing you in…" minHeight={320} />
+        ) : (
+          <>
+            <Typography variant="h4" fontWeight={800} gutterBottom>
+              Sign in
+            </Typography>
+            <Typography color="text.secondary" sx={{ mb: 3 }}>
+              Access your Incentra workspace
+            </Typography>
 
-        <Stack spacing={2}>
-          <AuthTextField
-            label="Work email"
-            type="email"
-            placeholder="you@company.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-            disabled={loading}
-            autoComplete="email"
-          />
-          <AuthTextField
-            label="Password"
-            type={showPassword ? "text" : "password"}
-            placeholder="Enter your password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-            disabled={loading}
-            autoComplete="current-password"
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    aria-pressed={showPassword}
-                    edge="end"
-                    size="small"
-                    type="button"
-                    onClick={() => setShowPassword((value) => !value)}
-                    onMouseDown={(e) => e.preventDefault()}
-                    sx={{
-                      width: "32px !important",
-                      minWidth: "32px !important",
-                      height: "32px",
-                      p: "4px !important",
-                      bgcolor: "transparent !important",
-                      boxShadow: "none !important",
-                      color: "text.secondary",
-                      "&:hover": {
-                        bgcolor: "action.hover !important",
-                        transform: "none",
-                      },
-                    }}
-                  >
-                    {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-          />
-          <Button
-            variant="contained"
-            size="large"
-            fullWidth
-            onClick={handleLogin}
-            disabled={loading}
-            startIcon={loading ? <CircularProgress size={18} color="inherit" /> : null}
-          >
-            {loading ? "Signing in…" : "Sign in"}
-          </Button>
-        </Stack>
+            <Stack spacing={2}>
+              <AuthTextField
+                label="Work email"
+                type="email"
+                placeholder="you@company.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                autoComplete="email"
+              />
+              <AuthTextField
+                label="Password"
+                type={showPassword ? "text" : "password"}
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                autoComplete="current-password"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        aria-pressed={showPassword}
+                        edge="end"
+                        size="small"
+                        type="button"
+                        onClick={() => setShowPassword((value) => !value)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        sx={{
+                          width: "32px !important",
+                          minWidth: "32px !important",
+                          height: "32px",
+                          p: "4px !important",
+                          bgcolor: "transparent !important",
+                          boxShadow: "none !important",
+                          color: "text.secondary",
+                          "&:hover": {
+                            bgcolor: "action.hover !important",
+                            transform: "none",
+                          },
+                        }}
+                      >
+                        {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+              <Button
+                variant="contained"
+                size="large"
+                fullWidth
+                onClick={handleLogin}
+              >
+                Sign in
+              </Button>
+            </Stack>
 
-        {oidcEnabled && (
-          <Button
-            variant="outlined"
-            fullWidth
-            sx={{ mt: 2 }}
-            onClick={() => {
-              window.location.href = `${apiHost}/oidc/authenticate/`;
-            }}
-          >
-            Continue with SSO
-          </Button>
+            {oidcEnabled && (
+              <Button
+                variant="outlined"
+                fullWidth
+                sx={{ mt: 2 }}
+                onClick={() => {
+                  window.location.href = `${apiHost}/oidc/authenticate/`;
+                }}
+              >
+                Continue with SSO
+              </Button>
+            )}
+
+            <Typography align="center" sx={{ mt: 3 }} color="text.secondary" variant="body2">
+              New employees must accept their email invite and set a password before signing in.
+            </Typography>
+          </>
         )}
-
-        <Typography align="center" sx={{ mt: 3 }} color="text.secondary" variant="body2">
-          New employees must accept their email invite and set a password before signing in.
-        </Typography>
       </Card>
     </AuthPageLayout>
   );

@@ -4,7 +4,6 @@ import {
   Box,
   Button,
   Card,
-  CircularProgress,
   IconButton,
   InputAdornment,
   Stack,
@@ -16,6 +15,7 @@ import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import api, { getApiErrorMessage } from "./api";
 import AuthTextField from "./Components/AuthTextField";
 import AuthPageLayout, { authFormCardSx } from "./Components/AuthPageLayout";
+import LoadingCenter from "./Components/LoadingCenter";
 import { useToast } from "./Components/Toast";
 import { enterprise } from "./theme/muiTheme";
 
@@ -162,9 +162,7 @@ function InviteAccept() {
         </Typography>
 
         {loading ? (
-          <Stack alignItems="center" sx={{ py: 3 }}>
-            <CircularProgress size={28} />
-          </Stack>
+          <LoadingCenter label="Checking your invite…" minHeight={200} />
         ) : invite ? (
           <Stack spacing={2}>
             <AuthTextField label="Email" value={invite.email || ""} disabled />

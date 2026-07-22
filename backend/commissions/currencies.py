@@ -82,10 +82,3 @@ def active_currency_totals(rows, value_key="total"):
         )
     cleaned.sort(key=lambda item: item["currency"])
     return cleaned
-
-
-def primary_currency_from_totals(rows, fallback=DEFAULT_CURRENCY):
-    active = active_currency_totals(rows)
-    if len(active) == 1:
-        return active[0]["currency"]
-    return normalize_currency(fallback)

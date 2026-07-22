@@ -31,10 +31,6 @@ _ALIASES = {
 }
 
 
-def business_group_choices_for_api():
-    return [{"value": item["value"], "label": item["label"]} for item in BUSINESS_GROUPS]
-
-
 def normalize_business_group(value, default="India"):
     raw = str(value or "").strip()
     if not raw:
@@ -250,60 +246,3 @@ def apply_business_group_to_orders(queryset, business_group, organization=None):
     if not business_group:
         return queryset
     return queryset.filter(order_business_group_q(business_group, organization))
-
-
-def commission_totals_by_business_group(
-    queryset,
-    *,
-    amount_field="commission_amount",
-    organization=None,
-):
-    from django.db.models import Sum
-
-    results = []
-    for item in BUSINESS_GROUPS:
-        scoped = apply_business_group_to_commissions(
-            queryset,
-            item["value"],
-            organization=organization,
-        )
-        total = scoped.aggregate(total=Sum(amount_field))["total"] or 0
-        count = scoped.count()
-        if not total and not count:
-            continue
-        results.append(
-            {
-                "business_group": item["value"],
-                "label": item["label"],
-                "currency": item["currency"],
-                "total": float(total),
-                "count": count,
-            }
-        )
-    return results
-
-
-def sales_totals_by_business_group(queryset, organization=None):
-    from django.db.models import Sum
-
-    results = []
-    for item in BUSINESS_GROUPS:
-        scoped = apply_business_group_to_orders(
-            queryset,
-            item["value"],
-            organization=organization,
-        )
-        total = scoped.aggregate(total=Sum("sales_amount"))["total"] or 0
-        count = scoped.count()
-        if not total and not count:
-            continue
-        results.append(
-            {
-                "business_group": item["value"],
-                "label": item["label"],
-                "currency": item["currency"],
-                "total": float(total),
-                "count": count,
-            }
-        )
-    return results

@@ -348,5 +348,4 @@ export function getApiErrorMessage(err, fallback = "Request failed") {
   return fallback;
 }
 
-export { apiHost, apiBaseURL };
 export default api;

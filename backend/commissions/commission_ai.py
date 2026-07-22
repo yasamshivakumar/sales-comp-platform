@@ -185,12 +185,6 @@ def ai_setup_status() -> dict:
     }
 
 
-def commission_ai_enabled() -> bool:
-    if not getattr(settings, "COMMISSION_AI_ENABLED", True):
-        return False
-    return _resolve_ai_runtime() is not None
-
-
 def _decimal_str(value) -> str:
     if value is None:
         return "0"

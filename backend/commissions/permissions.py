@@ -50,9 +50,3 @@ def require_finance_or_admin(request):
             "Only administrators or finance users can access this resource"
         )
 
-
-def require_manager_or_admin(request):
-    if not (user_is_manager(request) or user_is_admin(request)):
-        raise PermissionDenied(
-            "Only managers or administrators can perform this action"
-        )
