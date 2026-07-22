@@ -8,6 +8,7 @@ import { enterprise } from "../theme/muiTheme";
 function LoadingCenter({
   label = "",
   overlay = false,
+  overlayTone = "light",
   minHeight = 160,
   size = 24,
 }) {
@@ -28,7 +29,7 @@ function LoadingCenter({
       <CircularProgress
         size={size}
         thickness={4}
-        sx={{ color: enterprise.accent }}
+        sx={{ color: overlayTone === "dark" ? "#fff" : enterprise.accent }}
       />
     </Box>
   );
@@ -45,7 +46,10 @@ function LoadingCenter({
         alignItems: "center",
         justifyContent: "center",
         borderRadius: "inherit",
-        bgcolor: "rgba(255, 255, 255, 0.72)",
+        bgcolor:
+          overlayTone === "dark"
+            ? "rgba(3, 45, 96, 0.4)"
+            : "rgba(255, 255, 255, 0.72)",
         backdropFilter: "blur(3px)",
         WebkitBackdropFilter: "blur(3px)",
       }}

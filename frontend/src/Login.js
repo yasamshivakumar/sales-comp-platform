@@ -1,14 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Box,
-  Button,
-  Card,
-  IconButton,
-  InputAdornment,
-  Stack,
-  Typography,
-} from "@mui/material";
+import { Box, IconButton, InputAdornment } from "@mui/material";
 import SecurityIcon from "@mui/icons-material/Security";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import VisibilityIcon from "@mui/icons-material/Visibility";
@@ -16,8 +8,7 @@ import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import api, { getApiErrorMessage, getAuthToken, isSessionExpired, saveAuthSession } from "./api";
 import { useToast } from "./Components/Toast";
 import AuthTextField from "./Components/AuthTextField";
-import AuthPageLayout, { authFormCardSx } from "./Components/AuthPageLayout";
-import LoadingCenter from "./Components/LoadingCenter";
+import "./Login.css";
 
 const apiHost = process.env.REACT_APP_API_HOST || "http://localhost:8000";
 const oidcEnabled = process.env.REACT_APP_OIDC_ENABLED === "true";
@@ -121,69 +112,46 @@ function Login() {
     }
   };
 
-  const brandPanel = (
-    <>
-      <Box
-        component="img"
-        src="/incentra-icon.svg"
-        alt="Incentra"
-        sx={{
-          width: 52,
-          height: 52,
-          borderRadius: 2,
-          mb: 3,
-          boxShadow: "0 8px 24px rgba(1,118,211,0.35)",
-        }}
-      />
-      <Typography
-        variant="h3"
-        fontWeight={800}
-        sx={{ mb: 1.5, lineHeight: 1.2, color: "#fff" }}
-      >
-        Enterprise sales compensation
-      </Typography>
-      <Typography sx={{ color: "rgba(255,255,255,0.78)", lineHeight: 1.7, mb: 4 }}>
-        Plan incentives, calculate commissions, and pay reps with confidence — built for
-        finance and sales ops teams.
-      </Typography>
-      <Stack spacing={2}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <TrendingUpIcon sx={{ color: "rgba(255,255,255,0.85)" }} />
-          <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.86)" }}>
-            Real-time commission analytics
-          </Typography>
-        </Stack>
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <SecurityIcon sx={{ color: "rgba(255,255,255,0.85)" }} />
-          <Typography variant="body2" sx={{ color: "rgba(255,255,255,0.86)" }}>
-            Role-based access & audit trails
-          </Typography>
-        </Stack>
-      </Stack>
-    </>
-  );
-
   return (
-    <AuthPageLayout brand={brandPanel}>
-      <Card
-        elevation={0}
-        sx={{
-          ...authFormCardSx,
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
-        {loading && <LoadingCenter overlay size={24} label="Signing in" />}
-        <Typography variant="h4" fontWeight={800} gutterBottom>
-          Sign in
-        </Typography>
-        <Typography color="text.secondary" sx={{ mb: 3 }}>
-          Access your Incentra workspace
-        </Typography>
+    <div className="login-glass">
+      <div className="login-glass__stage" aria-hidden={false}>
+        <span className="login-glass__blob login-glass__blob--a" aria-hidden="true" />
+        <span className="login-glass__blob login-glass__blob--b" aria-hidden="true" />
+        <span className="login-glass__blob login-glass__blob--c" aria-hidden="true" />
+        <span className="login-glass__ribbon login-glass__ribbon--1" aria-hidden="true" />
+        <span className="login-glass__ribbon login-glass__ribbon--2" aria-hidden="true" />
+        <span className="login-glass__zig login-glass__zig--1" aria-hidden="true" />
+        <span className="login-glass__zig login-glass__zig--2" aria-hidden="true" />
 
-        <Stack spacing={2}>
-          <AuthTextField
-            label="Work email"
+        <div className="login-glass__content">
+          <aside className="login-glass__intro">
+            <div className="login-glass__brand login-glass__brand--intro">
+              <img src="/incentra-icon.svg" alt="" />
+              <span className="login-glass__brand-name">Incentra</span>
+            </div>
+            <h2 className="login-glass__headline">Enterprise sales compensation</h2>
+            <p className="login-glass__lede">
+              Plan incentives, calculate commissions, and pay reps with confidence — built for
+              finance and sales ops teams.
+            </p>
+            <ul className="login-glass__features">
+              <li>
+                <TrendingUpIcon fontSize="small" aria-hidden="true" />
+                <span>Real-time commission analytics</span>
+              </li>
+              <li>
+                <SecurityIcon fontSize="small" aria-hidden="true" />
+                <span>Role-based access &amp; audit trails</span>
+              </li>
+            </ul>
+          </aside>
+
+          <Box className="login-glass__card" sx={{ position: "relative", overflow: "hidden" }}>
+            <h1 className="login-glass__title">Login</h1>
+            <p className="login-glass__subtitle">Access your Incentra workspace</p>
+
+            <AuthTextField
+            label="Email"
             type="email"
             placeholder="you@company.com"
             value={email}
@@ -191,11 +159,12 @@ function Login() {
             onKeyDown={(e) => e.key === "Enter" && !loading && handleLogin()}
             autoComplete="email"
             disabled={loading}
+            sx={{ mb: 2 }}
           />
           <AuthTextField
             label="Password"
             type={showPassword ? "text" : "password"}
-            placeholder="Enter your password"
+            placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !loading && handleLogin()}
@@ -220,9 +189,9 @@ function Login() {
                       p: "4px !important",
                       bgcolor: "transparent !important",
                       boxShadow: "none !important",
-                      color: "text.secondary",
+                      color: "#64748b",
                       "&:hover": {
-                        bgcolor: "action.hover !important",
+                        bgcolor: "rgba(15, 23, 42, 0.06) !important",
                         transform: "none",
                       },
                     }}
@@ -233,36 +202,39 @@ function Login() {
               ),
             }}
           />
-          <Button
-            variant="contained"
-            size="large"
-            fullWidth
+
+          <button
+            type="button"
+            className="login-glass__submit"
             disabled={loading}
             onClick={handleLogin}
           >
             {loading ? "Signing in…" : "Sign in"}
-          </Button>
-        </Stack>
+          </button>
 
-        {oidcEnabled && (
-          <Button
-            variant="outlined"
-            fullWidth
-            sx={{ mt: 2 }}
-            disabled={loading}
-            onClick={() => {
-              window.location.href = `${apiHost}/oidc/authenticate/`;
-            }}
-          >
-            Continue with SSO
-          </Button>
-        )}
+          {oidcEnabled && (
+            <>
+              <div className="login-glass__divider">or continue with</div>
+              <button
+                type="button"
+                className="login-glass__sso"
+                disabled={loading}
+                onClick={() => {
+                  window.location.href = `${apiHost}/oidc/authenticate/`;
+                }}
+              >
+                Continue with SSO
+              </button>
+            </>
+          )}
 
-        <Typography align="center" sx={{ mt: 3 }} color="text.secondary" variant="body2">
-          New employees must accept their email invite and set a password before signing in.
-        </Typography>
-      </Card>
-    </AuthPageLayout>
+          <p className="login-glass__footer">
+            New here? <strong>Accept your email invite</strong> to set a password before signing in.
+          </p>
+          </Box>
+        </div>
+      </div>
+    </div>
   );
 }
 
