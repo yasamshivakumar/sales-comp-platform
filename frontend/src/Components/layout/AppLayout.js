@@ -584,15 +584,21 @@ function AppLayout({ children }) {
           bgcolor: enterprise.navy,
           color: "#fff",
           borderBottom: "1px solid rgba(255,255,255,0.1)",
+          pt: "env(safe-area-inset-top)",
         }}
       >
-        <Toolbar>
+        <Toolbar sx={{ minHeight: { xs: 56 }, gap: 0.5 }}>
           <IconButton edge="start" onClick={() => setMobileOpen(true)} aria-label="Open menu" sx={{ color: "#fff" }}>
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" sx={{ ml: 1, fontWeight: 800, flexGrow: 1 }}>
-            Incentra
-          </Typography>
+          <Box sx={{ ml: 0.5, flexGrow: 1, minWidth: 0 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.15 }} noWrap>
+              {pageTitle}
+            </Typography>
+            <Typography variant="caption" sx={{ opacity: 0.75, lineHeight: 1.1, display: "block" }} noWrap>
+              Incentra
+            </Typography>
+          </Box>
           {canManageIntegrations && (
             <Tooltip title="Connect CRM">
               <IconButton
@@ -685,8 +691,9 @@ function AppLayout({ children }) {
           maxWidth: "100%",
           minWidth: 0,
           overflowX: "hidden",
-          pt: { xs: 8, md: 0 },
-          minHeight: "100vh",
+          pt: { xs: "calc(56px + env(safe-area-inset-top))", md: 0 },
+          pb: { xs: "env(safe-area-inset-bottom)", md: 0 },
+          minHeight: "100dvh",
           display: "flex",
           flexDirection: "column",
         }}
@@ -779,6 +786,7 @@ function AppLayout({ children }) {
         open={connectDialogOpen}
         onClose={() => setConnectDialogOpen(false)}
         fullWidth
+        fullScreen={isMobile}
         maxWidth="lg"
         scroll="paper"
         aria-labelledby="integrations-dialog-title"

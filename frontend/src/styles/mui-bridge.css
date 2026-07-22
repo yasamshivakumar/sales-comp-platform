@@ -375,6 +375,22 @@ table tbody tr:hover {
   flex: 0 0 auto;
 }
 
+@media (max-width: 560px) {
+  .enterprise-form-row .compact-date-field.MuiFormControl-root,
+  .ra-toolbar__filters .compact-date-field.MuiFormControl-root {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: 1 1 100%;
+  }
+
+  .form-field .compact-date-field.MuiFormControl-root,
+  .cr-field .compact-date-field.MuiFormControl-root,
+  .orders-form-grid .compact-date-field.MuiFormControl-root {
+    max-width: none;
+  }
+}
+
 .commissions-filter-date.compact-date-field.MuiFormControl-root,
 .commissions-toolbar .compact-date-field.MuiFormControl-root.commissions-filter-date {
   width: 100%;

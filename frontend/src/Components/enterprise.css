@@ -1,3 +1,14 @@
+.enterprise-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.enterprise-table-wrap .enterprise-table {
+  min-width: 640px;
+}
+
 .enterprise-table {
   width: 100%;
   border-collapse: collapse;
@@ -66,6 +77,7 @@
 
 .view-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   margin-bottom: 1rem;
 }
@@ -129,6 +141,7 @@
 
 .integrations-panel__head {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
   gap: 1rem;
@@ -401,4 +414,39 @@
 [data-theme="dark"] .disputes-form__summary {
   background: rgba(15, 23, 42, 0.5);
   border-color: rgba(148, 163, 184, 0.14);
+}
+
+/* Mobile / tablet — enterprise surfaces */
+@media (max-width: 560px) {
+  .enterprise-form-row > * {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .enterprise-form-row .btn-primary,
+  .enterprise-form-row .btn-secondary,
+  .enterprise-form-row button[type="submit"] {
+    width: 100%;
+  }
+
+  .disputes-form__field,
+  .disputes-form__field--grow {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .integration-modal-backdrop {
+    padding: 0.75rem 0.5rem;
+  }
+
+  .integration-modal {
+    width: 100%;
+    max-height: calc(100dvh - 1.5rem);
+    padding: 1rem;
+    border-radius: 10px;
+  }
+
+  .integrations-panel__title {
+    font-size: 1.1rem;
+  }
 }

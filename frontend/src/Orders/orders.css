@@ -56,10 +56,12 @@
 
 .orders-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 0;
   margin: 0;
   padding: 0;
   list-style: none;
+  width: 100%;
 }
 
 .orders-tab {
@@ -784,6 +786,27 @@
     flex: 1 1 100%;
     width: 100%;
     min-width: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .orders-toolbar {
+    padding: 0 8px;
+  }
+
+  .orders-panel {
+    padding: 16px;
+  }
+
+  .orders-panel__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .orders-tab {
+    flex: 1 1 auto;
+    padding: 12px 10px;
+    text-align: center;
   }
 }
 

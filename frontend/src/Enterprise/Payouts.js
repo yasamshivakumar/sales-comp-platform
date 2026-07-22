@@ -90,39 +90,41 @@ function Payouts() {
         {loading ? (
           <p>Loading…</p>
         ) : (
-          <table className="enterprise-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Period</th>
-                <th>Status</th>
-                <th>Reference</th>
-                <th>Paid commissions</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {runs.map((run) => (
-                <tr key={run.id}>
-                  <td>{run.name}</td>
-                  <td>{run.start_date} → {run.end_date}</td>
-                  <td><StatusPill status={run.status} /></td>
-                  <td>{run.payment_reference || "—"}</td>
-                  <td>{run.commission_count ?? 0}</td>
-                  <td>
-                    {run.status === "draft" && (
-                      <button type="button" className="btn-secondary" onClick={() => markPaid(run.id)}>
-                        Mark paid
-                      </button>
-                    )}
-                    {run.paid_at && (
-                      <small>{new Date(run.paid_at).toLocaleString()}</small>
-                    )}
-                  </td>
+          <div className="enterprise-table-wrap">
+            <table className="enterprise-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Period</th>
+                  <th>Status</th>
+                  <th>Reference</th>
+                  <th>Paid commissions</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {runs.map((run) => (
+                  <tr key={run.id}>
+                    <td>{run.name}</td>
+                    <td>{run.start_date} → {run.end_date}</td>
+                    <td><StatusPill status={run.status} /></td>
+                    <td>{run.payment_reference || "—"}</td>
+                    <td>{run.commission_count ?? 0}</td>
+                    <td>
+                      {run.status === "draft" && (
+                        <button type="button" className="btn-secondary" onClick={() => markPaid(run.id)}>
+                          Mark paid
+                        </button>
+                      )}
+                      {run.paid_at && (
+                        <small>{new Date(run.paid_at).toLocaleString()}</small>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

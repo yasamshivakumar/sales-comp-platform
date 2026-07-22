@@ -178,10 +178,13 @@
 
 .comp-plans-table-wrap {
   overflow-x: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
 }
 
 .comp-plans-table {
   width: 100%;
+  min-width: 900px;
   border-collapse: collapse;
   font-size: 13px;
 }
@@ -391,7 +394,7 @@
 
 .cp-manage__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
   gap: 24px;
   margin-bottom: 24px;
 }
@@ -734,4 +737,26 @@
 [data-theme="dark"] .ai-plan-builder__result {
   background: rgba(0, 112, 210, 0.12);
   border-color: rgba(0, 112, 210, 0.35);
+}
+
+@media (max-width: 768px) {
+  .comp-plans-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cp-module .comp-plans-actions .btn-secondary {
+    width: 100%;
+    white-space: normal;
+  }
+
+  .cp-module .cp-form-card.panel {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 560px) {
+  .cp-manage__grid {
+    grid-template-columns: 1fr;
+  }
 }

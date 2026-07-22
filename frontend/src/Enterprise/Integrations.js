@@ -364,6 +364,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
         ) : integrations.length === 0 ? (
           <p>No integrations yet.</p>
         ) : (
+          <div className="enterprise-table-wrap">
           <table className="enterprise-table">
             <thead>
               <tr>
@@ -394,6 +395,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -519,7 +521,8 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
                   No CRM-linked employees yet. Run <strong>Sync users</strong> to import HubSpot owners.
                 </p>
               ) : (
-                <table className="enterprise-table" style={{ marginBottom: "1rem" }}>
+                <div className="enterprise-table-wrap" style={{ marginBottom: "1rem" }}>
+                <table className="enterprise-table">
                   <thead>
                     <tr>
                       <th>Name</th>
@@ -543,6 +546,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
 
               {userRows.length > 0 ? (
@@ -553,6 +557,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
                       ? ` (${new Date(latestUserLog.started_at).toLocaleString()})`
                       : ""}
                   </h4>
+                  <div className="enterprise-table-wrap">
                   <table className="enterprise-table">
                     <thead>
                       <tr>
@@ -587,6 +592,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </>
               ) : (
                 <p style={{ color: "var(--text-muted)" }}>
@@ -599,6 +605,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
           {logs.length > 0 && (
             <>
               <h4 style={{ marginTop: "1rem" }}>Recent sync logs</h4>
+              <div className="enterprise-table-wrap">
               <table className="enterprise-table">
                 <thead>
                   <tr>
@@ -646,6 +653,7 @@ function Integrations({ embedded = false, inline = false, onClose, onOrdersSynce
                   ))}
                 </tbody>
               </table>
+              </div>
             </>
           )}
         </div>
