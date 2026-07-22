@@ -418,7 +418,12 @@ def login(request):
         )
 
     token = issue_user_token(user)
-    record_audit(request, "login_success", {"user_id": user.pk})
+    record_audit(
+        request,
+        "login_success",
+        {"user_id": user.pk, "username": username},
+        user=user,
+    )
 
     # Return success response
     return Response({
@@ -439,7 +444,16 @@ class CompensationPlanListCreateView(generics.ListCreateAPIView):
         )
 
     def perform_create(self, serializer):
-        serializer.save(organization=getattr(self.request, "organization", None))
+        plan = serializer.save(organization=getattr(self.request, "organization", None))
+        record_audit(
+            self.request,
+            "compensation_plan_created",
+            {
+                "plan_id": plan.id,
+                "plan_name": plan.plan_name,
+                "commission_table_type": plan.commission_table_type,
+            },
+        )
 
     def check_admin_permission(self, request):
         """Check if user is admin, raise PermissionDenied if not"""
@@ -508,11 +522,33 @@ class CompensationPlanDetailView(generics.RetrieveUpdateAPIView):
 
     def update(self, request, *args, **kwargs):
         self.check_admin_permission(request)
-        return super().update(request, *args, **kwargs)
+        response = super().update(request, *args, **kwargs)
+        plan = self.get_object()
+        record_audit(
+            request,
+            "compensation_plan_updated",
+            {
+                "plan_id": plan.id,
+                "plan_name": plan.plan_name,
+                "commission_table_type": plan.commission_table_type,
+            },
+        )
+        return response
 
     def partial_update(self, request, *args, **kwargs):
         self.check_admin_permission(request)
-        return super().partial_update(request, *args, **kwargs)
+        response = super().partial_update(request, *args, **kwargs)
+        plan = self.get_object()
+        record_audit(
+            request,
+            "compensation_plan_updated",
+            {
+                "plan_id": plan.id,
+                "plan_name": plan.plan_name,
+                "commission_table_type": plan.commission_table_type,
+            },
+        )
+        return response
 
 
 class UserProfileListCreateView(generics.ListCreateAPIView):
@@ -727,6 +763,19 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
             if invite_error:
                 payload["invite_error"] = invite_error
 
+            record_audit(
+                request,
+                "user_setup_created" if created else "user_setup_updated",
+                {
+                    "profile_id": profile.id,
+                    "email": profile.email,
+                    "employee_id": profile.employee_id,
+                    "role": profile.role,
+                    "enable_login": profile.enable_login,
+                    "invite_status": invite_status or None,
+                },
+            )
+
             return Response(
                 payload,
                 status=status.HTTP_201_CREATED
@@ -852,7 +901,17 @@ class HierarchyRelationshipListCreateView(generics.ListCreateAPIView):
                 raise PermissionDenied(
                     "Hierarchy participants must belong to your organization"
                 )
-        serializer.save()
+        instance = serializer.save()
+        record_audit(
+            self.request,
+            "hierarchy_created",
+            {
+                "id": instance.id,
+                "parent_id": instance.parent_participant_id,
+                "child_id": instance.child_participant_id,
+                "split_percentage": str(instance.split_percentage),
+            },
+        )
 
 
 class CompensationTierListCreateView(generics.ListCreateAPIView):
@@ -873,7 +932,17 @@ class CompensationTierListCreateView(generics.ListCreateAPIView):
         plan = serializer.validated_data.get("plan")
         if plan is not None and org is not None and plan.organization_id != org.id:
             raise PermissionDenied("Tier plan must belong to your organization")
-        serializer.save()
+        instance = serializer.save()
+        record_audit(
+            self.request,
+            "compensation_tier_created",
+            {
+                "tier_id": instance.id,
+                "plan_id": instance.plan_id,
+                "min_sales": str(instance.min_sales),
+                "commission_percent": str(instance.commission_percent),
+            },
+        )
 
 
 def _orders_queryset_for_request(request):
@@ -948,6 +1017,16 @@ class OrderListCreateView(generics.ListCreateAPIView):
             organization=getattr(self.request, "organization", None)
         )
         calculate_commission_for_order(order)
+        record_audit(
+            self.request,
+            "order_created",
+            {
+                "order_id": order.order_id,
+                "employee_id": order.employee_id,
+                "sales_amount": str(order.sales_amount),
+                "order_status": order.order_status,
+            },
+        )
 
 
 class OrderDetailView(generics.RetrieveUpdateAPIView):
@@ -963,6 +1042,16 @@ class OrderDetailView(generics.RetrieveUpdateAPIView):
             raise PermissionDenied("Only administrators can update orders")
         order = serializer.save()
         calculate_commission_for_order(order)
+        record_audit(
+            self.request,
+            "order_updated",
+            {
+                "order_id": order.order_id,
+                "employee_id": order.employee_id,
+                "sales_amount": str(order.sales_amount),
+                "order_status": order.order_status,
+            },
+        )
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop("partial", False)
@@ -1200,6 +1289,8 @@ def email_login(request):
             request,
             "login_success",
             {"user_id": user.id, "email": email, "ip": ip, "user_agent": user_agent},
+            user=user,
+            organization=getattr(user_profile, "organization", None) if user_profile else None,
         )
 
         return Response({

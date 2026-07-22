@@ -660,6 +660,50 @@ class PilotOperationsTests(TestCase):
         )
         self.assertEqual(denied.status_code, 403)
 
+    def test_login_audit_uses_actor_organization(self):
+        """Login is AllowAny, so middleware attaches the default org. Audit
+        rows must still land on the actor's real tenant with their email."""
+        from rest_framework.test import APIClient
+
+        org = Organization.objects.create(name="Audit Org", slug="audit-org-login")
+        user = User.objects.create_user(
+            username="audit-login@test.com",
+            email="audit-login@test.com",
+            password="AuditPass123!",
+        )
+        UserProfile.objects.create(
+            organization=org,
+            employee_id="AUDLOGIN",
+            email="audit-login@test.com",
+            name="Audit Login",
+            role="Admin",
+            enable_login=True,
+        )
+        client = APIClient()
+        res = client.post(
+            "/api/auth/email-login/",
+            {"email": "audit-login@test.com", "password": "AuditPass123!"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, res.data)
+        row = (
+            AuditLog.objects.filter(action="login_success", user_email="audit-login@test.com")
+            .order_by("-id")
+            .first()
+        )
+        self.assertIsNotNone(row)
+        self.assertEqual(row.organization_id, org.id)
+        self.assertEqual(row.user_id, user.id)
+
+        listed = client.get(
+            "/api/audit-logs/",
+            HTTP_AUTHORIZATION=f"Token {res.data['token']}",
+        )
+        self.assertEqual(listed.status_code, 200)
+        actions = [item["action"] for item in listed.data["results"]]
+        self.assertIn("login_success", actions)
+
+
 
 class CommissionRuleEngineTests(TestCase):
     def setUp(self):
