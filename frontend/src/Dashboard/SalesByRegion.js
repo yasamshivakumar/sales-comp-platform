@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import api, { getApiErrorMessage } from "../api";
 import DatePickerField from "../Components/DatePickerField";
+import LoadingCenter from "../Components/LoadingCenter";
 import {
   formatDashboardAmount,
   formatMoney,
@@ -143,7 +144,11 @@ function SalesByRegion() {
   };
 
   if (!accessChecked) {
-    return <div className="sbr-root">Loading…</div>;
+    return (
+      <div className="sbr-root sbr-root--loading">
+        <LoadingCenter minHeight={240} size={24} />
+      </div>
+    );
   }
 
   if (!canView) {
@@ -214,7 +219,7 @@ function SalesByRegion() {
               onClick={load}
               disabled={loading}
             >
-              {loading ? "Loading…" : "Apply"}
+              {loading ? "…" : "Apply"}
             </button>
             <button
               type="button"
@@ -258,7 +263,9 @@ function SalesByRegion() {
             <span className="sbr-card__meta">Geography</span>
           </div>
           {loading ? (
-            <p className="ra-empty">Loading…</p>
+            <div className="sbr-card__loading">
+              <LoadingCenter minHeight={120} size={24} />
+            </div>
           ) : (
             <BreakdownBars
               rows={regionRows}
@@ -274,7 +281,9 @@ function SalesByRegion() {
             <span className="sbr-card__meta">Zone</span>
           </div>
           {loading ? (
-            <p className="ra-empty">Loading…</p>
+            <div className="sbr-card__loading">
+              <LoadingCenter minHeight={120} size={24} />
+            </div>
           ) : (
             <BreakdownBars
               rows={territoryRows}
@@ -291,8 +300,13 @@ function SalesByRegion() {
       <section className="sbr-card sbr-card--table">
         <div className="sbr-card__head">
           <h2 className="sbr-card__title">Region detail</h2>
-          <span className="sbr-card__meta">{regionRows.length} rows</span>
+          <span className="sbr-card__meta">{loading ? "…" : `${regionRows.length} rows`}</span>
         </div>
+        {loading ? (
+          <div className="sbr-card__loading">
+            <LoadingCenter minHeight={140} size={24} />
+          </div>
+        ) : (
         <div className="sbr-table-wrap">
           <table className="sbr-table">
             <thead>
@@ -305,7 +319,7 @@ function SalesByRegion() {
               </tr>
             </thead>
             <tbody>
-              {!loading && regionRows.length === 0 && (
+              {regionRows.length === 0 && (
                 <tr>
                   <td colSpan={5} className="sbr-table__empty">
                     {query
@@ -328,6 +342,7 @@ function SalesByRegion() {
             </tbody>
           </table>
         </div>
+        )}
       </section>
     </div>
   );
