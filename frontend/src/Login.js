@@ -173,94 +173,94 @@ function Login() {
           overflow: "hidden",
         }}
       >
-        {loading ? (
-          <LoadingCenter minHeight={240} size={24} />
-        ) : (
-          <>
-            <Typography variant="h4" fontWeight={800} gutterBottom>
-              Sign in
-            </Typography>
-            <Typography color="text.secondary" sx={{ mb: 3 }}>
-              Access your Incentra workspace
-            </Typography>
+        {loading && <LoadingCenter overlay size={24} label="Signing in" />}
+        <Typography variant="h4" fontWeight={800} gutterBottom>
+          Sign in
+        </Typography>
+        <Typography color="text.secondary" sx={{ mb: 3 }}>
+          Access your Incentra workspace
+        </Typography>
 
-            <Stack spacing={2}>
-              <AuthTextField
-                label="Work email"
-                type="email"
-                placeholder="you@company.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-                autoComplete="email"
-              />
-              <AuthTextField
-                label="Password"
-                type={showPassword ? "text" : "password"}
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-                autoComplete="current-password"
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        aria-label={showPassword ? "Hide password" : "Show password"}
-                        aria-pressed={showPassword}
-                        edge="end"
-                        size="small"
-                        type="button"
-                        onClick={() => setShowPassword((value) => !value)}
-                        onMouseDown={(e) => e.preventDefault()}
-                        sx={{
-                          width: "32px !important",
-                          minWidth: "32px !important",
-                          height: "32px",
-                          p: "4px !important",
-                          bgcolor: "transparent !important",
-                          boxShadow: "none !important",
-                          color: "text.secondary",
-                          "&:hover": {
-                            bgcolor: "action.hover !important",
-                            transform: "none",
-                          },
-                        }}
-                      >
-                        {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-              />
-              <Button
-                variant="contained"
-                size="large"
-                fullWidth
-                onClick={handleLogin}
-              >
-                Sign in
-              </Button>
-            </Stack>
+        <Stack spacing={2}>
+          <AuthTextField
+            label="Work email"
+            type="email"
+            placeholder="you@company.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !loading && handleLogin()}
+            autoComplete="email"
+            disabled={loading}
+          />
+          <AuthTextField
+            label="Password"
+            type={showPassword ? "text" : "password"}
+            placeholder="Enter your password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !loading && handleLogin()}
+            autoComplete="current-password"
+            disabled={loading}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                    edge="end"
+                    size="small"
+                    type="button"
+                    disabled={loading}
+                    onClick={() => setShowPassword((value) => !value)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    sx={{
+                      width: "32px !important",
+                      minWidth: "32px !important",
+                      height: "32px",
+                      p: "4px !important",
+                      bgcolor: "transparent !important",
+                      boxShadow: "none !important",
+                      color: "text.secondary",
+                      "&:hover": {
+                        bgcolor: "action.hover !important",
+                        transform: "none",
+                      },
+                    }}
+                  >
+                    {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
+          />
+          <Button
+            variant="contained"
+            size="large"
+            fullWidth
+            disabled={loading}
+            onClick={handleLogin}
+          >
+            {loading ? "Signing in…" : "Sign in"}
+          </Button>
+        </Stack>
 
-            {oidcEnabled && (
-              <Button
-                variant="outlined"
-                fullWidth
-                sx={{ mt: 2 }}
-                onClick={() => {
-                  window.location.href = `${apiHost}/oidc/authenticate/`;
-                }}
-              >
-                Continue with SSO
-              </Button>
-            )}
-
-            <Typography align="center" sx={{ mt: 3 }} color="text.secondary" variant="body2">
-              New employees must accept their email invite and set a password before signing in.
-            </Typography>
-          </>
+        {oidcEnabled && (
+          <Button
+            variant="outlined"
+            fullWidth
+            sx={{ mt: 2 }}
+            disabled={loading}
+            onClick={() => {
+              window.location.href = `${apiHost}/oidc/authenticate/`;
+            }}
+          >
+            Continue with SSO
+          </Button>
         )}
+
+        <Typography align="center" sx={{ mt: 3 }} color="text.secondary" variant="body2">
+          New employees must accept their email invite and set a password before signing in.
+        </Typography>
       </Card>
     </AuthPageLayout>
   );
