@@ -174,7 +174,7 @@ function Login() {
         }}
       >
         {loading ? (
-          <LoadingCenter label="Signing you in…" minHeight={320} />
+          <LoadingCenter minHeight={240} size={24} />
         ) : (
           <>
             <Typography variant="h4" fontWeight={800} gutterBottom>

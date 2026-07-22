@@ -635,9 +635,8 @@ function ReportsAnalytics({ compact = false }) {
       {error && <div className="ra-error">{error}</div>}
 
       {loadingInitial && !summary ? (
-        <div className="ra-loading">
+        <div className="ra-loading" role="status" aria-label="Loading">
           <span className="ra-loading__pulse" aria-hidden="true" />
-          Loading analytics…
         </div>
       ) : (
         <div className="ra-body">

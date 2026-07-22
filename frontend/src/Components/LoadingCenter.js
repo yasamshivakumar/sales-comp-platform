@@ -1,68 +1,35 @@
-import { Box, CircularProgress, Typography } from "@mui/material";
+import { Box, CircularProgress } from "@mui/material";
 import { enterprise } from "../theme/muiTheme";
 
 /**
- * Centered loading state for cards / panels.
+ * Centered loading spinner for cards / panels.
  * Use `overlay` to float over existing content without collapsing layout.
  */
 function LoadingCenter({
-  label = "Loading…",
+  label = "",
   overlay = false,
-  minHeight = 220,
-  size = 40,
+  minHeight = 160,
+  size = 24,
 }) {
   const content = (
     <Box
       role="status"
       aria-live="polite"
       aria-busy="true"
+      aria-label={label || "Loading"}
       sx={{
         display: "flex",
-        flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        gap: 1.75,
-        textAlign: "center",
         width: "100%",
         minHeight: overlay ? "100%" : minHeight,
-        px: 2,
       }}
     >
-      <Box
-        sx={{
-          position: "relative",
-          width: size + 16,
-          height: size + 16,
-          display: "grid",
-          placeItems: "center",
-        }}
-      >
-        <Box
-          sx={{
-            position: "absolute",
-            inset: 0,
-            borderRadius: "50%",
-            background: `radial-gradient(circle, ${enterprise.accent}22 0%, transparent 70%)`,
-          }}
-        />
-        <CircularProgress
-          size={size}
-          thickness={3.6}
-          sx={{ color: enterprise.accent }}
-        />
-      </Box>
-      {label ? (
-        <Typography
-          variant="body2"
-          sx={{
-            fontWeight: 600,
-            letterSpacing: "0.02em",
-            color: "text.secondary",
-          }}
-        >
-          {label}
-        </Typography>
-      ) : null}
+      <CircularProgress
+        size={size}
+        thickness={4}
+        sx={{ color: enterprise.accent }}
+      />
     </Box>
   );
 
@@ -78,9 +45,9 @@ function LoadingCenter({
         alignItems: "center",
         justifyContent: "center",
         borderRadius: "inherit",
-        bgcolor: "rgba(255, 255, 255, 0.78)",
-        backdropFilter: "blur(4px)",
-        WebkitBackdropFilter: "blur(4px)",
+        bgcolor: "rgba(255, 255, 255, 0.72)",
+        backdropFilter: "blur(3px)",
+        WebkitBackdropFilter: "blur(3px)",
       }}
     >
       {content}

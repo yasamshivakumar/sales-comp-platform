@@ -162,7 +162,7 @@ function InviteAccept() {
         </Typography>
 
         {loading ? (
-          <LoadingCenter label="Checking your invite…" minHeight={200} />
+          <LoadingCenter minHeight={160} size={24} />
         ) : invite ? (
           <Stack spacing={2}>
             <AuthTextField label="Email" value={invite.email || ""} disabled />

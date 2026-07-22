@@ -20,7 +20,7 @@ function Dashboard() {
   if (!loaded) {
     return (
       <div className="unified-dashboard unified-dashboard--loading">
-        <LoadingCenter label="Loading dashboard…" minHeight={360} />
+        <LoadingCenter minHeight={240} size={24} />
       </div>
     );
   }
