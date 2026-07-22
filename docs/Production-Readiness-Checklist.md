@@ -15,8 +15,10 @@ Goal: the main compensation workflow must work reliably before adding more produ
 - [x] Employee incentive details reconcile generated commissions.
 - [x] Disputes can be raised, resolved, acknowledged, and deleted.
 - [x] Backend regression tests cover commission logic, tenant isolation, invite flow, disputes, order status transitions, and aggregate calculations.
+- [x] GitHub Actions CI/CD covers build → test → package → deploy → monitor (see `.github/workflows/ci-cd.yml`).
 - [ ] Add frontend regression tests for compensation plan edit/rate edit workflows.
 - [x] Add a smoke-test checklist for every production deploy.
+- [ ] Require CI status checks on `main` and disable Render/Vercel auto-deploy (use CI deploy hooks only).
 
 ## 2. Production Operations
 

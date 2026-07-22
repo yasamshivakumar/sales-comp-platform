@@ -123,6 +123,20 @@ Then redeploy the Vercel project so the React build includes the Render API URL.
 
 **[docs/Incentra-User-Guide.md](docs/Incentra-User-Guide.md)** (also at `/Incentra-User-Guide-Full.md` in the frontend public folder)
 
+## CI/CD (build → test → package → deploy → monitor)
+
+GitHub Actions workflow: [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml)
+
+| Stage | What runs |
+|--------|-----------|
+| **Test** | Backend Django tests (Postgres) |
+| **Build** | Frontend production build |
+| **Package** | Backend Docker image |
+| **Deploy** | Render + Vercel deploy hooks on `main` (after quality gate) |
+| **Monitor** | Smoke checks for health endpoints + frontend |
+
+See **[docs/Deploy-And-Rollback-Runbook.md](docs/Deploy-And-Rollback-Runbook.md)** for secrets setup and how to disable platform auto-deploy so broken commits never reach users.
+
 ## Production readiness
 
 Use **[docs/Production-Readiness-Checklist.md](docs/Production-Readiness-Checklist.md)** to move Incentra from MVP to a commercial SaaS product step by step.

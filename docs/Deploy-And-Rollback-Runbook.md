@@ -8,25 +8,52 @@ This runbook defines the production deploy and rollback process for Incentra.
 - Database: Render PostgreSQL `incentra-db`
 - Frontend: Vercel app/domain `https://incentra.co.in`
 - Repository branch: `main`
+- CI/CD: GitHub Actions workflow `.github/workflows/ci-cd.yml`
+
+## CI-gated releases (recommended)
+
+Goal: never ship a broken build to users.
+
+The **CI/CD** workflow runs on every pull request and every push to `main`:
+
+1. **Test** — Django `commissions.tests` against Postgres
+2. **Build** — frontend production `npm run build`
+3. **Package** — backend Docker image build + import check
+4. **Deploy** — only on `main`, after the quality gate, via deploy hooks
+5. **Monitor** — smoke checks for `/ping`, `/api/health/`, `/api/health/ready/`, and the frontend URL
+
+### One-time setup
+
+1. In GitHub → **Settings → Secrets and variables → Actions**, add:
+   - `RENDER_DEPLOY_HOOK_URL` — from Render → service → Deploy Hook
+   - `VERCEL_DEPLOY_HOOK_URL` — from Vercel → project → Settings → Git → Deploy Hooks
+   - `BACKEND_BASE_URL` — e.g. `https://api.incentra.co.in`
+   - `FRONTEND_BASE_URL` — e.g. `https://incentra.co.in`
+2. Create a GitHub **Environment** named `production` (optional protection rules / reviewers).
+3. **Turn off auto-deploy on `main`** in Render and Vercel so only the CI/CD workflow deploys after tests pass.
+4. In GitHub → branch protection for `main`, require these checks before merge:
+   - `Test (backend)`
+   - `Build (frontend)`
+   - `Package (Docker)`
+   - `Quality gate`
+
+Until deploy-hook secrets are set, CI still blocks broken PRs; production platforms keep their current deploy behavior.
 
 ## Pre-Deploy Checklist
 
 Before deploying:
 
 1. Confirm latest code is pushed to GitHub.
-2. Confirm backend tests pass:
+2. Confirm the **CI/CD** workflow is green (or run locally):
    ```powershell
    cd backend
    python manage.py test commissions
-   ```
-3. Confirm frontend build passes if frontend changed:
-   ```powershell
-   cd frontend
+   cd ..\frontend
    npm run build
    ```
-4. Review changed environment variables.
-5. Confirm database backup availability before migrations or risky releases.
-6. Confirm there is a rollback owner.
+3. Review changed environment variables.
+4. Confirm database backup availability before migrations or risky releases.
+5. Confirm there is a rollback owner.
 
 ## Backend Deploy On Render
 
