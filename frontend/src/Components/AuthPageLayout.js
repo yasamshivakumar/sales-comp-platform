@@ -4,19 +4,21 @@ import { enterprise } from "../theme/muiTheme";
 export const authFormCardSx = {
   width: "100%",
   maxWidth: 440,
-  borderRadius: 2.5,
+  borderRadius: 3.5,
   p: { xs: 2.5, sm: 3 },
-  boxShadow: "0 16px 48px rgba(3, 45, 96, 0.14)",
-  border: "1px solid rgba(255, 255, 255, 0.85)",
-  bgcolor: "background.paper",
+  boxShadow: "0 20px 60px rgba(3, 45, 96, 0.18)",
+  border: "1px solid rgba(255, 255, 255, 0.45)",
+  bgcolor: "rgba(255, 255, 255, 0.55)",
+  backdropFilter: "blur(18px) saturate(1.25)",
+  WebkitBackdropFilter: "blur(18px) saturate(1.25)",
 };
 
 const pageBg = {
   minHeight: "100vh",
   background: `
-    radial-gradient(ellipse 80% 60% at 10% 0%, rgba(1, 118, 211, 0.12) 0%, transparent 55%),
-    radial-gradient(ellipse 70% 50% at 90% 100%, rgba(3, 45, 96, 0.1) 0%, transparent 50%),
-    linear-gradient(165deg, #e4ecf6 0%, #dce8f4 40%, #d4e3f2 100%)
+    radial-gradient(ellipse 70% 55% at 12% 18%, rgba(27, 150, 255, 0.28) 0%, transparent 55%),
+    radial-gradient(ellipse 55% 45% at 88% 82%, rgba(1, 118, 211, 0.22) 0%, transparent 50%),
+    linear-gradient(165deg, #d7e6f6 0%, #c5daf0 45%, #a8c8e8 100%)
   `,
 };
 

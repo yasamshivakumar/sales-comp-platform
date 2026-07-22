@@ -9,6 +9,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import "./styles/mui-bridge.css";
 import "./styles/sidebar-nav.css";
 import "./styles.css";
+import "./styles/glass.css";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(

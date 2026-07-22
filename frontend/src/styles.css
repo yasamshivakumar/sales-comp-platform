@@ -12,24 +12,24 @@
   --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --sidebar-width: 96px;
 
-  /* Colors */
-  --primary-color: #6366f1;
-  --primary-dark: #4f46e5;
-  --primary-light: #818cf8;
-  --secondary-color: #a855f7;
-  --accent-glow: rgba(99, 102, 241, 0.35);
+  /* Colors — Incentra navy / cyan */
+  --primary-color: #0176d3;
+  --primary-dark: #032d60;
+  --primary-light: #1b96ff;
+  --secondary-color: #014486;
+  --accent-glow: rgba(1, 118, 211, 0.3);
   --success-color: #16a34a;
   --danger-color: #dc2626;
   --warning-color: #ea580c;
-  --info-color: #0891b2;
+  --info-color: #0176d3;
   
-  /* Backgrounds — light default */
-  --bg-dark: #f8fafc;
-  --bg-darker: #ffffff;
-  --bg-card: #ffffff;
-  --bg-white: #ffffff;
-  --bg-light: #f1f5f9;
-  --bg-hover: #e0e7ff;
+  /* Backgrounds — light glass canvas */
+  --bg-dark: #c5daf0;
+  --bg-darker: rgba(255, 255, 255, 0.72);
+  --bg-card: rgba(255, 255, 255, 0.55);
+  --bg-white: rgba(255, 255, 255, 0.72);
+  --bg-light: rgba(255, 255, 255, 0.35);
+  --bg-hover: rgba(1, 118, 211, 0.12);
   
   /* Text */
   --text-primary: #0f172a;
@@ -61,12 +61,12 @@
 }
 
 [data-theme="dark"] {
-  --bg-dark: #020617;
-  --bg-darker: #0f172a;
-  --bg-card: #111827;
-  --bg-white: #111827;
-  --bg-light: #1e293b;
-  --bg-hover: #1e3a8a;
+  --bg-dark: #0a1b33;
+  --bg-darker: rgba(17, 28, 48, 0.72);
+  --bg-card: rgba(15, 28, 48, 0.55);
+  --bg-white: rgba(17, 28, 48, 0.72);
+  --bg-light: rgba(30, 41, 59, 0.45);
+  --bg-hover: rgba(1, 118, 211, 0.2);
   --text-primary: #ffffff;
   --text-secondary: #cbd5e1;
   --text-muted: #94a3b8;
@@ -737,16 +737,16 @@ tbody tr:last-child td {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(99, 102, 241, 0.1), transparent 50%),
-    radial-gradient(ellipse 60% 40% at 90% 10%, rgba(168, 85, 247, 0.08), transparent 45%),
-    linear-gradient(160deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
+    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(27, 150, 255, 0.22), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 90% 10%, rgba(1, 118, 211, 0.16), transparent 45%),
+    linear-gradient(160deg, #d7e6f6 0%, #c5daf0 50%, #a8c8e8 100%);
 }
 
 [data-theme="dark"] .app-shell__bg {
   background:
-    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(99, 102, 241, 0.22), transparent 50%),
-    radial-gradient(ellipse 60% 40% at 90% 10%, rgba(168, 85, 247, 0.15), transparent 45%),
-    linear-gradient(160deg, var(--bg-dark) 0%, #0b1120 40%, #0f172a 100%);
+    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(27, 150, 255, 0.2), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 90% 10%, rgba(1, 118, 211, 0.16), transparent 45%),
+    linear-gradient(160deg, var(--bg-dark) 0%, #061427 40%, #031018 100%);
 }
 
 .app-main {
@@ -814,8 +814,8 @@ body.sidebar-collapsed {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--primary-dark);
-  background: rgba(99, 102, 241, 0.15);
-  border: 1px solid rgba(99, 102, 241, 0.35);
+  background: rgba(1, 118, 211, 0.12);
+  border: 1px solid rgba(1, 118, 211, 0.3);
   padding: 3px 8px;
   border-radius: 999px;
   margin-bottom: 6px;
@@ -1403,7 +1403,7 @@ body.sidebar-collapsed {
 
 .stat-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(99, 102, 241, 0.35);
+  border-color: rgba(1, 118, 211, 0.35);
   box-shadow: var(--shadow-lg);
 }
 
@@ -1415,7 +1415,7 @@ body.sidebar-collapsed {
   align-items: center;
   justify-content: center;
   font-size: 22px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.2));
+  background: linear-gradient(135deg, rgba(1, 118, 211, 0.22), rgba(3, 45, 96, 0.18));
 }
 
 .stat-card__label {
@@ -1436,18 +1436,19 @@ body.sidebar-collapsed {
 }
 
 .panel {
-  background: #ffffff;
-  backdrop-filter: blur(12px);
-  border: 1px solid var(--border-light);
+  background: var(--glass-bg, rgba(255, 255, 255, 0.55));
+  backdrop-filter: blur(var(--glass-blur, 18px)) saturate(1.25);
+  -webkit-backdrop-filter: blur(var(--glass-blur, 18px)) saturate(1.25);
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.55));
   border-radius: 16px;
   padding: 24px;
   margin-bottom: 24px;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--glass-shadow, var(--shadow-md));
 }
 
 [data-theme="dark"] .panel {
-  background: #111827;
-  border-color: rgba(148, 163, 184, 0.12);
+  background: var(--glass-bg, rgba(15, 28, 48, 0.55));
+  border-color: var(--glass-border, rgba(148, 163, 184, 0.18));
 }
 
 .panel__header {

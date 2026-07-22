@@ -43,8 +43,8 @@ export function buildMuiTheme(mode = "light") {
         light: isDark ? "#0c4a6e" : "#eff6ff",
       },
       background: {
-        default: isDark ? "#0b1220" : "#f4f6f9",
-        paper: isDark ? "#111827" : "#ffffff",
+        default: isDark ? "#0a1b33" : "#c5daf0",
+        paper: isDark ? "rgba(17, 28, 48, 0.72)" : "rgba(255, 255, 255, 0.72)",
       },
       text: {
         primary: isDark ? "#f3f4f6" : "#181818",
@@ -98,17 +98,26 @@ export function buildMuiTheme(mode = "light") {
       MuiCard: {
         styleOverrides: {
           root: {
-            border: `1px solid ${isDark ? alpha("#fff", 0.08) : "#dddbda"}`,
+            border: `1px solid ${isDark ? alpha("#fff", 0.14) : "rgba(255,255,255,0.55)"}`,
             boxShadow: isDark
-              ? "0 2px 12px rgba(0,0,0,0.35)"
-              : "0 2px 8px rgba(3, 45, 96, 0.06)",
-            borderRadius: 10,
+              ? "0 16px 48px rgba(0,0,0,0.45)"
+              : "0 12px 40px rgba(3, 45, 96, 0.12)",
+            borderRadius: 16,
+            backgroundImage: "none",
+            backgroundColor: isDark
+              ? "rgba(17, 28, 48, 0.55)"
+              : "rgba(255, 255, 255, 0.55)",
+            backdropFilter: "blur(18px) saturate(1.25)",
+            WebkitBackdropFilter: "blur(18px) saturate(1.25)",
           },
         },
       },
       MuiPaper: {
         styleOverrides: {
-          rounded: { borderRadius: 10 },
+          rounded: { borderRadius: 16 },
+          root: {
+            backgroundImage: "none",
+          },
         },
       },
       MuiTableHead: {

@@ -1,0 +1,168 @@
+/* App-wide glassmorphism — Incentra navy / cyan (matches login aesthetic) */
+
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-bg-strong: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.55);
+  --glass-shadow: 0 12px 40px rgba(3, 45, 96, 0.12);
+  --glass-blur: 18px;
+  --app-canvas-top: #d7e6f6;
+  --app-canvas-mid: #c5daf0;
+  --app-canvas-deep: #a8c8e8;
+}
+
+[data-theme="dark"] {
+  --glass-bg: rgba(15, 28, 48, 0.55);
+  --glass-bg-strong: rgba(17, 28, 48, 0.72);
+  --glass-border: rgba(148, 163, 184, 0.18);
+  --glass-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  --glass-blur: 20px;
+  --app-canvas-top: #061427;
+  --app-canvas-mid: #0a1b33;
+  --app-canvas-deep: #031018;
+}
+
+/* Authenticated app shell canvas */
+.app-glass-shell {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse 70% 50% at 8% 0%, rgba(27, 150, 255, 0.28) 0%, transparent 55%),
+    radial-gradient(ellipse 55% 45% at 92% 12%, rgba(1, 118, 211, 0.22) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 40% at 70% 100%, rgba(3, 45, 96, 0.18) 0%, transparent 55%),
+    linear-gradient(165deg, var(--app-canvas-top) 0%, var(--app-canvas-mid) 45%, var(--app-canvas-deep) 100%) !important;
+}
+
+.app-glass-shell::before,
+.app-glass-shell::after {
+  content: "";
+  position: fixed;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.55;
+}
+
+.app-glass-shell::before {
+  width: min(420px, 55vw);
+  height: min(420px, 55vw);
+  top: -80px;
+  right: -60px;
+  background: radial-gradient(circle, rgba(91, 184, 255, 0.55), transparent 70%);
+}
+
+.app-glass-shell::after {
+  width: min(380px, 50vw);
+  height: min(380px, 50vw);
+  bottom: -100px;
+  left: 80px;
+  background: radial-gradient(circle, rgba(1, 118, 211, 0.35), transparent 70%);
+}
+
+.app-glass-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Shared frosted surfaces */
+.app-glass-shell .panel,
+.app-glass-shell .theme-surface,
+.app-glass-shell .card,
+.app-glass-shell .stat-card,
+.app-glass-shell .orders-workspace,
+.app-glass-shell .orders-toolbar,
+.app-glass-shell .commissions-records,
+.app-glass-shell .cp-list-card,
+.app-glass-shell .cp-form-card,
+.app-glass-shell .sbr-panel,
+.app-glass-shell .ra-panel,
+.app-glass-shell .setup-panel,
+.app-glass-shell .page-content .MuiPaper-root:not(.MuiDialog-paper):not(.MuiDrawer-paper):not(.MuiAppBar-root):not(.MuiPopover-paper):not(.MuiMenu-paper) {
+  background: var(--glass-bg) !important;
+  background-image: none !important;
+  border: 1px solid var(--glass-border) !important;
+  box-shadow: var(--glass-shadow) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.25);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.25);
+}
+
+.app-glass-shell .panel__header,
+.app-glass-shell .orders-panel__header {
+  border-bottom-color: rgba(3, 45, 96, 0.08) !important;
+}
+
+[data-theme="dark"] .app-glass-shell .panel__header,
+[data-theme="dark"] .app-glass-shell .orders-panel__header {
+  border-bottom-color: rgba(148, 163, 184, 0.14) !important;
+}
+
+/* Top bar glass */
+.app-glass-shell .app-glass-topbar {
+  background: var(--glass-bg-strong) !important;
+  border-bottom: 1px solid var(--glass-border) !important;
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  box-shadow: 0 8px 24px rgba(3, 45, 96, 0.06);
+}
+
+.app-glass-shell .app-profile-chip {
+  background: rgba(255, 255, 255, 0.55) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+[data-theme="dark"] .app-glass-shell .app-profile-chip {
+  background: rgba(15, 23, 42, 0.55) !important;
+}
+
+/* Keep inputs / tables readable on glass */
+.app-glass-shell input:not([type="checkbox"]):not([type="radio"]),
+.app-glass-shell textarea,
+.app-glass-shell select,
+.app-glass-shell .MuiOutlinedInput-root,
+.app-glass-shell .search-bar {
+  background: rgba(255, 255, 255, 0.92) !important;
+}
+
+[data-theme="dark"] .app-glass-shell input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="dark"] .app-glass-shell textarea,
+[data-theme="dark"] .app-glass-shell select,
+[data-theme="dark"] .app-glass-shell .MuiOutlinedInput-root,
+[data-theme="dark"] .app-glass-shell .search-bar {
+  background: rgba(15, 23, 42, 0.72) !important;
+}
+
+.app-glass-shell .enterprise-table th,
+.app-glass-shell .comp-plans-table th,
+.app-glass-shell .orders-list-table th,
+.app-glass-shell .commissions-table th,
+.app-glass-shell .theme-table th {
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+[data-theme="dark"] .app-glass-shell .enterprise-table th,
+[data-theme="dark"] .app-glass-shell .comp-plans-table th,
+[data-theme="dark"] .app-glass-shell .orders-list-table th,
+[data-theme="dark"] .app-glass-shell .commissions-table th,
+[data-theme="dark"] .app-glass-shell .theme-table th {
+  background: rgba(15, 23, 42, 0.55);
+}
+
+/* Dialogs — soft glass, not full-page blur on click */
+.app-glass-shell .MuiDialog-paper {
+  background: var(--glass-bg-strong) !important;
+  border: 1px solid var(--glass-border) !important;
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  box-shadow: 0 24px 64px rgba(3, 45, 96, 0.22) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-glass-shell::before,
+  .app-glass-shell::after {
+    filter: none;
+    opacity: 0.35;
+  }
+}

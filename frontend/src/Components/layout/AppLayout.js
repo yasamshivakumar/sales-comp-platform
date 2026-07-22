@@ -244,6 +244,7 @@ function AppTopBar({ pageTitle, displayName, initials, profile, onEditProfile, s
 
   return (
     <Box
+      className="app-glass-topbar"
       sx={{
         display: { xs: "none", md: "flex" },
         alignItems: "center",
@@ -251,7 +252,7 @@ function AppTopBar({ pageTitle, displayName, initials, profile, onEditProfile, s
         px: 3,
         py: 1.5,
         minHeight: 56,
-        bgcolor: "background.paper",
+        bgcolor: "transparent",
         borderBottom: "1px solid",
         borderColor: "divider",
         position: "sticky",
@@ -566,6 +567,7 @@ function AppLayout({ children }) {
 
   return (
     <Box
+      className="app-glass-shell"
       sx={{
         display: "flex",
         minHeight: "100vh",
@@ -573,7 +575,7 @@ function AppLayout({ children }) {
         maxWidth: "100vw",
         minWidth: 0,
         overflowX: "hidden",
-        bgcolor: "background.default",
+        bgcolor: "transparent",
       }}
     >
       <AppBar
