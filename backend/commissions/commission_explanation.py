@@ -29,6 +29,9 @@ from .services import (
     _calculate_amount_for_plan,
     _eligible_orders_for_employee_month,
     _get_user_profile_for_order,
+    _marginal_band_index_for_level,
+    _marginal_band_upper,
+    _marginal_single_order,
     _rate_qs_for,
     find_sc_lookup_tier,
     resolve_compensation_plan,
@@ -53,7 +56,7 @@ def _tier_breakdown(plan, sales_amount, order=None, version=None):
         rate_qs = SCRateTable.objects.filter(compensation_plan=plan)
         flat_qs = SCFlatRateTable.objects.filter(compensation_plan=plan)
 
-    if source.commission_table_type == "RATE":
+    if source.commission_table_type in ("RATE", "HIGHEST"):
         tier = (
             rate_qs.filter(
                 is_active=True,
@@ -70,7 +73,9 @@ def _tier_breakdown(plan, sales_amount, order=None, version=None):
         return tier, base, {
             "rate_pct": tier.commission_rate,
             "tier_bonus": tier.bonus_amount,
-            "tier_name": tier.tier_name or "Rate tier",
+            "tier_name": tier.tier_name or (
+                "Highest rate tier" if source.commission_table_type == "HIGHEST" else "Rate tier"
+            ),
             "from_amount": tier.from_amount,
             "to_amount": to_label,
         }
@@ -176,6 +181,62 @@ def _per_order_rate_lines(plan, representative_order, currency, version=None):
                 "checked": True,
             }
         )
+    return total, out
+
+
+def _per_order_marginal_lines(plan, representative_order, currency, version=None):
+    """Per-order breakdown for MARGINAL plans using the fill model. A running
+    fill level carries across the month's orders: each order tops up the
+    leftover of the band the fill level sits in (at that band's rate), then the
+    rest of the order is paid at the next band's rate. The month's base
+    commission is the sum of the per-order commissions."""
+    from .currencies import currency_meta
+
+    rate_qs = _rate_qs_for(plan, version)
+    tiers = list(rate_qs.filter(is_active=True).order_by("from_amount", "sequence"))
+    symbol = currency_meta(currency)["symbol"]
+    total = Decimal("0.00")
+    out = []
+    orders = _eligible_orders_for_employee_month(representative_order).order_by(
+        "order_date", "id"
+    )
+    fill_level = Decimal("0.00")
+    for o in orders:
+        amount = _decimal(o.sales_amount)
+        if amount <= 0:
+            continue
+        piece = _marginal_single_order(tiers, fill_level, amount)
+        total += piece
+
+        detail = "This order earned no commission."
+        if tiers:
+            index = _marginal_band_index_for_level(tiers, fill_level)
+            current = tiers[index]
+            upper = _marginal_band_upper(tiers, index)
+            room = None if upper is None else (upper - fill_level)
+            if room is None or amount <= room:
+                detail = (
+                    f"Filled from {symbol}{fill_level:,.0f} at "
+                    f"{_pct(current.commission_rate)} (whole order in this band)."
+                )
+            else:
+                nxt = tiers[index + 1] if index + 1 < len(tiers) else current
+                remainder = amount - room
+                detail = (
+                    f"{_inr(room, currency)} @ {_pct(current.commission_rate)} "
+                    f"(fills the current band) + {_inr(remainder, currency)} @ "
+                    f"{_pct(nxt.commission_rate)} (next band)."
+                )
+        out.append(
+            {
+                "key": f"marginal_order_{o.id}",
+                "label": f"Order {o.order_id} ({_inr(amount, currency)})",
+                "display": _inr(piece, currency),
+                "detail": detail,
+                "checked": piece > 0,
+            }
+        )
+        fill_level += amount
     return total, out
 
 
@@ -427,6 +488,11 @@ def build_commission_explanation(commission: Commission) -> dict:
             and comm.calculation_scope == Commission.SCOPE_EMPLOYEE_MONTH
             and representative_order is not None
         )
+        is_marginal = (
+            table_type == "MARGINAL"
+            and comm.calculation_scope == Commission.SCOPE_EMPLOYEE_MONTH
+            and representative_order is not None
+        )
         if is_per_order_rate:
             # RATE tables: each order is tiered on its own value, then the
             # per-order commissions are summed for the month.
@@ -434,6 +500,23 @@ def build_commission_explanation(commission: Commission) -> dict:
                 plan, representative_order, currency, version=plan_version
             )
             lines.extend(per_order_lines)
+            lines.append(
+                {
+                    "key": "base_commission",
+                    "label": "Base commission (before rules)",
+                    "display": _inr(base_amount, currency),
+                    "detail": "Sum of the per-order commissions above.",
+                    "checked": True,
+                }
+            )
+        elif is_marginal:
+            # MARGINAL tables: a running fill level carries across the month's
+            # orders. Each order fills the current band's leftover at its rate,
+            # then the rest of the order is paid at the next band's rate.
+            base_amount, marginal_lines = _per_order_marginal_lines(
+                plan, representative_order, currency, version=plan_version
+            )
+            lines.extend(marginal_lines)
             lines.append(
                 {
                     "key": "base_commission",
@@ -462,7 +545,13 @@ def build_commission_explanation(commission: Commission) -> dict:
                 symbol = currency_meta(currency)["symbol"]
                 band = f"{symbol}{tier_meta['from_amount']:,.0f} – "
                 band += f"{symbol}{to_amt:,.0f}" if to_amt is not None else "no upper limit"
-                detail = f"{tier_meta['tier_name']} · {band}."
+                if table_type == "HIGHEST":
+                    detail = (
+                        f"{tier_meta['tier_name']} · {band}. "
+                        "This rate applies to the full monthly sales total."
+                    )
+                else:
+                    detail = f"{tier_meta['tier_name']} · {band}."
             lines.append(
                 {
                     "key": "commission_rate",

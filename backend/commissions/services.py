@@ -590,6 +590,98 @@ def _landing_tier_amount(rate_qs, sales_amount):
     return (sales_amount * tier.commission_rate / Decimal("100")) + tier.bonus_amount
 
 
+def _marginal_band_upper(tiers, index):
+    """Upper edge of band `index`. Returns None when the band is open-ended
+    (the highest band is always treated as open-ended)."""
+    if index >= len(tiers) - 1:
+        return None
+    upper = tiers[index].to_amount
+    if upper is None:
+        # A non-top band with no ceiling extends to the next band's floor.
+        return tiers[index + 1].from_amount or Decimal("0")
+    return upper
+
+
+def _marginal_band_index_for_level(tiers, level):
+    """Index of the band whose [from, upper) range contains `level`. The top
+    band is open-ended, so any level at/above its floor lands there."""
+    n = len(tiers)
+    for index in range(n):
+        lower = tiers[index].from_amount or Decimal("0")
+        upper = _marginal_band_upper(tiers, index)
+        if level < lower:
+            return index
+        if upper is None or level < upper:
+            return index
+    return n - 1
+
+
+def _marginal_single_order(tiers, fill_level, amount):
+    """Commission for ONE order under the fill model.
+
+    The month's bands are filled sequentially by a running `fill_level`. For
+    each order we top up the leftover room in the band the fill level currently
+    sits in (at that band's rate), then charge the ENTIRE remainder of the
+    order at the next band's rate — the remainder is not capped at the next
+    band's width and never cascades further.
+
+    Example (0-10k @ 5%, 10k-50k @ 10%, 50k-100k @ 15%):
+      fill_level 9,000, order 50,000 -> 1,000 @ 5% + 49,000 @ 10%.
+    """
+    amount = Decimal(str(amount or "0"))
+    if amount <= 0 or not tiers:
+        return Decimal("0.00")
+
+    index = _marginal_band_index_for_level(tiers, fill_level)
+    current = tiers[index]
+    upper = _marginal_band_upper(tiers, index)
+
+    # Open-ended current band: the whole order earns the current rate.
+    if upper is None:
+        return (
+            amount * current.commission_rate / Decimal("100")
+            + (current.bonus_amount or Decimal("0.00"))
+        )
+
+    room = upper - fill_level
+    if room < 0:
+        room = Decimal("0.00")
+
+    if amount <= room:
+        return (
+            amount * current.commission_rate / Decimal("100")
+            + (current.bonus_amount or Decimal("0.00"))
+        )
+
+    nxt = tiers[index + 1] if index + 1 < len(tiers) else current
+    remainder = amount - room
+    total = room * current.commission_rate / Decimal("100")
+    total += remainder * nxt.commission_rate / Decimal("100")
+    total += nxt.bonus_amount or Decimal("0.00")
+    return total
+
+
+def _marginal_commission_per_order(plan, orders, version=None):
+    """MARGINAL tables are calculated per order with a running fill level that
+    carries across the month's orders (processed in chronological order). Each
+    order tops up the current band's leftover at its rate, then the rest of the
+    order is paid at the next band's rate. The monthly commission is the sum of
+    the per-order commissions."""
+    rate_qs = _rate_qs_for(plan, version)
+    tiers = list(rate_qs.filter(is_active=True).order_by("from_amount", "sequence"))
+    if not tiers:
+        return Decimal("0.00")
+    total = Decimal("0.00")
+    fill_level = Decimal("0.00")
+    for order in orders:
+        amount = order.sales_amount or Decimal("0.00")
+        if amount <= 0:
+            continue
+        total += _marginal_single_order(tiers, fill_level, amount)
+        fill_level += amount
+    return total
+
+
 def _rate_commission_per_order(plan, orders, version=None):
     """RATE tables are calculated per order: each order's value picks the
     tier band it falls into, that tier's rate applies to the whole order
@@ -607,10 +699,14 @@ def _rate_commission_per_order(plan, orders, version=None):
 
 
 def _calculate_amount_for_plan(plan, sales_amount, order=None, version=None):
-    """Apply RATE, FLAT, or LOOKUP table rules; returns Decimal commission or zero.
+    """Apply RATE, HIGHEST, FLAT, or LOOKUP table rules; returns Decimal commission or zero.
 
     When a plan version is given, only rows belonging to that immutable
     version are used; otherwise legacy plan-level rows apply.
+
+    HIGHEST uses the same banded rate rows as RATE, but the caller should
+    pass the monthly sales total so the matching tier rate applies to the
+    entire aggregate (not per order).
     """
     commission_amount = Decimal("0.00")
     source = version or plan
@@ -621,8 +717,16 @@ def _calculate_amount_for_plan(plan, sales_amount, order=None, version=None):
     else:
         flat_qs = SCFlatRateTable.objects.filter(compensation_plan=plan)
 
-    if source.commission_table_type == "RATE":
+    if source.commission_table_type in ("RATE", "HIGHEST"):
         commission_amount = _landing_tier_amount(rate_qs, sales_amount)
+
+    elif source.commission_table_type == "MARGINAL":
+        tiers = list(
+            rate_qs.filter(is_active=True).order_by("from_amount", "sequence")
+        )
+        commission_amount = _marginal_single_order(
+            tiers, Decimal("0.00"), sales_amount
+        )
 
     elif source.commission_table_type == "FLAT":
         flat = flat_qs.filter(
@@ -833,13 +937,23 @@ def calculate_commission_for_order(order, replace_existing=True, force=False):
 
     original_sales_amount = representative_order.sales_amount
     representative_order.sales_amount = total_sales
-    if (plan_version or plan).commission_table_type == "RATE":
+    table_type = (plan_version or plan).commission_table_type
+    if table_type == "RATE":
         # RATE tables: each order picks the tier band its own value falls
         # into; the monthly commission is the sum of per-order commissions.
         commission_amount = _rate_commission_per_order(
             plan, eligible_orders, version=plan_version
         )
+    elif table_type == "MARGINAL":
+        # MARGINAL tables: a running fill level carries across the month's
+        # orders. Each order tops up the current band's leftover at its rate,
+        # then the rest of the order is paid at the next band's rate.
+        commission_amount = _marginal_commission_per_order(
+            plan, eligible_orders, version=plan_version
+        )
     else:
+        # HIGHEST / FLAT / LOOKUP: use the monthly sales total. HIGHEST
+        # applies the matching tier rate to the entire monthly sum.
         commission_amount = _calculate_amount_for_plan(
             plan,
             total_sales,

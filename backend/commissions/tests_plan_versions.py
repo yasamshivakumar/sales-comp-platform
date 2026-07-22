@@ -638,3 +638,434 @@ class PerOrderRateTierTests(TestCase):
         commission = calculate_commission_for_order(last)
         self.assertIsNotNone(commission)
         self.assertEqual(commission.commission_amount, Decimal("200.00"))
+
+
+class HighestRateTableTests(TestCase):
+    """HIGHEST tables: sum successful monthly orders first, then apply the
+    matching tier rate to the entire monthly total."""
+
+    def setUp(self):
+        self.org = get_default_organization()
+        UserProfile.objects.create(
+            organization=self.org,
+            email="highest@calc.co",
+            name="Highest Rep",
+            employee_id="HI1",
+            role="Sales Rep",
+        )
+
+    def _build_plan(self, with_bonus=False):
+        plan = CompensationPlan.objects.create(
+            organization=self.org,
+            plan_name="Highest Rate Plan",
+            status="Active",
+            role="Sales Rep",
+            commission_table_type="HIGHEST",
+            effective_start_date=date(2026, 3, 1),
+            effective_end_date=date(2026, 3, 31),
+        )
+        version = CommissionPlanVersion.objects.create(
+            organization=self.org,
+            compensation_plan=plan,
+            version_number=1,
+            status=CommissionPlanVersion.STATUS_PUBLISHED,
+            effective_from=date(2026, 3, 1),
+            effective_to=date(2026, 3, 31),
+            role="Sales Rep",
+            commission_table_type="HIGHEST",
+        )
+        tiers = [
+            (Decimal("0"), Decimal("10000"), Decimal("1.0"), Decimal("0")),
+            (Decimal("10000"), Decimal("50000"), Decimal("5.0"), Decimal("0")),
+            (Decimal("50000"), Decimal("100000"), Decimal("10.0"), Decimal("0")),
+            (
+                Decimal("100000"),
+                Decimal("200000"),
+                Decimal("15.0"),
+                Decimal("500.00") if with_bonus else Decimal("0"),
+            ),
+        ]
+        for idx, (lo, hi, rate, bonus) in enumerate(tiers, start=1):
+            SCRateTable.objects.create(
+                compensation_plan=plan,
+                plan_version=version,
+                from_amount=lo,
+                to_amount=hi,
+                commission_rate=rate,
+                bonus_amount=bonus,
+                sequence=idx,
+                is_active=True,
+            )
+        return plan, version
+
+    def _order(self, order_id, amount, order_date=None):
+        return Order.objects.create(
+            organization=self.org,
+            order_id=order_id,
+            employee_id="HI1",
+            order_date=order_date or date(2026, 3, 10),
+            sales_amount=Decimal(amount),
+            order_status="Success",
+            currency="INR",
+        )
+
+    def test_monthly_sum_selects_highest_matching_tier(self):
+        self._build_plan()
+        # 30k + 20k + 100k + 50k = 200k -> 100k-200k tier @ 15% = 30,000
+        self._order("H-30k", "30000")
+        self._order("H-20k", "20000")
+        self._order("H-100k", "100000")
+        last = self._order("H-50k", "50000")
+        commission = calculate_commission_for_order(last)
+        self.assertIsNotNone(commission)
+        self.assertEqual(commission.source_sales_total, Decimal("200000.00"))
+        self.assertEqual(commission.source_order_count, 4)
+        self.assertEqual(commission.commission_amount, Decimal("30000.00"))
+
+    def test_recalc_moves_to_higher_tier_when_new_order_arrives(self):
+        self._build_plan()
+        first = self._order("H-R1", "40000")
+        commission = calculate_commission_for_order(first)
+        # 40k lands in 10k-50k @ 5% = 2,000
+        self.assertEqual(commission.commission_amount, Decimal("2000.00"))
+
+        last = self._order("H-R2", "80000")
+        commission = calculate_commission_for_order(last)
+        # 40k + 80k = 120k -> 100k-200k @ 15% = 18,000
+        self.assertEqual(commission.commission_amount, Decimal("18000.00"))
+
+    def test_bonus_added_on_selected_tier(self):
+        self._build_plan(with_bonus=True)
+        last = self._order("H-BONUS", "150000")
+        commission = calculate_commission_for_order(last)
+        # 150k @ 15% + 500 bonus = 22,500 + 500
+        self.assertEqual(commission.commission_amount, Decimal("23000.00"))
+
+    def test_open_ended_top_tier(self):
+        plan, version = self._build_plan()
+        SCRateTable.objects.filter(
+            plan_version=version, from_amount=Decimal("100000")
+        ).update(to_amount=None)
+        last = self._order("H-OPEN", "250000")
+        commission = calculate_commission_for_order(last)
+        self.assertEqual(commission.commission_amount, Decimal("37500.00"))
+
+    def test_currency_isolation(self):
+        self._build_plan()
+        self._order("H-INR", "150000")
+        usd = Order.objects.create(
+            organization=self.org,
+            order_id="H-USD",
+            employee_id="HI1",
+            order_date=date(2026, 3, 12),
+            sales_amount=Decimal("150000"),
+            order_status="Success",
+            currency="USD",
+        )
+        # USD order alone has no HIGHEST plan currency match via rates on INR
+        # buckets — still same plan, but monthly aggregate is currency-scoped.
+        commission_usd = calculate_commission_for_order(usd)
+        self.assertIsNotNone(commission_usd)
+        self.assertEqual(commission_usd.currency.upper(), "USD")
+        self.assertEqual(commission_usd.source_sales_total, Decimal("150000.00"))
+        self.assertEqual(commission_usd.commission_amount, Decimal("22500.00"))
+
+        inr_order = Order.objects.filter(order_id="H-INR").first()
+        commission_inr = calculate_commission_for_order(inr_order)
+        self.assertEqual(commission_inr.currency.upper(), "INR")
+        self.assertEqual(commission_inr.source_sales_total, Decimal("150000.00"))
+        self.assertEqual(commission_inr.commission_amount, Decimal("22500.00"))
+
+    def test_explanation_uses_monthly_tier_not_per_order_lines(self):
+        from commissions.commission_explanation import build_commission_explanation
+
+        self._build_plan()
+        self._order("H-E1", "30000")
+        last = self._order("H-E2", "170000")
+        commission = calculate_commission_for_order(last)
+        data = build_commission_explanation(commission)
+        keys = [line["key"] for line in data["lines"]]
+        self.assertIn("commission_rate", keys)
+        self.assertFalse(any(k.startswith("order_tier_") for k in keys))
+        self.assertEqual(data["commission_earned"], "30000.00")
+        rate_line = next(line for line in data["lines"] if line["key"] == "commission_rate")
+        self.assertIn("full monthly sales total", rate_line["detail"])
+
+
+class HighestRateTableAPITests(TestCase):
+    def setUp(self):
+        self.org = get_default_organization()
+        self.admin_user = User.objects.create_user(
+            username="highest-admin@test.com",
+            password="pass12345",
+            email="highest-admin@test.com",
+        )
+        UserProfile.objects.create(
+            organization=self.org,
+            email="highest-admin@test.com",
+            name="Highest Admin",
+            employee_id="HADM",
+            role="Admin",
+            enable_login=True,
+        )
+        self.token = Token.objects.create(user=self.admin_user)
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+
+    def test_create_clone_publish_highest_plan(self):
+        create = self.client.post(
+            "/api/compensation-plans/",
+            {
+                "plan_name": "API Highest Plan",
+                "role": "Sales Rep",
+                "status": "Active",
+                "plan_basis": "Role",
+                "effective_start_date": "2026-04-01",
+                "effective_end_date": "2026-04-30",
+                "commission_table_type": "HIGHEST",
+                "sc_rate_tables": [
+                    {
+                        "tier_name": "Top",
+                        "from_amount": "0",
+                        "to_amount": None,
+                        "commission_rate": "12",
+                        "bonus_amount": "0",
+                        "sequence": 1,
+                        "is_active": True,
+                    }
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(create.status_code, status.HTTP_201_CREATED, create.data)
+        plan_id = create.data["id"]
+        self.assertEqual(create.data["commission_table_type"], "HIGHEST")
+        self.assertGreaterEqual(len(create.data.get("sc_rate_tables") or []), 1)
+
+        versions = self.client.get(f"/api/compensation-plans/{plan_id}/versions/")
+        self.assertEqual(versions.status_code, status.HTTP_200_OK)
+        version_rows = versions.data if isinstance(versions.data, list) else versions.data["results"]
+        version_id = version_rows[0]["id"]
+
+        clone = self.client.post(f"/api/compensation-plans/{plan_id}/versions/{version_id}/clone/")
+        self.assertEqual(clone.status_code, status.HTTP_201_CREATED, clone.data)
+        draft_id = clone.data["id"]
+        self.assertEqual(clone.data["commission_table_type"], "HIGHEST")
+        self.assertGreaterEqual(len(clone.data.get("sc_rate_tables") or []), 1)
+
+        # Avoid date overlap with the published v1 before publishing the clone.
+        self.client.patch(
+            f"/api/compensation-plans/{plan_id}/versions/{draft_id}/",
+            {
+                "effective_from": "2026-05-01",
+                "effective_to": "2026-05-31",
+            },
+            format="json",
+        )
+
+        publish = self.client.post(
+            f"/api/compensation-plans/{plan_id}/versions/{draft_id}/publish/"
+        )
+        self.assertEqual(publish.status_code, status.HTTP_200_OK, publish.data)
+        self.assertEqual(publish.data["status"], "Published")
+
+
+class MarginalRateTableTests(TestCase):
+    """MARGINAL tables: a running fill level carries across the month's orders.
+    Each order tops up the leftover of the band the fill level sits in (at that
+    band's rate), then the rest of the order is paid at the next band's rate
+    (the remainder is not capped at that band's width)."""
+
+    def setUp(self):
+        self.org = get_default_organization()
+        UserProfile.objects.create(
+            organization=self.org,
+            email="marginal@calc.co",
+            name="Marginal Rep",
+            employee_id="MG1",
+            role="Sales Rep",
+        )
+
+    def _build_plan(self, top_open_ended=False, with_bonus=False):
+        plan = CompensationPlan.objects.create(
+            organization=self.org,
+            plan_name="Marginal Rate Plan",
+            status="Active",
+            role="Sales Rep",
+            commission_table_type="MARGINAL",
+            effective_start_date=date(2026, 3, 1),
+            effective_end_date=date(2026, 3, 31),
+        )
+        version = CommissionPlanVersion.objects.create(
+            organization=self.org,
+            compensation_plan=plan,
+            version_number=1,
+            status=CommissionPlanVersion.STATUS_PUBLISHED,
+            effective_from=date(2026, 3, 1),
+            effective_to=date(2026, 3, 31),
+            role="Sales Rep",
+            commission_table_type="MARGINAL",
+        )
+        top_to = None if top_open_ended else Decimal("100000")
+        tiers = [
+            (Decimal("0"), Decimal("10000"), Decimal("5.0"), Decimal("0")),
+            (Decimal("10000"), Decimal("50000"), Decimal("10.0"), Decimal("0")),
+            (
+                Decimal("50000"),
+                top_to,
+                Decimal("15.0"),
+                Decimal("300.00") if with_bonus else Decimal("0"),
+            ),
+        ]
+        for idx, (lo, hi, rate, bonus) in enumerate(tiers, start=1):
+            SCRateTable.objects.create(
+                compensation_plan=plan,
+                plan_version=version,
+                from_amount=lo,
+                to_amount=hi,
+                commission_rate=rate,
+                bonus_amount=bonus,
+                sequence=idx,
+                is_active=True,
+            )
+        return plan, version
+
+    def _order(self, order_id, amount, order_date=None):
+        return Order.objects.create(
+            organization=self.org,
+            order_id=order_id,
+            employee_id="MG1",
+            order_date=order_date or date(2026, 3, 10),
+            sales_amount=Decimal(amount),
+            order_status="Success",
+            currency="INR",
+        )
+
+    def test_single_order_crosses_one_band(self):
+        self._build_plan()
+        # Single 59,000 order from an empty fill level crosses one boundary:
+        # 10,000 @ 5% + 49,000 @ 10% = 500 + 4,900 = 5,400.
+        commission = calculate_commission_for_order(self._order("M-59k", "59000"))
+        self.assertIsNotNone(commission)
+        self.assertEqual(commission.commission_amount, Decimal("5400.00"))
+
+    def test_user_example_fill_carries_across_orders(self):
+        self._build_plan()
+        # Order 1 = 9,000 -> 9,000 @ 5% = 450. Fill level now 9,000
+        # (1,000 left in the 0-10k band).
+        self._order("M-9k", "9000")
+        # Order 2 = 50,000 -> 1,000 @ 5% (fills the band) + 49,000 @ 10%
+        # = 50 + 4,900 = 4,950. Month total = 450 + 4,950 = 5,400.
+        last = self._order("M-50k", "50000")
+        commission = calculate_commission_for_order(last)
+        self.assertEqual(commission.source_sales_total, Decimal("59000.00"))
+        self.assertEqual(commission.commission_amount, Decimal("5400.00"))
+
+    def test_within_first_band_only(self):
+        self._build_plan()
+        commission = calculate_commission_for_order(self._order("M-9only", "9000"))
+        # 9,000 all in 0-10k @ 5% = 450
+        self.assertEqual(commission.commission_amount, Decimal("450.00"))
+
+    def test_top_band_open_ended_once_fill_reaches_it(self):
+        self._build_plan(top_open_ended=True)
+        # Order 1 = 60,000 -> 10,000 @ 5% + 50,000 @ 10% = 500 + 5,000 = 5,500.
+        # Fill level is now 60,000 (inside the 50k+ top band).
+        self._order("M-60k", "60000")
+        # Order 2 = 100,000 -> whole order at the open-ended top rate 15%
+        # = 15,000. Month total = 5,500 + 15,000 = 20,500.
+        last = self._order("M-100k", "100000")
+        commission = calculate_commission_for_order(last)
+        self.assertEqual(commission.commission_amount, Decimal("20500.00"))
+
+    def test_closed_top_band_still_extends_last_tier(self):
+        # Even with a closed top band (to_amount=100000), the last tier is
+        # treated as open-ended once the fill level reaches it.
+        self._build_plan(top_open_ended=False)
+        self._order("M-60k2", "60000")
+        last = self._order("M-100k2", "100000")
+        commission = calculate_commission_for_order(last)
+        self.assertEqual(commission.commission_amount, Decimal("20500.00"))
+
+    def test_bonus_added_when_order_lands_in_bonus_band(self):
+        self._build_plan(with_bonus=True)
+        # Order 1 = 60,000 -> 500 + 5,000 = 5,500 (lands in the 10% band, no
+        # bonus there). Fill level now 60,000 (top band).
+        self._order("M-b60k", "60000")
+        # Order 2 = 20,000 -> whole order at top band 15% = 3,000, plus the
+        # top band's 300 bonus. Month total = 5,500 + 3,300 = 8,800.
+        last = self._order("M-b20k", "20000")
+        commission = calculate_commission_for_order(last)
+        self.assertEqual(commission.commission_amount, Decimal("8800.00"))
+
+    def test_explanation_shows_per_order_marginal_lines(self):
+        from commissions.commission_explanation import build_commission_explanation
+
+        self._build_plan()
+        self._order("M-E9k", "9000")
+        last = self._order("M-E50k", "50000")
+        commission = calculate_commission_for_order(last)
+        data = build_commission_explanation(commission)
+        keys = [line["key"] for line in data["lines"]]
+        self.assertTrue(any(k.startswith("marginal_order_") for k in keys))
+        self.assertFalse(any(k.startswith("order_tier_") for k in keys))
+        self.assertEqual(data["commission_earned"], "5400.00")
+
+
+class MarginalRateTableAPITests(TestCase):
+    def setUp(self):
+        self.org = get_default_organization()
+        self.admin_user = User.objects.create_user(
+            username="marginal-admin@test.com",
+            password="pass12345",
+            email="marginal-admin@test.com",
+        )
+        UserProfile.objects.create(
+            organization=self.org,
+            email="marginal-admin@test.com",
+            name="Marginal Admin",
+            employee_id="MADM",
+            role="Admin",
+            enable_login=True,
+        )
+        self.token = Token.objects.create(user=self.admin_user)
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
+
+    def test_create_and_publish_marginal_plan(self):
+        create = self.client.post(
+            "/api/compensation-plans/",
+            {
+                "plan_name": "API Marginal Plan",
+                "role": "Sales Rep",
+                "status": "Active",
+                "plan_basis": "Role",
+                "effective_start_date": "2026-04-01",
+                "effective_end_date": "2026-04-30",
+                "commission_table_type": "MARGINAL",
+                "sc_rate_tables": [
+                    {
+                        "tier_name": "Band 1",
+                        "from_amount": "0",
+                        "to_amount": "50000",
+                        "commission_rate": "5",
+                        "bonus_amount": "0",
+                        "sequence": 1,
+                        "is_active": True,
+                    },
+                    {
+                        "tier_name": "Band 2",
+                        "from_amount": "50000",
+                        "to_amount": None,
+                        "commission_rate": "10",
+                        "bonus_amount": "0",
+                        "sequence": 2,
+                        "is_active": True,
+                    },
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(create.status_code, status.HTTP_201_CREATED, create.data)
+        self.assertEqual(create.data["commission_table_type"], "MARGINAL")
+        self.assertGreaterEqual(len(create.data.get("sc_rate_tables") or []), 2)

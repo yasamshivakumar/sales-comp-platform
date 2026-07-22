@@ -3,20 +3,31 @@ import { currencyForBusinessGroup } from "../utils/businessGroups";
 
 function TierList({ selectedPlan, onEditTier }) {
   const isFlat = selectedPlan?.commission_table_type === "FLAT";
+  const isHighest = selectedPlan?.commission_table_type === "HIGHEST";
+  const isMarginal = selectedPlan?.commission_table_type === "MARGINAL";
   const rateRows = selectedPlan?.sc_rate_tables || [];
   const flatRows = selectedPlan?.sc_flat_rate_tables || [];
   const hasRows = isFlat ? flatRows.length > 0 : rateRows.length > 0;
   const currency = selectedPlan?.currency || currencyForBusinessGroup(selectedPlan?.business_group || "", "");
   const money = (value) => (currency ? formatMoney(value, currency) : value);
 
+  const title = isHighest
+    ? "Highest-rate bands"
+    : isMarginal
+      ? "Marginal bands"
+      : "Current rates";
+
   return (
     <div className="panel">
-      <h3 className="panel__title">Current rates</h3>
+      <h3 className="panel__title">{title}</h3>
 
       {!hasRows ? (
         <p style={{ color: "var(--text-muted)", margin: 0 }}>
-          No commission rates yet. Add at least one rate — orders will not earn commission until a
-          rate exists on this plan.
+          {isHighest
+            ? "Add at least one sales band — the monthly total picks the matching tier rate and applies it to the full sum."
+            : isMarginal
+              ? "Add at least one sales band — bands fill as orders come in; each order tops up the current band, then the rest is paid at the next band's rate."
+              : "No commission rates yet. Add at least one rate — orders will not earn commission until a rate exists on this plan."}
         </p>
       ) : isFlat ? (
         flatRows.map((row, index) => (

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import api, { getApiErrorMessage } from "../api";
 import { useToast } from "../Components/Toast";
 import PageHeader from "../Components/PageHeader";
-import PlanHeaderForm from "./PlanHeaderForm";
+import PlanHeaderForm, { commissionTableLabel } from "./PlanHeaderForm";
 import TierForm from "./TierForm";
 import TierList from "./TierList";
 import LookupTierForm from "./LookupTierForm";
@@ -182,7 +182,9 @@ function AiPlanBuilder({ onPlanCreated, onCancel }) {
             value={form.commission_table_type}
             onChange={handleChange}
           >
-            <option value="RATE">Rate tiers</option>
+            <option value="RATE">Rate tiers (per order)</option>
+            <option value="HIGHEST">Highest rate (monthly total)</option>
+            <option value="MARGINAL">Marginal rate (bands fill)</option>
             <option value="FLAT">Flat rate</option>
             <option value="LOOKUP">Lookup table</option>
           </select>
@@ -476,7 +478,7 @@ function CompensationPlans() {
                             {plan.status}
                           </span>
                         </td>
-                        <td>{plan.commission_table_type || "—"}</td>
+                        <td>{commissionTableLabel(plan.commission_table_type)}</td>
                         <td>{rateCount}</td>
                         <td>{ruleCount}</td>
                         <td>
@@ -539,6 +541,19 @@ function CompensationPlans() {
                   This version is {selectedPlan.current_version.status} and read-only.
                   Use <strong>Clone</strong> in Version history below to create an editable
                   draft, then publish when ready.
+                </p>
+              ) : null}
+              {selectedPlan.commission_table_type === "HIGHEST" ? (
+                <p className="plan-readonly-banner">
+                  Highest Rate Table: monthly successful sales are summed first, then the
+                  matching tier’s rate applies to the <strong>full monthly total</strong>.
+                </p>
+              ) : null}
+              {selectedPlan.commission_table_type === "MARGINAL" ? (
+                <p className="plan-readonly-banner">
+                  Marginal Rate Table: bands fill up across the month’s orders. Each order first
+                  <strong> tops up the current band’s leftover</strong> at its rate, then the rest of
+                  that order is paid at the next band’s rate. The top band is open-ended.
                 </p>
               ) : null}
               <div className="cp-manage__grid">

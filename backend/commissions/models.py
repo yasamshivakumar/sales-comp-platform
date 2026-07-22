@@ -332,6 +332,8 @@ class CompensationPlan(models.Model):
     # ADD THIS SECTION
     COMMISSION_TABLE_TYPE_CHOICES = [
         ('RATE', 'SC Rate Table'),
+        ('HIGHEST', 'Highest Rate Table'),
+        ('MARGINAL', 'Marginal Rate Table'),
         ('FLAT', 'SC Flat Rate Table'),
         ('LOOKUP', 'SC Lookup Table'),
     ]

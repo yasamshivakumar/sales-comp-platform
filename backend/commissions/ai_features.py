@@ -32,7 +32,7 @@ PLAN_SCHEMA_HINT = """
     "plan_basis": "Role",
     "effective_start_date": "YYYY-MM-DD",
     "effective_end_date": "YYYY-MM-DD or null",
-    "commission_table_type": "RATE|FLAT|LOOKUP",
+    "commission_table_type": "RATE|HIGHEST|MARGINAL|FLAT|LOOKUP",
     "role": "string",
     "position_name": "string or null",
     "business_group": "India|USA|Australia|Europe"
@@ -193,7 +193,7 @@ def _normalize_plan_payload(ai_data, request_data, org):
         or raw_plan.get("commission_table_type")
         or "RATE"
     ).upper()
-    if table_type not in {"RATE", "FLAT", "LOOKUP"}:
+    if table_type not in {"RATE", "HIGHEST", "MARGINAL", "FLAT", "LOOKUP"}:
         table_type = "RATE"
     plan = {
         **raw_plan,
@@ -300,7 +300,7 @@ def _sample_simulation(plan_payload, request_data):
     for sample in samples:
         sales = Decimal(_clean_decimal(sample.get("sales_amount"), "0"))
         estimate = Decimal("0")
-        if table_type == "RATE":
+        if table_type in ("RATE", "HIGHEST"):
             for tier in plan_payload.get("sc_rate_tables", []):
                 start = Decimal(_clean_decimal(tier.get("from_amount"), "0"))
                 end = tier.get("to_amount")
@@ -308,6 +308,30 @@ def _sample_simulation(plan_payload, request_data):
                     estimate = sales * Decimal(str(tier["commission_rate"])) / Decimal("100")
                     estimate += Decimal(str(tier.get("bonus_amount") or "0"))
                     break
+        elif table_type == "MARGINAL":
+            # Fill model on a single order from an empty fill level: top up the
+            # first band at its rate, then the rest of the order at the next
+            # band's rate (remainder is not capped at that band's width).
+            tiers = sorted(
+                plan_payload.get("sc_rate_tables", []),
+                key=lambda t: Decimal(_clean_decimal(t.get("from_amount"), "0")),
+            )
+            if tiers and sales > 0:
+                first = tiers[0]
+                first_rate = Decimal(str(first.get("commission_rate") or "0"))
+                first_end = first.get("to_amount")
+                open_top = first_end in (None, "") or len(tiers) == 1
+                room = sales if open_top else Decimal(str(first_end))
+                if sales <= room:
+                    estimate = sales * first_rate / Decimal("100")
+                    estimate += Decimal(str(first.get("bonus_amount") or "0"))
+                else:
+                    nxt = tiers[1]
+                    nxt_rate = Decimal(str(nxt.get("commission_rate") or "0"))
+                    remainder = sales - room
+                    estimate = room * first_rate / Decimal("100")
+                    estimate += remainder * nxt_rate / Decimal("100")
+                    estimate += Decimal(str(nxt.get("bonus_amount") or "0"))
         elif table_type == "FLAT":
             flat = (plan_payload.get("sc_flat_rate_tables") or [{}])[0]
             estimate = sales * Decimal(str(flat.get("flat_rate") or "0")) / Decimal("100")

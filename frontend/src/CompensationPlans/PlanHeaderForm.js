@@ -28,7 +28,19 @@ function tableTypeFromPlan(plan) {
   const type = String(plan?.commission_table_type || "RATE").toUpperCase();
   if (type === "FLAT") return "flat";
   if (type === "LOOKUP") return "lookup";
+  if (type === "HIGHEST") return "highest";
+  if (type === "MARGINAL") return "marginal";
   return "rate";
+}
+
+export function commissionTableLabel(type) {
+  const value = String(type || "").toUpperCase();
+  if (value === "HIGHEST") return "Highest Rate";
+  if (value === "MARGINAL") return "Marginal Rate";
+  if (value === "FLAT") return "Flat Rate";
+  if (value === "LOOKUP") return "Lookup";
+  if (value === "RATE") return "Rate";
+  return value || "—";
 }
 
 function formFromPlan(plan) {
@@ -102,7 +114,11 @@ function PlanHeaderForm({ initialPlan = null, onPlanCreated, onPlanUpdated, onCa
             ? "FLAT"
             : form.table_type === "lookup"
               ? "LOOKUP"
-              : "RATE",
+              : form.table_type === "highest"
+                ? "HIGHEST"
+                : form.table_type === "marginal"
+                  ? "MARGINAL"
+                  : "RATE",
         description: form.description || "",
         position_name: form.position_name || "",
         title: form.title || "",
@@ -110,7 +126,14 @@ function PlanHeaderForm({ initialPlan = null, onPlanCreated, onPlanUpdated, onCa
       };
 
       const defaultRate = parseFloat(form.default_commission_rate);
-      if (!editing && form.table_type === "rate" && !Number.isNaN(defaultRate) && defaultRate > 0) {
+      if (
+        !editing &&
+        (form.table_type === "rate" ||
+          form.table_type === "highest" ||
+          form.table_type === "marginal") &&
+        !Number.isNaN(defaultRate) &&
+        defaultRate > 0
+      ) {
         payload.sc_rate_tables = [
           {
             tier_name: "Default",
@@ -248,10 +271,31 @@ function PlanHeaderForm({ initialPlan = null, onPlanCreated, onPlanUpdated, onCa
         <div className="form-field">
           <label>Commission table <span style={req}>*</span></label>
           <select name="table_type" value={form.table_type} onChange={handleChange}>
-            <option value="rate">SC Rate Table (% by sales band)</option>
+            <option value="rate">SC Rate Table (% by sales band, per order)</option>
+            <option value="highest">Highest Rate Table (monthly total tier %)</option>
+            <option value="marginal">Marginal Rate Table (bands fill across orders)</option>
             <option value="flat">SC Flat Rate Table (single %)</option>
             <option value="lookup">SC Lookup Table (product / service / distribution)</option>
           </select>
+          {form.table_type === "highest" && (
+            <small style={{ color: "var(--text-muted)", fontSize: 12, display: "block", marginTop: 6 }}>
+              Monthly successful sales are summed first. The matching tier’s rate then applies to the
+              entire monthly total (not per order).
+            </small>
+          )}
+          {form.table_type === "marginal" && (
+            <small style={{ color: "var(--text-muted)", fontSize: 12, display: "block", marginTop: 6 }}>
+              Bands fill up as orders come in. Each order first tops up the leftover room in the
+              current band at that band’s rate, then the rest of the order is paid at the next
+              band’s rate. The top band is open-ended.
+            </small>
+          )}
+          {form.table_type === "rate" && (
+            <small style={{ color: "var(--text-muted)", fontSize: 12, display: "block", marginTop: 6 }}>
+              Each order picks its own tier band; the monthly commission is the sum of those
+              per-order commissions.
+            </small>
+          )}
         </div>
         <div className="form-field">
           <label>Business group / currency</label>

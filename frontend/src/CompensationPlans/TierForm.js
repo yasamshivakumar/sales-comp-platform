@@ -57,6 +57,8 @@ function TierForm({ selectedPlan, editingTier = null, onTierUpdated, onCancelEdi
   const { error } = useToast();
   const [loading, setLoading] = useState(false);
   const isFlat = selectedPlan.commission_table_type === "FLAT";
+  const isHighest = selectedPlan.commission_table_type === "HIGHEST";
+  const isMarginal = selectedPlan.commission_table_type === "MARGINAL";
 
   const [form, setForm] = useState(() => formFromEditingTier(editingTier, isFlat));
   const editing = Boolean(editingTier);
@@ -136,7 +138,32 @@ function TierForm({ selectedPlan, editingTier = null, onTierUpdated, onCancelEdi
 
   return (
     <div className="panel">
-      <h3 className="panel__title">{editing ? "Edit commission rate" : "Add commission rate"}</h3>
+      <h3 className="panel__title">
+        {editing
+          ? isHighest
+            ? "Edit highest-rate band"
+            : isMarginal
+              ? "Edit marginal band"
+              : "Edit commission rate"
+          : isHighest
+            ? "Add highest-rate band"
+            : isMarginal
+              ? "Add marginal band"
+              : "Add commission rate"}
+      </h3>
+      {isHighest && (
+        <p style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 0 }}>
+          These bands apply to the employee’s monthly sales total. The matching tier’s rate is
+          applied to the entire monthly sum.
+        </p>
+      )}
+      {isMarginal && (
+        <p style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 0 }}>
+          These bands fill up as orders come in — each order tops up the current band’s leftover at
+          its rate, then the rest of that order is paid at the next band’s rate. The top band is
+          open-ended.
+        </p>
+      )}
 
       {isFlat ? (
         <div className="form-grid">

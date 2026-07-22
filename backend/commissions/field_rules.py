@@ -125,11 +125,15 @@ def normalize_compensation_plan_payload(data):
             normalized["commission_table_type"] = "FLAT"
         elif raw == "lookup":
             normalized["commission_table_type"] = "LOOKUP"
+        elif raw in ("highest", "highest_rate", "highest-rate"):
+            normalized["commission_table_type"] = "HIGHEST"
+        elif raw in ("marginal", "marginal_rate", "marginal-rate", "progressive"):
+            normalized["commission_table_type"] = "MARGINAL"
         else:
             normalized["commission_table_type"] = "RATE"
     elif "commission_table_type" in normalized:
         raw = str(normalized["commission_table_type"]).strip().upper()
-        if raw not in ("RATE", "FLAT", "LOOKUP"):
+        if raw not in ("RATE", "HIGHEST", "MARGINAL", "FLAT", "LOOKUP"):
             raw = "RATE"
         normalized["commission_table_type"] = raw
 

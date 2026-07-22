@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import api, { getApiErrorMessage } from "../api";
 import { useToast } from "../Components/Toast";
+import { commissionTableLabel } from "./PlanHeaderForm";
 
 function VersionBadge({ status }) {
   const tone =
@@ -226,7 +227,7 @@ function PlanVersionHistory({ plan, onVersionsChanged }) {
                       <VersionBadge status={version.status} />
                     </td>
                     <td>{formatRange(version.effective_from, version.effective_to)}</td>
-                    <td>{version.commission_table_type}</td>
+                    <td>{commissionTableLabel(version.commission_table_type)}</td>
                     <td>{rateCount}</td>
                     <td>{version.commission_rules?.length || 0}</td>
                     <td>

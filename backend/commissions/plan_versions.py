@@ -150,7 +150,7 @@ def supersede_overlapping_published(version):
 
 def _has_rate_configuration(version):
     table_type = version.commission_table_type
-    if table_type == "RATE":
+    if table_type in ("RATE", "HIGHEST", "MARGINAL"):
         return version.sc_rate_tables.filter(is_active=True).exists()
     if table_type == "FLAT":
         return version.sc_flat_rate_tables.filter(is_active=True).exists()
