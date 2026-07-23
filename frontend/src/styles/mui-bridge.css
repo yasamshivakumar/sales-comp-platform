@@ -293,6 +293,16 @@ table tbody tr:hover {
   -webkit-text-fill-color: #f3f4f6 !important;
 }
 
+/* Login fields are always white ? never force light text onto them */
+[data-theme="dark"] .login-glass .MuiOutlinedInput-root .MuiOutlinedInput-input:not(.Mui-disabled),
+[data-theme="dark"] .login-glass .auth-text-field .MuiOutlinedInput-input,
+[data-theme="dark"] .login-glass .auth-text-field .MuiInputBase-input,
+[data-theme="dark"] .login-glass .auth-text-field input {
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  caret-color: #0f172a !important;
+}
+
 [data-theme="dark"] .MuiOutlinedInput-root.Mui-disabled .MuiOutlinedInput-input {
   color: rgba(243, 244, 246, 0.55) !important;
   -webkit-text-fill-color: rgba(243, 244, 246, 0.55) !important;
@@ -316,6 +326,18 @@ table tbody tr:hover {
   -webkit-box-shadow: 0 0 0 100px #0f172a inset !important;
   -webkit-text-fill-color: #f8fafc !important;
   caret-color: #f8fafc !important;
+}
+
+/* Login page keeps white inputs ? dark autofill fill would hide the email */
+[data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill,
+[data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill:hover,
+[data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill:focus,
+[data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+  -webkit-text-fill-color: #0f172a !important;
+  color: #0f172a !important;
+  caret-color: #0f172a !important;
 }
 
 .MuiOutlinedInput-root fieldset {
@@ -547,7 +569,7 @@ table tbody tr:hover {
   color: #94a3b8 !important;
 }
 
-/* Autofill in dark mode */
+/* Autofill in dark mode (exclude login ? those fields stay white) */
 [data-theme="dark"] input:-webkit-autofill,
 [data-theme="dark"] input:-webkit-autofill:hover,
 [data-theme="dark"] input:-webkit-autofill:focus,
@@ -555,8 +577,21 @@ table tbody tr:hover {
 [data-theme="dark"] select:-webkit-autofill {
   -webkit-text-fill-color: #f8fafc !important;
   caret-color: #f8fafc !important;
+  -webkit-box-shadow: 0 0 0 1000px #0f172a inset !important;
   box-shadow: 0 0 0 1000px #0f172a inset !important;
   transition: background-color 9999s ease-out;
+}
+
+[data-theme="dark"] .login-glass input:-webkit-autofill,
+[data-theme="dark"] .login-glass input:-webkit-autofill:hover,
+[data-theme="dark"] .login-glass input:-webkit-autofill:focus,
+[data-theme="dark"] .login-glass input:-webkit-autofill:active {
+  -webkit-text-fill-color: #0f172a !important;
+  color: #0f172a !important;
+  caret-color: #0f172a !important;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+  background-color: #ffffff !important;
 }
 
 /* Date / number spin buttons stay readable */

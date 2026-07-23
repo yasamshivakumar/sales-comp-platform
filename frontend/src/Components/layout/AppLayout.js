@@ -20,7 +20,7 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
+import CloudSyncOutlinedIcon from "@mui/icons-material/CloudSyncOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
 import SpaceDashboardOutlinedIcon from "@mui/icons-material/SpaceDashboardOutlined";
 import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalanceWalletOutlined";
@@ -187,7 +187,6 @@ const adminMenu = [
   { name: "Payouts", path: "/payouts", icon: SavingsOutlinedIcon },
   { name: "Comp Plans", path: "/comp-plans", icon: DescriptionOutlinedIcon },
   { name: "Commission Rules", path: "/commission-rules", icon: GavelOutlinedIcon },
-  { name: "CRM Integrations", path: "/integrations", icon: HubOutlinedIcon },
   { name: "People & Access", path: "/user-setup", icon: ManageAccountsOutlinedIcon },
   { name: "Audit Log", path: "/audit-logs", icon: FactCheckOutlinedIcon },
 ];
@@ -280,7 +279,7 @@ function AppTopBar({ pageTitle, displayName, initials, profile, onEditProfile, s
                 },
               }}
             >
-              <HubOutlinedIcon fontSize="small" />
+              <CloudSyncOutlinedIcon fontSize="small" />
             </IconButton>
           </Tooltip>
         )}
@@ -615,7 +614,7 @@ function AppLayout({ children }) {
                   },
                 }}
               >
-                <HubOutlinedIcon fontSize="small" />
+                <CloudSyncOutlinedIcon fontSize="small" />
               </IconButton>
             </Tooltip>
           )}

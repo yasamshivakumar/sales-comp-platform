@@ -291,16 +291,27 @@
   opacity: 1 !important;
 }
 
+/* Chrome/Edge autocomplete paints a bright fill + often light text in dark mode.
+   Keep login fields white with dark, readable text in every autofill state. */
 .login-glass .auth-text-field input:-webkit-autofill,
 .login-glass .auth-text-field input:-webkit-autofill:hover,
 .login-glass .auth-text-field input:-webkit-autofill:focus,
+.login-glass .auth-text-field input:-webkit-autofill:active,
+.login-glass .auth-text-field textarea:-webkit-autofill,
 [data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill,
 [data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill:hover,
-[data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill:focus {
+[data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill:focus,
+[data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill:active,
+[data-theme="dark"] .login-glass .auth-text-field .MuiOutlinedInput-input:-webkit-autofill,
+[data-theme="dark"] .login-glass .auth-text-field .MuiInputBase-input:-webkit-autofill {
+  color: #0f172a !important;
   -webkit-text-fill-color: #0f172a !important;
   caret-color: #0f172a !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
   box-shadow: 0 0 0 1000px #ffffff inset !important;
-  transition: background-color 9999s ease-out;
+  transition: background-color 99999s ease-in-out 0s !important;
 }
 
 .login-glass .auth-text-field .MuiIconButton-root {
