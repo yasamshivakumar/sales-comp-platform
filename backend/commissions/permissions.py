@@ -37,20 +37,70 @@ def user_is_manager(request):
     )
 
 
+def effective_permission_codes(profile):
+    """Resolve permission codes for a profile (role defaults or custom matrix)."""
+    from .people_ops import permissions_for_role
+
+    if profile is None:
+        return set()
+    custom = getattr(profile, "custom_permissions", None)
+    if isinstance(custom, list):
+        # Explicit People UI matrix is authoritative when present (incl. empty).
+        return set(permissions_for_role(profile.role, custom_permissions=custom))
+    return set(permissions_for_role(profile.role, custom_permissions=None))
+
+
+def user_has_permission(request, code):
+    """True if the caller's effective permission set includes ``code``."""
+    profile = get_request_user_profile(request)
+    if not profile:
+        return False
+    return str(code) in effective_permission_codes(profile)
+
+
 def user_can_view_finance_data(request):
+    # Preserve legacy role aliases; do not expand Manager via catalog alone.
     return user_is_admin(request) or user_is_finance(request)
 
 
 def require_admin(request):
-    if not user_is_admin(request):
-        raise PermissionDenied("Only administrators can perform this action")
+    """Admin role OR custom matrix with manage_users / manage_plans."""
+    if user_is_admin(request):
+        return
+    profile = get_request_user_profile(request)
+    if profile and isinstance(getattr(profile, "custom_permissions", None), list):
+        codes = effective_permission_codes(profile)
+        if codes & {"manage_users", "manage_plans"}:
+            return
+    raise PermissionDenied("Only administrators can perform this action")
 
 
 def require_finance_or_admin(request):
-    if not user_can_view_finance_data(request):
-        raise PermissionDenied(
-            "Only administrators or finance users can access this resource"
-        )
+    """Admin/Finance roles OR custom matrix with finance-capable codes."""
+    if user_is_admin(request) or user_is_finance(request):
+        return
+    profile = get_request_user_profile(request)
+    if profile and isinstance(getattr(profile, "custom_permissions", None), list):
+        codes = effective_permission_codes(profile)
+        if codes & {
+            "export_reports",
+            "view_commissions",
+            "approve_transactions",
+            "manage_users",
+            "manage_plans",
+        }:
+            return
+    raise PermissionDenied(
+        "Only administrators or finance users can access this resource"
+    )
+
+
+def require_permission(request, code, message=None):
+    if user_is_admin(request):
+        return
+    if user_has_permission(request, code):
+        return
+    raise PermissionDenied(message or f"Missing permission: {code}")
 
 
 _FORCE_PASSWORD_CHANGE_ALLOWLIST = (

@@ -354,3 +354,134 @@ class SsrfGuardTests(TestCase):
 
     def test_public_ip_allowed(self):
         self.assertTrue(is_public_host("1.1.1.1"))
+
+
+class FineGrainedRbacTests(TwoOrgBase):
+    def test_custom_manage_users_grants_admin_endpoint(self):
+        custom_user = User.objects.create_user(
+            username="custom-mgr@test.com",
+            email="custom-mgr@test.com",
+            password="test",
+        )
+        UserProfile.objects.create(
+            organization=self.org_a,
+            email="custom-mgr@test.com",
+            username="custom-mgr@test.com",
+            employee_id="CM1",
+            name="Custom Mgr",
+            role="Sales Rep",
+            enable_login=True,
+            custom_permissions=["manage_users", "view_own_incentives"],
+        )
+        token = Token.objects.create(user=custom_user)
+        client = Client(HTTP_AUTHORIZATION=f"Token {token.key}")
+        res = client.get("/api/user-setup/")
+        self.assertEqual(res.status_code, 200)
+
+    def test_missing_permission_code_is_403(self):
+        custom_user = User.objects.create_user(
+            username="custom-rep@test.com",
+            email="custom-rep@test.com",
+            password="test",
+        )
+        UserProfile.objects.create(
+            organization=self.org_a,
+            email="custom-rep@test.com",
+            username="custom-rep@test.com",
+            employee_id="CR1",
+            name="Custom Rep",
+            role="Sales Rep",
+            enable_login=True,
+            custom_permissions=["view_own_incentives"],
+        )
+        token = Token.objects.create(user=custom_user)
+        client = Client(HTTP_AUTHORIZATION=f"Token {token.key}")
+        res = client.get("/api/user-setup/")
+        self.assertEqual(res.status_code, 403)
+
+    def test_system_admin_role_still_works_without_custom_matrix(self):
+        res = self.client_admin_a.get("/api/user-setup/")
+        self.assertEqual(res.status_code, 200)
+
+
+@override_settings(TENANT_ALLOW_DEFAULT_FALLBACK=False)
+class TenantHardOffTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.org_a = Organization.objects.create(slug="hard-a", name="Hard A")
+        self.org_b = Organization.objects.create(slug="hard-b", name="Hard B")
+        Employee.objects.create(
+            organization=self.org_b, name="Secret B", email="secret-b@test.com"
+        )
+        # Authenticated user with no organization on profile
+        self.user = User.objects.create_user(
+            username="no-org@test.com",
+            email="no-org@test.com",
+            password="test",
+        )
+        UserProfile.objects.create(
+            organization=None,
+            email="no-org@test.com",
+            username="no-org@test.com",
+            employee_id="NO1",
+            name="No Org",
+            role="Admin",
+            enable_login=True,
+        )
+        token = Token.objects.create(user=self.user)
+        self.client = Client(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+    def test_authenticated_user_without_org_sees_no_other_tenant_data(self):
+        res = self.client.get("/api/employees/")
+        self.assertIn(res.status_code, (200, 403))
+        if res.status_code == 200:
+            body = res.json()
+            rows = body if isinstance(body, list) else body.get("results", [])
+            emails = {row.get("email") for row in rows}
+            self.assertNotIn("secret-b@test.com", emails)
+            self.assertEqual(len(rows), 0)
+
+
+@override_settings(
+    TENANT_ALLOW_DEFAULT_FALLBACK=False,
+    OIDC_ORGANIZATION_CLAIM="organization_slug",
+    OIDC_EMAIL_DOMAIN_ORG_MAP={"acme.test": "oidc-acme"},
+)
+class OidcOrgBindingTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.org_acme = Organization.objects.create(slug="oidc-acme", name="OIDC Acme")
+        self.org_other = Organization.objects.create(slug="oidc-other", name="OIDC Other")
+        Organization.objects.get_or_create(
+            slug="default", defaults={"name": "Default Organization"}
+        )
+
+    def test_claim_resolves_correct_org(self):
+        from .tenants import resolve_organization_for_oidc
+
+        org, source = resolve_organization_for_oidc(
+            email="user@elsewhere.com",
+            claims={"organization_slug": "oidc-acme"},
+        )
+        self.assertEqual(org, self.org_acme)
+        self.assertEqual(source, "claim")
+
+    def test_email_domain_map_resolves_org(self):
+        from .tenants import resolve_organization_for_oidc
+
+        org, source = resolve_organization_for_oidc(
+            email="rep@acme.test",
+            claims={},
+        )
+        self.assertEqual(org, self.org_acme)
+        self.assertEqual(source, "domain")
+
+    def test_no_claim_or_map_fails_closed_without_default_fallback(self):
+        from .tenants import resolve_organization_for_oidc
+
+        org, source = resolve_organization_for_oidc(
+            email="stranger@unknown.test",
+            claims={},
+        )
+        self.assertIsNone(org)
+        self.assertEqual(source, "none")

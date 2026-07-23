@@ -15,12 +15,31 @@ from rest_framework.authtoken.models import Token
 
 from .authentication import issue_user_token, token_expires_at_iso
 from .models import UserProfile
-from .tenants import get_default_organization
+from .tenants import resolve_organization_for_oidc
 
 logger = logging.getLogger("commissions")
 
 OIDC_EXCHANGE_PREFIX = "oidc_exchange:"
 OIDC_EXCHANGE_TTL_SECONDS = 120
+
+
+def _oidc_claims(request, user):
+    """Best-effort claim dict from mozilla-django-oidc session / user attrs."""
+    claims = {}
+    for key in (
+        "oidc_user_info",
+        "oidc_id_token_payload",
+        "userinfo",
+    ):
+        raw = request.session.get(key) if hasattr(request, "session") else None
+        if isinstance(raw, dict):
+            claims.update(raw)
+    # Common extras sometimes stored on the user by the backend
+    for attr in ("organization_slug", "organization", "org"):
+        val = getattr(user, attr, None)
+        if val:
+            claims.setdefault(attr, val)
+    return claims
 
 
 class TokenOIDCCallbackView(OIDCAuthenticationCallbackView):
@@ -32,9 +51,14 @@ class TokenOIDCCallbackView(OIDCAuthenticationCallbackView):
         if not user.is_authenticated:
             return response
 
-        org = get_default_organization()
+        claims = _oidc_claims(self.request, user)
+        org, source = resolve_organization_for_oidc(email=user.email, claims=claims)
         if org is None:
-            logger.error("OIDC login failed: default organization is unavailable")
+            logger.error(
+                "OIDC login failed: no organization resolved for %s (source=%s)",
+                user.email,
+                source,
+            )
             frontend = settings.FRONTEND_URL.rstrip("/")
             return HttpResponseRedirect(f"{frontend}/login?sso_error=org")
 
@@ -42,12 +66,30 @@ class TokenOIDCCallbackView(OIDCAuthenticationCallbackView):
             email__iexact=user.email, organization=org
         ).first()
         if not profile:
+            # Do not auto-create profiles in a different org when email already
+            # belongs to another tenant.
+            other = UserProfile.objects.filter(email__iexact=user.email).exclude(
+                organization=org
+            ).exists()
+            if other:
+                logger.error(
+                    "OIDC login refused: %s already provisioned in another organization",
+                    user.email,
+                )
+                frontend = settings.FRONTEND_URL.rstrip("/")
+                return HttpResponseRedirect(f"{frontend}/login?sso_error=org")
             UserProfile.objects.create(
                 email=user.email,
                 name=user.get_full_name() or user.username,
                 role="Sales Rep",
                 organization=org,
                 enable_login=True,
+            )
+            logger.info(
+                "OIDC provisioned profile for %s in org=%s via %s",
+                user.email,
+                org.slug,
+                source,
             )
 
         token = issue_user_token(user)

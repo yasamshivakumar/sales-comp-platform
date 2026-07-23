@@ -5,6 +5,7 @@ Load secrets from backend/.env (see .env.example).
 
 from pathlib import Path
 import os
+import sys
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -220,6 +221,23 @@ WEBHOOK_SECRET_MIN_LENGTH = int(os.getenv("WEBHOOK_SECRET_MIN_LENGTH", "24"))
 
 TOKEN_TTL_MINUTES = int(os.getenv("TOKEN_TTL_MINUTES", "60"))
 MFA_TOTP_ISSUER = os.getenv("MFA_TOTP_ISSUER", "Incentra")
+
+# Multi-tenant: never invent a default org for authenticated users in production.
+# DEBUG / test runner default to True so local legacy rows keep working; override
+# TENANT_ALLOW_DEFAULT_FALLBACK=False (or override_settings in tests) for hard-off.
+_TENANT_FALLBACK_DEFAULT = "True" if (DEBUG or "test" in sys.argv) else "False"
+TENANT_ALLOW_DEFAULT_FALLBACK = _env_bool(
+    "TENANT_ALLOW_DEFAULT_FALLBACK", _TENANT_FALLBACK_DEFAULT
+)
+
+# OIDC org binding (Sprint B). Claim name and optional email-domain → slug map.
+OIDC_ORGANIZATION_CLAIM = os.getenv("OIDC_ORGANIZATION_CLAIM", "organization_slug").strip()
+# Example: acme.com:acme,contoso.com:contoso
+OIDC_EMAIL_DOMAIN_ORG_MAP = {
+    part.split(":", 1)[0].strip().lower(): part.split(":", 1)[1].strip()
+    for part in os.getenv("OIDC_EMAIL_DOMAIN_ORG_MAP", "").split(",")
+    if ":" in part
+}
 
 # --- Upload limits (CSV imports) ---
 MAX_IMPORT_FILE_BYTES = int(os.getenv("MAX_IMPORT_FILE_BYTES", str(10 * 1024 * 1024)))

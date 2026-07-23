@@ -29,7 +29,9 @@ def _parse_hire_date(value):
 
 def _org_profile_filter(organization):
     if organization:
-        return Q(organization=organization) | Q(organization__isnull=True)
+        from commissions.tenants import tenant_org_q
+
+        return tenant_org_q(organization)
     return Q()
 
 

@@ -105,11 +105,13 @@ class CommissionSerializer(serializers.ModelSerializer):
         order = getattr(obj.sale, "order", None) if obj.sale_id else None
         if order and order.employee_id:
             return order.employee_id
+        from .tenants import allow_default_organization_fallback
+
         qs = UserProfile.objects.filter(email__iexact=obj.employee.email)
         org_id = getattr(obj, "organization_id", None) or getattr(order, "organization_id", None)
         if org_id:
             profile = qs.filter(organization_id=org_id).first()
-            if not profile:
+            if not profile and allow_default_organization_fallback():
                 profile = qs.filter(organization__isnull=True).first()
         else:
             profile = qs.first()

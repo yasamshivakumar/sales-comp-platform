@@ -234,12 +234,16 @@ def apply_ops_filters(queryset, request):
 def _profile_for_email(email, org=None):
     if not email:
         return None
+    from .tenants import allow_default_organization_fallback
+
     qs = UserProfile.objects.select_related("territory").filter(email__iexact=email)
     if org:
         profile = qs.filter(organization=org).first()
         if profile:
             return profile
-        return qs.filter(organization__isnull=True).first()
+        if allow_default_organization_fallback():
+            return qs.filter(organization__isnull=True).first()
+        return None
     return qs.first()
 
 

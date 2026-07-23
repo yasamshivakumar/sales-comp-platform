@@ -1151,7 +1151,9 @@ def plan_activity_queryset(plan, organization=None):
         | Q(detail__plan_id=str(plan.id))
     )
     if organization is not None:
-        qs = qs.filter(Q(organization=organization) | Q(organization__isnull=True))
+        from .tenants import tenant_org_q
+
+        qs = qs.filter(tenant_org_q(organization))
     return qs.order_by("-created_at")
 
 

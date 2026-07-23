@@ -510,9 +510,11 @@ def build_commission_history(profile, organization=None):
     email = (profile.email or "").strip()
     if not email:
         return []
+    from .tenants import tenant_org_q
+
     emp_qs = Employee.objects.filter(email__iexact=email)
     if organization is not None:
-        emp_qs = emp_qs.filter(Q(organization=organization) | Q(organization__isnull=True))
+        emp_qs = emp_qs.filter(tenant_org_q(organization))
     employee = emp_qs.first()
     if not employee:
         return []
@@ -520,7 +522,7 @@ def build_commission_history(profile, organization=None):
         "compensation_plan", "sale"
     )
     if organization is not None:
-        qs = qs.filter(Q(organization=organization) | Q(organization__isnull=True))
+        qs = qs.filter(tenant_org_q(organization))
     rows = []
     for c in qs.order_by("-calculated_at", "-id")[:40]:
         rows.append(

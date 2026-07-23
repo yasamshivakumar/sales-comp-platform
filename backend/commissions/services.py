@@ -47,13 +47,19 @@ def commission_skip_reason_for_status(order) -> str | None:
 def _profile_for_employee(employee_id, organization=None):
     if not employee_id:
         return None
+    from .tenants import allow_default_organization_fallback
+
     qs = UserProfile.objects.filter(employee_id__iexact=employee_id)
     if organization is not None:
         profile = qs.filter(organization=organization).first()
         if profile:
             return profile
-        return qs.filter(organization__isnull=True).first()
-    return qs.filter(organization__isnull=True).first() or qs.first()
+        if allow_default_organization_fallback():
+            return qs.filter(organization__isnull=True).first()
+        return None
+    if allow_default_organization_fallback():
+        return qs.filter(organization__isnull=True).first() or qs.first()
+    return qs.exclude(organization__isnull=True).first()
 
 
 def _get_user_profile_for_order(order):
@@ -174,12 +180,16 @@ def sync_order_currency(order, profile=None, save=True):
 
 
 def _plan_queryset_for_order(order):
+    from .tenants import allow_default_organization_fallback
+
     qs = CompensationPlan.objects.filter(status="Active")
     org_id = getattr(order, "organization_id", None)
     if org_id:
         qs = qs.filter(organization_id=org_id)
-    else:
+    elif allow_default_organization_fallback():
         qs = qs.filter(organization__isnull=True)
+    else:
+        return CompensationPlan.objects.none()
     order_territory_id = getattr(order, "territory_id", None)
     if not order_territory_id:
         user_profile = _get_user_profile_for_order(order)
@@ -248,7 +258,12 @@ def _eligible_orders_for_employee_month(order):
     if org_id:
         qs = qs.filter(organization_id=org_id)
     else:
-        qs = qs.filter(organization__isnull=True)
+        from .tenants import allow_default_organization_fallback
+
+        if allow_default_organization_fallback():
+            qs = qs.filter(organization__isnull=True)
+        else:
+            return Order.objects.none()
     return qs.order_by("order_date", "id")
 
 
@@ -268,7 +283,12 @@ def _aggregate_commission_queryset_for_order(order):
     if org_id:
         qs = qs.filter(organization_id=org_id)
     else:
-        qs = qs.filter(organization__isnull=True)
+        from .tenants import allow_default_organization_fallback
+
+        if allow_default_organization_fallback():
+            qs = qs.filter(organization__isnull=True)
+        else:
+            return Commission.objects.none()
     profile = _get_user_profile_for_order(order)
     if profile and profile.email:
         qs = qs | Commission.objects.filter(
@@ -305,7 +325,12 @@ def _version_queryset_for_order(order):
     if org_id:
         qs = qs.filter(organization_id=org_id)
     else:
-        qs = qs.filter(organization__isnull=True)
+        from .tenants import allow_default_organization_fallback
+
+        if allow_default_organization_fallback():
+            qs = qs.filter(organization__isnull=True)
+        else:
+            return CommissionPlanVersion.objects.none()
 
     order_territory_id = getattr(order, "territory_id", None)
     if not order_territory_id:

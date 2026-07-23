@@ -2,8 +2,6 @@
 
 import logging
 
-from django.db.models import Q
-
 from ..models import UserProfile
 
 logger = logging.getLogger("commissions")
@@ -68,7 +66,9 @@ def repair_hubspot_profile_mappings(organization, owner_index):
 
     profiles = UserProfile.objects.all()
     if organization:
-        profiles = profiles.filter(Q(organization=organization) | Q(organization__isnull=True))
+        from commissions.tenants import tenant_org_q
+
+        profiles = profiles.filter(tenant_org_q(organization))
 
     for profile in profiles.iterator():
         stored_ids = {
@@ -90,7 +90,9 @@ def repair_hubspot_profile_mappings(organization, owner_index):
 def _org_profile_queryset(organization):
     qs = UserProfile.objects.all()
     if organization:
-        return qs.filter(Q(organization=organization) | Q(organization__isnull=True))
+        from commissions.tenants import tenant_org_q
+
+        return qs.filter(tenant_org_q(organization))
     return qs
 
 
