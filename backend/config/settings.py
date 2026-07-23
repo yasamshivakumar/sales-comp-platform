@@ -222,6 +222,9 @@ WEBHOOK_SECRET_MIN_LENGTH = int(os.getenv("WEBHOOK_SECRET_MIN_LENGTH", "24"))
 TOKEN_TTL_MINUTES = int(os.getenv("TOKEN_TTL_MINUTES", "60"))
 MFA_TOTP_ISSUER = os.getenv("MFA_TOTP_ISSUER", "Incentra")
 
+# Audit / Activity Center retention (documented; no auto-purge in app).
+AUDIT_RETENTION_DAYS = int(os.getenv("AUDIT_RETENTION_DAYS", "365"))
+
 # Multi-tenant: never invent a default org for authenticated users in production.
 # DEBUG / test runner default to True so local legacy rows keep working; override
 # TENANT_ALLOW_DEFAULT_FALLBACK=False (or override_settings in tests) for hard-off.

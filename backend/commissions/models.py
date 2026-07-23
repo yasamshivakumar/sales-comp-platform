@@ -1506,8 +1506,53 @@ class CommissionDispute(models.Model):
         return f"Dispute #{self.pk} ({self.status})"
 
 
+class AuditLogQuerySet(models.QuerySet):
+    """Block bulk updates; allow queryset delete only for ORM cascades (tenant wipe)."""
+
+    def update(self, **kwargs):
+        raise ValueError("AuditLog rows are immutable and cannot be updated")
+
+
+class AuditLogManager(models.Manager):
+    def get_queryset(self):
+        return AuditLogQuerySet(self.model, using=self._db)
+
+
 class AuditLog(models.Model):
-    """Immutable trail of sensitive actions for pilot / compliance."""
+    """Immutable enterprise activity trail (Activity & Compliance Center)."""
+
+    SEVERITY_INFO = "info"
+    SEVERITY_WARNING = "warning"
+    SEVERITY_CRITICAL = "critical"
+    SEVERITY_SUCCESS = "success"
+    SEVERITY_CHOICES = (
+        (SEVERITY_INFO, "Information"),
+        (SEVERITY_WARNING, "Warning"),
+        (SEVERITY_CRITICAL, "Critical"),
+        (SEVERITY_SUCCESS, "Success"),
+    )
+
+    SOURCE_WEB = "web"
+    SOURCE_API = "api"
+    SOURCE_CSV = "csv_import"
+    SOURCE_CRM = "crm_sync"
+    SOURCE_JOB = "background_job"
+    SOURCE_CHOICES = (
+        (SOURCE_WEB, "Web"),
+        (SOURCE_API, "API"),
+        (SOURCE_CSV, "CSV Import"),
+        (SOURCE_CRM, "CRM Sync"),
+        (SOURCE_JOB, "Background Job"),
+    )
+
+    STATUS_SUCCESS = "success"
+    STATUS_FAILED = "failed"
+    STATUS_CANCELLED = "cancelled"
+    STATUS_CHOICES = (
+        (STATUS_SUCCESS, "Success"),
+        (STATUS_FAILED, "Failed"),
+        (STATUS_CANCELLED, "Cancelled"),
+    )
 
     organization = models.ForeignKey(
         Organization,
@@ -1525,7 +1570,36 @@ class AuditLog(models.Model):
         related_name="audit_logs",
     )
     user_email = models.EmailField(blank=True, db_index=True)
+    employee_id = models.CharField(max_length=64, blank=True, db_index=True)
+    role = models.CharField(max_length=64, blank=True, db_index=True)
+    business_unit = models.CharField(max_length=128, blank=True, db_index=True)
+
     action = models.CharField(max_length=64, db_index=True)
+    module = models.CharField(max_length=64, blank=True, db_index=True)
+    entity_type = models.CharField(max_length=64, blank=True, db_index=True)
+    entity_id = models.CharField(max_length=64, blank=True, db_index=True)
+    severity = models.CharField(
+        max_length=16,
+        choices=SEVERITY_CHOICES,
+        default=SEVERITY_INFO,
+        blank=True,
+        db_index=True,
+    )
+    source = models.CharField(
+        max_length=32,
+        choices=SOURCE_CHOICES,
+        default=SOURCE_WEB,
+        blank=True,
+        db_index=True,
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=STATUS_CHOICES,
+        default=STATUS_SUCCESS,
+        blank=True,
+        db_index=True,
+    )
+
     plan_version = models.ForeignKey(
         "CommissionPlanVersion",
         on_delete=models.SET_NULL,
@@ -1534,12 +1608,54 @@ class AuditLog(models.Model):
         related_name="audit_logs",
     )
     detail = models.JSONField(default=dict, blank=True)
+    reason = models.TextField(blank=True)
+    old_value = models.JSONField(default=dict, blank=True)
+    new_value = models.JSONField(default=dict, blank=True)
+    changed_fields = models.JSONField(default=list, blank=True)
+    duration_ms = models.PositiveIntegerField(null=True, blank=True)
+
     ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=512, blank=True)
+    device = models.CharField(max_length=128, blank=True)
+    session_id = models.CharField(max_length=64, blank=True, db_index=True)
     request_id = models.CharField(max_length=36, blank=True, db_index=True)
+    search_text = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    objects = AuditLogManager()
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["organization", "-created_at"],
+                name="audit_org_created_idx",
+            ),
+            models.Index(
+                fields=["organization", "module", "-created_at"],
+                name="audit_org_module_idx",
+            ),
+            models.Index(
+                fields=["organization", "severity", "-created_at"],
+                name="audit_org_severity_idx",
+            ),
+            models.Index(
+                fields=["organization", "action"],
+                name="audit_org_action_idx",
+            ),
+            models.Index(
+                fields=["organization", "entity_type", "entity_id"],
+                name="audit_org_entity_idx",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValueError("AuditLog rows are immutable and cannot be updated")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError("AuditLog rows are immutable and cannot be deleted")
 
     def __str__(self):
         return f"{self.action} ({self.user_email or 'system'})"

@@ -1503,9 +1503,15 @@ class PeopleDetailView(APIView):
                 {
                     "profile_id": profile.id,
                     "email": profile.email,
+                    "field": "role",
                     "from": old_role,
                     "to": profile.role,
                 },
+                entity_type="user",
+                entity_id=str(profile.id),
+                old_value={"role": old_role},
+                new_value={"role": profile.role},
+                changed_fields=["role"],
             )
         if "personal_target" in changed and str(profile.personal_target) != old_quota:
             record_audit(
@@ -1514,9 +1520,15 @@ class PeopleDetailView(APIView):
                 {
                     "profile_id": profile.id,
                     "email": profile.email,
+                    "field": "quota",
                     "from": old_quota,
                     "to": str(profile.personal_target),
                 },
+                entity_type="user",
+                entity_id=str(profile.id),
+                old_value={"quota": old_quota},
+                new_value={"quota": str(profile.personal_target)},
+                changed_fields=["quota"],
             )
         if (
             "assigned_compensation_plan" in changed
@@ -2602,6 +2614,8 @@ def email_login(request):
             request,
             "login_failed",
             {"email": email, "ip": ip, "user_agent": user_agent},
+            status="failed",
+            severity="warning",
         )
         try:
             from .auth_hardening import record_login_event
@@ -3819,6 +3833,12 @@ def commission_payroll_export(request):
 
     response = HttpResponse(buffer.getvalue(), content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="payroll_commissions.csv"'
+    record_audit(
+        request,
+        "payroll_exported",
+        {"row_count": queryset.count()},
+        entity_type="payroll",
+    )
     return response
 
 
@@ -3864,38 +3884,13 @@ def recalculate_commissions_view(request):
     return Response(stats)
 
 
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def audit_log_list(request):
-    """Recent audit events (admin / finance)."""
-    require_finance_or_admin(request)
-    limit = min(int(request.query_params.get("limit", 100)), 500)
-    logs = AuditLog.objects.select_related("user", "plan_version").order_by("-created_at")
-    logs = filter_queryset_by_organization(
-        logs, getattr(request, "organization", None)
-    )
-    plan_id = (request.query_params.get("plan_id") or "").strip()
-    if plan_id:
-        logs = logs.filter(
-            Q(plan_version__compensation_plan_id=plan_id)
-            | Q(detail__plan_id=int(plan_id) if plan_id.isdigit() else plan_id)
-            | Q(detail__plan_id=plan_id)
-        )
-    logs = logs[:limit]
-    data = [
-        {
-            "id": row.id,
-            "action": row.action,
-            "user_email": row.user_email,
-            "detail": row.detail,
-            "ip_address": row.ip_address,
-            "request_id": row.request_id,
-            "plan_version_id": row.plan_version_id,
-            "created_at": row.created_at.isoformat(),
-        }
-        for row in logs
-    ]
-    return Response({"count": len(data), "results": data})
+from .audit_activity import (  # noqa: F401 — keep import path for urls
+    audit_log_detail,
+    audit_log_export,
+    audit_log_list,
+    audit_log_security,
+    audit_log_summary,
+)
 
 
 email_login.throttle_scope = "login"

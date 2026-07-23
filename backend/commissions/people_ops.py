@@ -24,6 +24,8 @@ ROLE_PERMISSIONS = {
         "manage_users",
         "view_orders",
         "create_orders",
+        "view_audit",
+        "export_audit",
     ],
     "Finance": [
         "view_plans",
@@ -31,6 +33,8 @@ ROLE_PERMISSIONS = {
         "view_commissions",
         "export_reports",
         "view_orders",
+        "view_audit",
+        "export_audit",
     ],
     "Manager": [
         "view_plans",
@@ -55,6 +59,8 @@ PERMISSION_LABELS = {
     "manage_users": "Manage Users",
     "view_orders": "View Orders",
     "create_orders": "Create Orders",
+    "view_audit": "View Audit Activity",
+    "export_audit": "Export Audit Activity",
 }
 
 SORTABLE_FIELDS = {

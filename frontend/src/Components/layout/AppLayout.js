@@ -188,7 +188,7 @@ const adminMenu = [
   { name: "Comp Plans", path: "/comp-plans", icon: DescriptionOutlinedIcon },
   { name: "Commission Rules", path: "/commission-rules", icon: GavelOutlinedIcon },
   { name: "People & Access", path: "/user-setup", icon: ManageAccountsOutlinedIcon },
-  { name: "Audit Log", path: "/audit-logs", icon: FactCheckOutlinedIcon },
+  { name: "Activity & Compliance", path: "/audit-logs", icon: FactCheckOutlinedIcon },
 ];
 
 const financeMenu = [
@@ -196,14 +196,13 @@ const financeMenu = [
   { name: "Sales insights", path: "/sales-insights", icon: MapOutlinedIcon },
   { name: "Commissions", path: "/commissions", icon: PaymentsOutlinedIcon },
   { name: "Payouts", path: "/payouts", icon: SavingsOutlinedIcon },
-  { name: "Audit Log", path: "/audit-logs", icon: FactCheckOutlinedIcon },
+  { name: "Activity & Compliance", path: "/audit-logs", icon: FactCheckOutlinedIcon },
 ];
 
 const managerMenu = [
   { name: "Dashboard", path: "/dashboard", icon: SpaceDashboardOutlinedIcon },
   { name: "Sales insights", path: "/sales-insights", icon: MapOutlinedIcon },
   { name: "Commissions", path: "/commissions", icon: PaymentsOutlinedIcon },
-  { name: "Audit Log", path: "/audit-logs", icon: FactCheckOutlinedIcon },
 ];
 
 function getMenuItems(profile) {

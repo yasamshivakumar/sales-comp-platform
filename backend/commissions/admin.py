@@ -278,19 +278,55 @@ class CompensationTierAdmin(admin.ModelAdmin):
 # ---------------------------------------------------
 @admin.register(AuditLog)
 class AuditLogAdmin(admin.ModelAdmin):
-    list_display = ("action", "user_email", "plan_version", "ip_address", "created_at")
-    list_filter = ("action",)
-    search_fields = ("user_email", "action", "request_id")
-    readonly_fields = (
-        "user",
-        "user_email",
+    list_display = (
         "action",
-        "plan_version",
-        "detail",
+        "module",
+        "severity",
+        "status",
+        "user_email",
         "ip_address",
-        "request_id",
         "created_at",
     )
+    list_filter = ("module", "severity", "status", "source", "action")
+    search_fields = ("user_email", "action", "request_id", "employee_id", "search_text")
+    readonly_fields = (
+        "organization",
+        "user",
+        "user_email",
+        "employee_id",
+        "role",
+        "business_unit",
+        "action",
+        "module",
+        "entity_type",
+        "entity_id",
+        "severity",
+        "source",
+        "status",
+        "plan_version",
+        "detail",
+        "reason",
+        "old_value",
+        "new_value",
+        "changed_fields",
+        "duration_ms",
+        "ip_address",
+        "user_agent",
+        "device",
+        "session_id",
+        "request_id",
+        "search_text",
+        "created_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Commission)
