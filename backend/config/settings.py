@@ -404,6 +404,7 @@ CORS_ALLOW_HEADERS = [
     "x-csrftoken",
     "x-requested-with",
     "x-request-id",
+    "x-device-id",
 ]
 CORS_EXPOSE_HEADERS = ["X-Request-ID", "X-Session-Expires-At"]
 CORS_PREFLIGHT_MAX_AGE = 86400
