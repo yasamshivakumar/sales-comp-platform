@@ -458,7 +458,15 @@ class CompensationPlanSerializer(serializers.ModelSerializer):
 
     # Header fields that may change without editing version content
     # (operational metadata, not calculation logic).
-    _NON_VERSIONED_FIELDS = {"plan_name", "description", "status"}
+    _NON_VERSIONED_FIELDS = {
+        "plan_name",
+        "description",
+        "status",
+        "plan_type",
+        "owner",
+        "approver",
+        "last_modified_by",
+    }
 
     def _display_version(self, plan):
         from .plan_versions import display_version_for_plan
@@ -503,6 +511,44 @@ class CompensationPlanSerializer(serializers.ModelSerializer):
             if version is not None
             else None
         )
+
+        from .plan_catalog import enrich_plan_enterprise_fields
+
+        request = self.context.get("request")
+        org = getattr(request, "organization", None) if request else None
+        skip_participants = False
+        lite = False
+        if request is not None:
+            skip_participants = str(
+                request.query_params.get("skip_participant_count") or ""
+            ).lower() in ("1", "true", "yes")
+            lite = str(request.query_params.get("lite") or "").lower() in (
+                "1",
+                "true",
+                "yes",
+            )
+
+        # Coverage aggregates help catalog cards answer "who is covered?"
+        # Pass lite=1 to skip for very large tenant scans.
+        include_coverage = not lite
+
+        if skip_participants:
+            enterprise = enrich_plan_enterprise_fields(
+                instance,
+                version,
+                organization=org,
+                participant_count=0,
+                include_coverage=False,
+            )
+            enterprise["participant_count"] = None
+        else:
+            enterprise = enrich_plan_enterprise_fields(
+                instance,
+                version,
+                organization=org,
+                include_coverage=include_coverage,
+            )
+        data.update(enterprise)
         return data
 
     def _sync_tables(self, plan, rate_tables=None, flat_rate_tables=None,
@@ -559,6 +605,9 @@ class CompensationPlanSerializer(serializers.ModelSerializer):
         rate_tables = validated_data.pop("sc_rate_tables", [])
         flat_rate_tables = validated_data.pop("sc_flat_rate_tables", [])
         lookup_tables = validated_data.pop("sc_lookup_tables", [])
+        user = self._request_user()
+        if user and getattr(user, "is_authenticated", False):
+            validated_data["last_modified_by"] = user
         plan = CompensationPlan.objects.create(**validated_data)
 
         version = create_initial_version(plan)
@@ -606,6 +655,9 @@ class CompensationPlanSerializer(serializers.ModelSerializer):
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+        user = self._request_user()
+        if user and getattr(user, "is_authenticated", False):
+            instance.last_modified_by = user
         instance.save()
 
         if version is not None and version.is_editable:
@@ -650,50 +702,9 @@ class OrderSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
     def _primary_commission(self, obj):
-        sale = getattr(obj, "sale_record", None)
-        if sale:
-            prefetched = getattr(sale, "_prefetched_objects_cache", {})
-            if "commission_set" in prefetched:
-                commissions = prefetched["commission_set"]
-                return commissions[0] if commissions else None
-            commission = sale.commission_set.order_by("id").first()
-            if commission:
-                return commission
-        from .models import Commission
+        from .transaction_ops import resolve_primary_commission
 
-        order_commission = (
-            Commission.objects.filter(
-                sale__order=obj,
-                organization=getattr(obj, "organization", None),
-            ).order_by("id").first()
-        )
-        if order_commission:
-            return order_commission
-
-        if not getattr(obj, "employee_id", None) or not getattr(obj, "order_date", None):
-            return None
-        from .currencies import normalize_currency
-        from .plan_periods import month_bounds
-
-        period_start, _period_end = month_bounds(obj.order_date.year, obj.order_date.month)
-        from .services import _profile_for_employee
-
-        profile = _profile_for_employee(
-            obj.employee_id,
-            getattr(obj, "organization", None),
-        )
-        emails = [f"{obj.employee_id}@company.com"]
-        if profile and profile.email:
-            emails.append(profile.email)
-        return (
-            Commission.objects.filter(
-                calculation_scope=Commission.SCOPE_EMPLOYEE_MONTH,
-                organization=getattr(obj, "organization", None),
-                period_start=period_start,
-                currency__iexact=normalize_currency(getattr(obj, "currency", None)),
-                employee__email__in=emails,
-            ).order_by("id").first()
-        )
+        return resolve_primary_commission(obj)
 
     def get_has_commission(self, obj):
         return self._primary_commission(obj) is not None
@@ -714,8 +725,21 @@ class OrderSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         from .services import derive_order_currency
+        from .transaction_ops import enrich_order_transaction_fields
 
         data["currency"] = derive_order_currency(instance)
+        commission = self._primary_commission(instance)
+        data.update(enrich_order_transaction_fields(instance, commission))
+        if self.context.get("include_workspace"):
+            from .transaction_ops import (
+                build_order_commission_breakdown,
+                build_order_history,
+            )
+
+            data["commission_breakdown"] = build_order_commission_breakdown(
+                instance, commission
+            )
+            data["audit_history"] = build_order_history(instance)
         return data
 
     def validate(self, attrs):
@@ -894,22 +918,9 @@ class CommissionDisputeSerializer(serializers.ModelSerializer):
 
 
 def _mask_integration_credentials(credentials):
-    if not credentials:
-        return {}
-    masked = {}
-    for key, value in credentials.items():
-        if key in (
-            "access_token",
-            "password",
-            "client_secret",
-            "api_key",
-            "security_token",
-            "refresh_token",
-        ):
-            masked[key] = "••••••••" if value else ""
-        else:
-            masked[key] = value
-    return masked
+    from .credential_crypto import mask_credentials
+
+    return mask_credentials(credentials)
 
 
 class ExternalIntegrationSerializer(serializers.ModelSerializer):
@@ -927,12 +938,17 @@ class ExternalIntegrationSerializer(serializers.ModelSerializer):
             "last_user_sync_at",
             "last_order_sync_at",
             "last_auto_sync_at",
+            "last_sync_at",
+            "encrypted_credentials",
             "created_at",
             "updated_at",
         ]
 
     def get_credentials_masked(self, obj):
-        return _mask_integration_credentials(obj.credentials)
+        try:
+            return _mask_integration_credentials(obj.get_decrypted_credentials())
+        except Exception:
+            return _mask_integration_credentials(obj.credentials)
 
     def get_webhook_urls(self, obj):
         request = self.context.get("request")
@@ -952,11 +968,22 @@ class ExternalIntegrationSerializer(serializers.ModelSerializer):
             return {"events": f"{base}/{obj.webhook_secret}/"}
         return {}
 
+    def create(self, validated_data):
+        credentials = validated_data.pop("credentials", None) or {}
+        instance = super().create(validated_data)
+        if credentials:
+            instance.set_encrypted_credentials(credentials)
+            instance.save(
+                update_fields=["credentials", "encrypted_credentials", "updated_at"]
+            )
+        return instance
+
     def update(self, instance, validated_data):
         credentials = validated_data.pop("credentials", serializers.empty)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
         if credentials is not serializers.empty and credentials is not None:
-            # Merge so blank form fields do not wipe existing secrets.
-            merged = dict(instance.credentials or {})
+            merged = dict(instance.get_decrypted_credentials() or {})
             for key, value in credentials.items():
                 if value is None:
                     continue
@@ -965,9 +992,7 @@ class ExternalIntegrationSerializer(serializers.ModelSerializer):
                 if value == "••••••••":
                     continue
                 merged[key] = value
-            instance.credentials = merged
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
+            instance.set_encrypted_credentials(merged)
         instance.save()
         return instance
 

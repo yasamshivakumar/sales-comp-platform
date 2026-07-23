@@ -103,7 +103,9 @@ class UserSetupPrivilegeTests(TwoOrgBase):
     def test_list_is_org_scoped(self):
         res = self.client_admin_a.get("/api/user-setup/")
         self.assertEqual(res.status_code, 200)
-        emails = {row["email"] for row in res.json()}
+        payload = res.json()
+        rows = payload if isinstance(payload, list) else payload.get("results", [])
+        emails = {row["email"] for row in rows}
         self.assertIn("sec-rep-a@test.com", emails)
         self.assertNotIn("sec-admin-b@test.com", emails)
 

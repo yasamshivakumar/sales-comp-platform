@@ -35,7 +35,17 @@ class BaseConnector:
 
     def __init__(self, integration):
         self.integration = integration
-        self.credentials = integration.credentials or {}
+        from ..credential_crypto import unseal_credentials
+
+        raw = {}
+        if hasattr(integration, "get_decrypted_credentials"):
+            try:
+                raw = integration.get_decrypted_credentials() or {}
+            except Exception:
+                raw = integration.credentials or {}
+        else:
+            raw = unseal_credentials(integration.credentials or {})
+        self.credentials = raw
         self.config = integration.config or {}
 
     def test_connection(self):

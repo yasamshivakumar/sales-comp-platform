@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   AppBar,
   Avatar,
@@ -46,7 +46,6 @@ import { useTheme as useAppTheme } from "../../ThemeContext";
 import { enterprise } from "../../theme/muiTheme";
 import AuthTextField from "../AuthTextField";
 import ChangePassword from "../ChangePassword";
-import Integrations from "../../Enterprise/Integrations";
 import { useToast } from "../Toast";
 import "../enterprise.css";
 
@@ -188,7 +187,8 @@ const adminMenu = [
   { name: "Payouts", path: "/payouts", icon: SavingsOutlinedIcon },
   { name: "Comp Plans", path: "/comp-plans", icon: DescriptionOutlinedIcon },
   { name: "Commission Rules", path: "/commission-rules", icon: GavelOutlinedIcon },
-  { name: "User Setup", path: "/user-setup", icon: ManageAccountsOutlinedIcon },
+  { name: "CRM Integrations", path: "/integrations", icon: HubOutlinedIcon },
+  { name: "People & Access", path: "/user-setup", icon: ManageAccountsOutlinedIcon },
   { name: "Audit Log", path: "/audit-logs", icon: FactCheckOutlinedIcon },
 ];
 
@@ -367,6 +367,7 @@ function AppTopBar({ pageTitle, displayName, initials, profile, onEditProfile, s
 
 function AppLayout({ children }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -376,7 +377,6 @@ function AppLayout({ children }) {
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [profile, setProfile] = useState(null);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
-  const [connectDialogOpen, setConnectDialogOpen] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileForm, setProfileForm] = useState({
     name: "",
@@ -421,12 +421,12 @@ function AppLayout({ children }) {
 
   useEffect(() => {
     if (searchParams.get("integrations") === "1" && profile?.is_admin) {
-      setConnectDialogOpen(true);
       const next = new URLSearchParams(searchParams);
       next.delete("integrations");
       setSearchParams(next, { replace: true });
+      navigate("/integrations");
     }
-  }, [searchParams, setSearchParams, profile?.is_admin]);
+  }, [searchParams, setSearchParams, profile?.is_admin, navigate]);
 
   const canManageIntegrations = Boolean(profile?.is_admin);
 
@@ -604,7 +604,7 @@ function AppLayout({ children }) {
           {canManageIntegrations && (
             <Tooltip title="Connect CRM">
               <IconButton
-                onClick={() => setConnectDialogOpen(true)}
+                onClick={() => navigate("/integrations")}
                 aria-label="Connect CRM"
                 sx={{
                   color: "#fff",
@@ -707,7 +707,7 @@ function AppLayout({ children }) {
           profile={profile}
           onEditProfile={openProfileDialog}
           showConnect={canManageIntegrations}
-          onOpenConnect={() => setConnectDialogOpen(true)}
+          onOpenConnect={() => navigate("/integrations")}
         />
         <Box
           className="container-fluid"
@@ -783,37 +783,6 @@ function AppLayout({ children }) {
             {profileSaving ? "Saving..." : "Save"}
           </Button>
         </DialogActions>
-      </Dialog>
-      <Dialog
-        open={connectDialogOpen}
-        onClose={() => setConnectDialogOpen(false)}
-        fullWidth
-        fullScreen={isMobile}
-        maxWidth="lg"
-        scroll="paper"
-        aria-labelledby="integrations-dialog-title"
-        PaperProps={{
-          sx: {
-            bgcolor: "background.paper",
-            backgroundImage: "none",
-            border: "1px solid",
-            borderColor: "divider",
-          },
-        }}
-      >
-        <DialogContent sx={{ p: { xs: 2, sm: 3 }, bgcolor: "background.paper" }}>
-          <Integrations
-            embedded
-            inline
-            onClose={() => setConnectDialogOpen(false)}
-            onOrdersSynced={(data) => {
-              const count = data?.result?.success ?? 0;
-              if (count > 0) {
-                success(`Synced ${count} order(s) from CRM — check Orders for results.`);
-              }
-            }}
-          />
-        </DialogContent>
       </Dialog>
     </Box>
   );

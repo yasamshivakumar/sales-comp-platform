@@ -34,7 +34,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from .serializers import UserProfileSerializer, HierarchyRelationshipSerializer
 from django.conf import settings
 from .services import (
@@ -62,6 +62,7 @@ from django.core.files.base import ContentFile
 from django.db import transaction
 from django.http import HttpResponse
 from django.utils.dateparse import parse_date
+from django.utils import timezone
 
 logger = logging.getLogger("commissions")
 
@@ -243,6 +244,9 @@ def invite_detail(request, token):
             {"error": "Invite is invalid, expired, or already used."},
             status=status.HTTP_400_BAD_REQUEST,
         )
+    from .people_ops import mark_invite_opened
+
+    mark_invite_opened(invite)
     return Response(invite_context(invite))
 
 
@@ -300,10 +304,24 @@ class CompensationPlanListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        qs = CompensationPlan.objects.prefetch_related("versions").order_by("-created_at")
-        return filter_queryset_by_organization(
+        from .plan_catalog import apply_plan_list_filters
+
+        qs = CompensationPlan.objects.prefetch_related(
+            "versions",
+            "versions__sc_rate_tables",
+            "versions__sc_flat_rate_tables",
+            "versions__sc_lookup_tables",
+            "versions__commission_rules",
+            "versions__quotas",
+            "sc_rate_tables",
+            "sc_flat_rate_tables",
+            "sc_lookup_tables",
+            "commission_rules",
+        ).select_related("last_modified_by").order_by("-created_at")
+        qs = filter_queryset_by_organization(
             qs, getattr(self.request, "organization", None)
         )
+        return apply_plan_list_filters(qs, self.request.query_params)
 
     def perform_create(self, serializer):
         plan = serializer.save(organization=getattr(self.request, "organization", None))
@@ -329,9 +347,99 @@ class CompensationPlanListCreateView(generics.ListCreateAPIView):
         return True
 
     def list(self, request, *args, **kwargs):
-        """Only admins can view compensation plans"""
+        """Only admins can view compensation plans. Optional pagination."""
         self.check_admin_permission(request)
-        return super().list(request, *args, **kwargs)
+        queryset = self.filter_queryset(self.get_queryset())
+        try:
+            page_size = int(request.query_params.get("page_size") or 0)
+        except (TypeError, ValueError):
+            page_size = 0
+        try:
+            page = max(1, int(request.query_params.get("page") or 1))
+        except (TypeError, ValueError):
+            page = 1
+
+        health = (request.query_params.get("health") or "").strip().lower()
+        calc_filter = (request.query_params.get("calculation_status") or "").strip().lower()
+        approval_filter = (request.query_params.get("approval_status") or "").strip().lower()
+        readiness_min = (request.query_params.get("readiness_min") or "").strip()
+
+        def _apply_health(rows):
+            out = rows
+            if health:
+                if health in ("attention", "needs_attention"):
+                    out = [
+                        row
+                        for row in out
+                        if (row.get("health") or {}).get("level") in ("warning", "critical")
+                    ]
+                else:
+                    out = [
+                        row
+                        for row in out
+                        if (row.get("health") or {}).get("level") == health
+                    ]
+            if calc_filter:
+                out = [
+                    row
+                    for row in out
+                    if (row.get("calculation_status") or {}).get("status") == calc_filter
+                ]
+            if approval_filter:
+                out = [
+                    row
+                    for row in out
+                    if str(row.get("approval_status") or "").lower().replace(" ", "_")
+                    == approval_filter
+                    or str(row.get("approval_status") or "").lower() == approval_filter
+                ]
+            if readiness_min != "":
+                try:
+                    threshold = int(readiness_min)
+                except ValueError:
+                    threshold = None
+                if threshold is not None:
+                    if threshold == 0:
+                        out = [
+                            row
+                            for row in out
+                            if (row.get("health") or {}).get("score", 100) < 40
+                        ]
+                    else:
+                        out = [
+                            row
+                            for row in out
+                            if (row.get("health") or {}).get("score", 0) >= threshold
+                        ]
+            return out
+
+        if page_size > 0:
+            page_size = min(page_size, 200)
+            # When filtering by health, evaluate a bounded window then page in memory.
+            if health:
+                serializer = self.get_serializer(queryset[:500], many=True)
+                filtered = _apply_health(serializer.data)
+                total = len(filtered)
+                start = (page - 1) * page_size
+                page_rows = filtered[start : start + page_size]
+            else:
+                total = queryset.count()
+                start = (page - 1) * page_size
+                end = start + page_size
+                page_qs = queryset[start:end]
+                page_rows = self.get_serializer(page_qs, many=True).data
+            return Response(
+                {
+                    "count": total,
+                    "page": page,
+                    "page_size": page_size,
+                    "results": page_rows,
+                }
+            )
+
+        serializer = self.get_serializer(queryset, many=True)
+        data = _apply_health(serializer.data)
+        return Response(data)
 
     def create(self, request, *args, **kwargs):
         """Only admins can create compensation plans"""
@@ -349,9 +457,316 @@ class CompensationPlanListCreateView(generics.ListCreateAPIView):
         return super().update(request, *args, **kwargs)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def compensation_plans_search(request):
+    """
+    GET /api/compensation-plans/search/?q= — cross-entity catalog search.
+    Returns plans, versions, rules, rate bands, and participant hits.
+    """
+    if not user_is_admin(request):
+        raise PermissionDenied("Only administrators can access compensation plans")
+    q = (request.query_params.get("q") or "").strip()
+    if len(q) < 2:
+        return Response({"q": q, "results": []})
+
+    from .models import CommissionPlanVersion, CommissionRule, SCRateTable
+    from .plan_catalog import apply_plan_list_filters
+
+    org = getattr(request, "organization", None)
+    plans = apply_plan_list_filters(
+        filter_queryset_by_organization(CompensationPlan.objects.all(), org),
+        {"q": q},
+    )[:15]
+
+    results = []
+    for plan in plans:
+        results.append(
+            {
+                "type": "plan",
+                "id": plan.id,
+                "label": plan.plan_name,
+                "href": f"/comp-plans/{plan.id}/overview",
+                "meta": plan.role or plan.business_group or "",
+            }
+        )
+
+    version_qs = CommissionPlanVersion.objects.filter(
+        Q(description__icontains=q)
+        | Q(role__icontains=q)
+        | Q(position_name__icontains=q)
+        | Q(business_group__icontains=q)
+    ).select_related("compensation_plan")
+    if org is not None:
+        version_qs = version_qs.filter(organization=org)
+    for v in version_qs[:10]:
+        results.append(
+            {
+                "type": "version",
+                "id": v.id,
+                "label": f"{v.compensation_plan.plan_name} v{v.version_number}",
+                "href": f"/comp-plans/{v.compensation_plan_id}/versions",
+                "meta": v.status,
+            }
+        )
+
+    rules = CommissionRule.objects.filter(name__icontains=q).select_related(
+        "compensation_plan"
+    )
+    if org is not None:
+        rules = rules.filter(organization=org)
+    for rule in rules[:10]:
+        if not rule.compensation_plan_id:
+            continue
+        results.append(
+            {
+                "type": "rule",
+                "id": rule.id,
+                "label": rule.name,
+                "href": f"/comp-plans/{rule.compensation_plan_id}/rules",
+                "meta": rule.rule_type,
+            }
+        )
+
+    rates = SCRateTable.objects.filter(tier_name__icontains=q).select_related(
+        "compensation_plan"
+    )
+    if org is not None:
+        rates = rates.filter(compensation_plan__organization=org)
+    for row in rates[:10]:
+        if not row.compensation_plan_id:
+            continue
+        results.append(
+            {
+                "type": "rate_table",
+                "id": row.id,
+                "label": row.tier_name or f"Rate {row.id}",
+                "href": f"/comp-plans/{row.compensation_plan_id}/rates",
+                "meta": f"{row.commission_rate}%",
+            }
+        )
+
+    profiles = UserProfile.objects.filter(
+        Q(name__icontains=q) | Q(email__icontains=q) | Q(employee_id__icontains=q)
+    )
+    if org is not None:
+        profiles = profiles.filter(organization=org)
+    for p in profiles[:10]:
+        results.append(
+            {
+                "type": "participant",
+                "id": p.id,
+                "label": p.name or p.email,
+                "href": "/comp-plans",
+                "meta": p.role or p.position_name or "",
+            }
+        )
+
+    return Response({"q": q, "count": len(results), "results": results[:40]})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def compensation_plans_summary(request):
+    """GET /api/compensation-plans/summary/ — catalog KPI strip."""
+    if not user_is_admin(request):
+        raise PermissionDenied("Only administrators can access compensation plans")
+    from .plan_catalog import build_catalog_summary
+
+    return Response(build_catalog_summary(getattr(request, "organization", None)))
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def compensation_plan_participants(request, pk):
+    """GET /api/compensation-plans/<id>/participants/ — matched employees."""
+    if not user_is_admin(request):
+        raise PermissionDenied("Only administrators can access compensation plans")
+    from .plan_catalog import participants_queryset_for_plan
+
+    org = getattr(request, "organization", None)
+    qs = CompensationPlan.objects.all()
+    qs = filter_queryset_by_organization(qs, org)
+    try:
+        plan = qs.get(pk=pk)
+    except CompensationPlan.DoesNotExist:
+        return Response({"error": "Plan not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    profiles = participants_queryset_for_plan(plan, org)
+    q = (request.query_params.get("q") or "").strip()
+    if q:
+        profiles = profiles.filter(
+            Q(name__icontains=q)
+            | Q(email__icontains=q)
+            | Q(employee_id__icontains=q)
+            | Q(role__icontains=q)
+            | Q(position_name__icontains=q)
+            | Q(business_group__icontains=q)
+            | Q(function_name__icontains=q)
+            | Q(market__icontains=q)
+            | Q(title__icontains=q)
+            | Q(hierarchy__icontains=q)
+            | Q(territory__name__icontains=q)
+        )
+
+    business_group = (request.query_params.get("business_group") or "").strip()
+    if business_group:
+        profiles = profiles.filter(business_group__iexact=business_group)
+    department = (request.query_params.get("department") or "").strip()
+    if department:
+        profiles = profiles.filter(function_name__iexact=department)
+    region = (request.query_params.get("region") or "").strip()
+    if region:
+        profiles = profiles.filter(
+            Q(market__iexact=region) | Q(territory__name__iexact=region)
+        )
+
+    from .plan_catalog import build_coverage_summary
+    from .models import Commission
+
+    coverage = build_coverage_summary(plan, org)
+
+    total = profiles.count()
+    try:
+        page_size = int(request.query_params.get("page_size") or 50)
+    except (TypeError, ValueError):
+        page_size = 50
+    page_size = max(1, min(page_size, 200))
+    try:
+        page = max(1, int(request.query_params.get("page") or 1))
+    except (TypeError, ValueError):
+        page = 1
+    start = (page - 1) * page_size
+    rows = list(profiles.select_related("territory")[start : start + page_size])
+    emails = [p.email for p in rows if p.email]
+    emp_by_email = {
+        e.email.lower(): e.id
+        for e in Employee.objects.filter(email__in=emails)
+    }
+    latest_comm = {}
+    if emp_by_email:
+        for c in (
+            Commission.objects.filter(
+                compensation_plan=plan,
+                employee_id__in=list(emp_by_email.values()),
+            )
+            .order_by("employee_id", "-calculated_at")
+            .only("employee_id", "commission_amount", "calculated_at")
+        ):
+            if c.employee_id not in latest_comm:
+                latest_comm[c.employee_id] = float(c.commission_amount)
+
+    # Current month quota from display version if present
+    from .plan_versions import display_version_for_plan
+
+    version = display_version_for_plan(plan)
+    month_quota = None
+    if version is not None:
+        today = timezone.localdate()
+        qrow = version.quotas.filter(year=today.year, month=today.month).first()
+        if qrow:
+            month_quota = float(qrow.quota_amount)
+
+    results = []
+    for p in rows:
+        target = float(p.personal_target or 0)
+        emp_id = emp_by_email.get((p.email or "").lower())
+        commission = latest_comm.get(emp_id) if emp_id else None
+        attainment = None
+        if target > 0 and commission is not None:
+            # Rough proxy: commission relative to target * sample — show target attainment
+            # using sales isn't available here; leave null unless we have sales.
+            attainment = None
+        results.append(
+            {
+                "id": p.id,
+                "name": p.name or f"{p.first_name} {p.last_name}".strip() or p.email,
+                "email": p.email,
+                "employee_id": p.employee_id or "",
+                "role": p.role or "",
+                "position_name": p.position_name or "",
+                "business_group": p.business_group or "",
+                "title": p.title or "",
+                "department": p.function_name or "",
+                "region": p.market or (p.territory.name if p.territory_id else ""),
+                "manager": p.hierarchy or "",
+                "territory_name": p.territory.name if p.territory_id else "",
+                "current_quota": month_quota if month_quota is not None else target,
+                "personal_target": target,
+                "current_attainment": attainment,
+                "current_commission": commission,
+            }
+        )
+    return Response(
+        {
+            "count": total,
+            "page": page,
+            "page_size": page_size,
+            "plan_id": plan.id,
+            "match": "position_name" if (plan.position_name or "").strip() else "role",
+            "coverage": coverage,
+            "results": results,
+        }
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def compensation_plan_activity(request, pk):
+    """GET /api/compensation-plans/<id>/activity/ — recent plan actions."""
+    if not user_is_admin(request):
+        raise PermissionDenied("Only administrators can access compensation plans")
+    from .plan_catalog import plan_activity_queryset, serialize_activity_row
+
+    org = getattr(request, "organization", None)
+    qs = CompensationPlan.objects.all()
+    qs = filter_queryset_by_organization(qs, org)
+    try:
+        plan = qs.get(pk=pk)
+    except CompensationPlan.DoesNotExist:
+        return Response({"error": "Plan not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        limit = min(int(request.query_params.get("limit") or 40), 200)
+    except (TypeError, ValueError):
+        limit = 40
+    rows = list(plan_activity_queryset(plan, org)[:limit])
+    return Response(
+        {
+            "count": len(rows),
+            "plan_id": plan.id,
+            "results": [serialize_activity_row(row) for row in rows],
+        }
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def compensation_plan_insights(request, pk):
+    """GET /api/compensation-plans/<id>/insights/ — lightweight plan analytics."""
+    if not user_is_admin(request):
+        raise PermissionDenied("Only administrators can access compensation plans")
+    from .plan_catalog import build_plan_insights
+
+    org = getattr(request, "organization", None)
+    qs = CompensationPlan.objects.all()
+    qs = filter_queryset_by_organization(qs, org)
+    try:
+        plan = qs.get(pk=pk)
+    except CompensationPlan.DoesNotExist:
+        return Response({"error": "Plan not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    return Response(build_plan_insights(plan, org))
+
+
 class CompensationPlanDetailView(generics.RetrieveUpdateAPIView):
     serializer_class = CompensationPlanSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["enterprise_full"] = True
+        return ctx
 
     def get_queryset(self):
         qs = CompensationPlan.objects.prefetch_related(
@@ -421,15 +836,190 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         # Tenant isolation: only ever list the caller's own organization.
-        return filter_queryset_by_organization(
-            UserProfile.objects.all().order_by('first_name'),
+        qs = filter_queryset_by_organization(
+            UserProfile.objects.select_related("territory", "assigned_compensation_plan")
+            .prefetch_related("login_invites")
+            .order_by("first_name", "name", "email"),
             getattr(self.request, "organization", None),
         )
+        params = self.request.query_params
+        q = (params.get("q") or params.get("search") or "").strip()
+        if q:
+            from .list_scope import profile_search_q
+            from .models import HierarchyRelationship
+
+            qs = qs.filter(
+                profile_search_q(q)
+                | Q(territory__name__icontains=q)
+                | Q(territory__code__icontains=q)
+                | Q(
+                    id__in=HierarchyRelationship.objects.filter(
+                        is_active=True,
+                        parent_participant__name__icontains=q,
+                    ).values_list("child_participant_id", flat=True)
+                )
+                | Q(
+                    id__in=HierarchyRelationship.objects.filter(
+                        is_active=True,
+                        parent_participant__email__icontains=q,
+                    ).values_list("child_participant_id", flat=True)
+                )
+            )
+        role = (params.get("role") or "").strip()
+        if role:
+            qs = qs.filter(role__iexact=role)
+        department = (params.get("department") or "").strip()
+        if department:
+            qs = qs.filter(
+                Q(department__icontains=department) | Q(function_name__icontains=department)
+            )
+        business_group = (params.get("business_group") or params.get("business_unit") or "").strip()
+        if business_group:
+            qs = qs.filter(business_group__icontains=business_group)
+        region = (params.get("region") or "").strip()
+        if region:
+            qs = qs.filter(market__icontains=region)
+        territory = (params.get("territory") or "").strip()
+        if territory:
+            qs = qs.filter(
+                Q(territory__name__icontains=territory) | Q(territory__code__icontains=territory)
+            )
+        eligibility = (params.get("eligibility") or "").strip().lower()
+        if eligibility in ("eligible", "1", "true", "yes"):
+            qs = qs.filter(commission_eligible=True)
+        elif eligibility in ("not_eligible", "0", "false", "no"):
+            qs = qs.filter(commission_eligible=False)
+        manager = (params.get("manager") or "").strip()
+        if manager:
+            from .models import HierarchyRelationship
+
+            qs = qs.filter(
+                id__in=HierarchyRelationship.objects.filter(
+                    is_active=True,
+                )
+                .filter(
+                    Q(parent_participant__name__icontains=manager)
+                    | Q(parent_participant__email__icontains=manager)
+                    | Q(parent_participant__employee_id__icontains=manager)
+                )
+                .values_list("child_participant_id", flat=True)
+            )
+        plan = (params.get("plan") or params.get("compensation_plan") or "").strip()
+        if plan:
+            from .models import CompensationPlan
+
+            org = getattr(self.request, "organization", None)
+            plan_qs = CompensationPlan.objects.filter(status="Active")
+            if org is not None:
+                plan_qs = plan_qs.filter(organization=org)
+            matched = plan_qs.filter(
+                Q(plan_name__icontains=plan) | Q(position_name__icontains=plan) | Q(role__icontains=plan)
+            )
+            positions = [p for p in matched.values_list("position_name", flat=True) if p]
+            roles = [r for r in matched.values_list("role", flat=True) if r]
+            plan_filter = Q()
+            if positions:
+                plan_filter |= Q(position_name__in=positions)
+            if roles:
+                plan_filter |= Q(role__in=roles)
+            if plan_filter:
+                qs = qs.filter(plan_filter)
+            else:
+                qs = qs.none()
+        view = (params.get("view") or "").strip().lower()
+        if view in ("sales", "sales_participants"):
+            qs = qs.filter(Q(role__icontains="Sales") | Q(role__iexact="Sales Rep"))
+        elif view in ("managers", "manager"):
+            qs = qs.filter(role__icontains="Manager")
+        elif view in ("admins", "admin"):
+            qs = qs.filter(role__iexact="Admin")
+        ordering = (params.get("ordering") or params.get("sort") or "").strip()
+        if ordering:
+            from .people_ops import SORTABLE_FIELDS
+
+            desc = ordering.startswith("-")
+            key = ordering.lstrip("-")
+            field = SORTABLE_FIELDS.get(key)
+            if field:
+                qs = qs.order_by(f"-{field}" if desc else field)
+        return qs
 
     def list(self, request, *args, **kwargs):
         # User Setup is an admin screen; reps must not enumerate the org roster.
         require_admin(request)
-        return super().list(request, *args, **kwargs)
+        org = getattr(request, "organization", None)
+        qs = self.filter_queryset(self.get_queryset())
+        try:
+            page = max(1, int(request.query_params.get("page") or 1))
+        except (TypeError, ValueError):
+            page = 1
+        try:
+            page_size = min(200, max(1, int(request.query_params.get("page_size") or 50)))
+        except (TypeError, ValueError):
+            page_size = 50
+
+        # Status / pending views need enrichment first — load capped set then filter.
+        status_filter = (request.query_params.get("status") or "").strip().lower()
+        view = (request.query_params.get("view") or "").strip().lower()
+        needs_status_pass = bool(status_filter) or view in (
+            "pending",
+            "pending_invitations",
+            "inactive",
+            "inactive_users",
+            "plan_assigned",
+        )
+
+        from .people_ops import enrich_people_row, resolve_plan_for_profile
+
+        if needs_status_pass:
+            profiles = list(qs[:2000])
+        else:
+            total = qs.count()
+            start = (page - 1) * page_size
+            profiles = list(qs[start : start + page_size])
+
+        profile_ids = [p.id for p in profiles]
+        manager_by_child = {}
+        if profile_ids:
+            for rel in HierarchyRelationship.objects.filter(
+                child_participant_id__in=profile_ids,
+                is_active=True,
+            ).select_related("parent_participant"):
+                manager_by_child[rel.child_participant_id] = rel.parent_participant
+
+        rows = []
+        for profile in profiles:
+            manager = manager_by_child.get(profile.id)
+            plan = resolve_plan_for_profile(profile, org)
+            row = enrich_people_row(profile, manager=manager, plan=plan)
+            if status_filter and row["status"] != status_filter:
+                continue
+            if view in ("pending", "pending_invitations"):
+                if row["status"] not in ("pending_activation", "invited"):
+                    continue
+            if view in ("inactive", "inactive_users"):
+                if row["status"] not in ("inactive", "suspended"):
+                    continue
+            if view in ("plan_assigned",):
+                if row["status"] != "plan_assigned":
+                    continue
+            rows.append(row)
+
+        if needs_status_pass:
+            total = len(rows)
+            start = (page - 1) * page_size
+            rows = rows[start : start + page_size]
+        else:
+            total = qs.count()
+
+        return Response(
+            {
+                "results": rows,
+                "count": total,
+                "page": page,
+                "page_size": page_size,
+            }
+        )
 
     def create(self, request, *args, **kwargs):
         # Only admins may create/update profiles. Without this, any user could
@@ -541,6 +1131,14 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
                 ).strip(),
                 position_name=str(data.get('position_name', '')).strip(),
                 position_title=str(data.get('position_title', '')).strip(),
+                department=str(
+                    data.get("department") or data.get("function_name") or ""
+                ).strip(),
+                phone=str(data.get("phone") or "").strip(),
+                commission_eligible=str(
+                    data.get("commission_eligible", "true")
+                ).strip().lower()
+                in ("true", "1", "yes", ""),
             )
             created = True
 
@@ -652,6 +1250,563 @@ class UserProfileListCreateView(generics.ListCreateAPIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+
+class PeopleSummaryView(APIView):
+    """GET /api/user-setup/summary/"""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        require_admin(request)
+        from .people_ops import build_people_summary
+
+        org = getattr(request, "organization", None)
+        qs = filter_queryset_by_organization(UserProfile.objects.all(), org)
+        return Response(build_people_summary(org, qs))
+
+
+class PeopleDetailView(APIView):
+    """GET/PATCH /api/user-setup/<pk>/ — People workspace."""
+
+    permission_classes = [IsAuthenticated]
+
+    def _get_profile(self, request, pk):
+        org = getattr(request, "organization", None)
+        return filter_queryset_by_organization(
+            UserProfile.objects.select_related(
+                "territory", "assigned_compensation_plan"
+            ).prefetch_related("login_invites"),
+            org,
+        ).filter(pk=pk).first()
+
+    def get(self, request, pk):
+        require_admin(request)
+        profile = self._get_profile(request, pk)
+        if not profile:
+            return Response({"error": "Person not found"}, status=status.HTTP_404_NOT_FOUND)
+        org = getattr(request, "organization", None)
+        manager = _manager_for_profile(profile, org)
+        from .people_ops import (
+            PERMISSION_LABELS,
+            SYSTEM_ROLES,
+            build_commission_history,
+            build_hierarchy_chain,
+            build_participant_compensation,
+            build_quota_attainment,
+            build_sales_performance,
+            enrich_people_row,
+            resolve_plan_for_profile,
+        )
+
+        plan = resolve_plan_for_profile(profile, org)
+        row = enrich_people_row(profile, manager=manager, plan=plan)
+        # Direct reports
+        reports = []
+        for rel in HierarchyRelationship.objects.filter(
+            parent_participant=profile, is_active=True
+        ).select_related("child_participant")[:50]:
+            child = rel.child_participant
+            reports.append(
+                {
+                    "id": child.id,
+                    "name": child.name or child.email,
+                    "employee_id": child.employee_id,
+                    "role": child.role,
+                }
+            )
+        detail = serialize_user_profile_detail(profile, organization=org)
+        detail.update(row)
+        detail["direct_reports"] = reports
+        detail["direct_report_count"] = len(reports)
+        detail["hierarchy_chain"] = build_hierarchy_chain(profile, org)
+        detail["participant_compensation"] = build_participant_compensation(
+            profile, plan=plan, organization=org
+        )
+        detail["quota_attainment"] = build_quota_attainment(profile, org)
+        detail["sales_performance"] = build_sales_performance(profile, org)
+        detail["transactions"] = detail["sales_performance"]
+        detail["assigned_plan"] = (
+            {
+                "id": plan.id,
+                "plan_name": plan.plan_name,
+                "status": plan.status,
+            }
+            if plan
+            else None
+        )
+        detail["role_catalog"] = list(SYSTEM_ROLES)
+        detail["permission_catalog"] = [
+            {"code": k, "label": v} for k, v in PERMISSION_LABELS.items()
+        ]
+        detail["commission_history"] = build_commission_history(profile, org)
+        detail["activity"] = []
+        detail["audit_log"] = []
+        from .models import AuditLog
+
+        for log in AuditLog.objects.filter(organization=org).order_by("-created_at")[:120]:
+            raw = getattr(log, "detail", None) or {}
+            if not isinstance(raw, dict):
+                continue
+            if str(raw.get("profile_id") or "") == str(profile.id) or str(
+                raw.get("email") or ""
+            ).lower() == (profile.email or "").lower():
+                entry = {
+                    "id": log.id,
+                    "action": log.action,
+                    "user": log.user_email or getattr(log.user, "email", None) or "System",
+                    "timestamp": log.created_at.isoformat() if log.created_at else None,
+                    "details": raw,
+                }
+                detail["activity"].append(entry)
+                detail["audit_log"].append(entry)
+            if len(detail["audit_log"]) >= 40:
+                break
+        return Response(detail)
+
+    def patch(self, request, pk):
+        require_admin(request)
+        profile = self._get_profile(request, pk)
+        if not profile:
+            return Response({"error": "Person not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        data = request.data
+        # Prevent privilege escalation into Admin unless already Admin-capable caller
+        # (require_admin already enforced). Still block empty role wipe.
+        new_role = data.get("role")
+        if new_role is not None and not str(new_role).strip():
+            return Response({"error": "Role cannot be empty"}, status=status.HTTP_400_BAD_REQUEST)
+
+        old_role = profile.role
+        old_quota = str(profile.personal_target)
+        old_plan_id = profile.assigned_compensation_plan_id
+
+        updatable = [
+            "name",
+            "first_name",
+            "last_name",
+            "role",
+            "phone",
+            "department",
+            "function_name",
+            "position_name",
+            "position_title",
+            "title",
+            "business_group",
+            "market",
+            "account_status",
+            "employee_id",
+            "pay_period_type",
+        ]
+        changed = []
+        for field in updatable:
+            if field in data:
+                setattr(profile, field, data.get(field) or "")
+                changed.append(field)
+        if "region" in data and "market" not in data:
+            profile.market = str(data.get("region") or "").strip()
+            changed.append("market")
+        if "commission_eligible" in data:
+            profile.commission_eligible = bool(data.get("commission_eligible"))
+            changed.append("commission_eligible")
+        if "enable_login" in data:
+            profile.enable_login = bool(data.get("enable_login"))
+            changed.append("enable_login")
+        if "personal_target" in data:
+            profile.personal_target = data.get("personal_target") or 0
+            changed.append("personal_target")
+        if "comp_effective_date" in data or "effective_date" in data:
+            raw_eff = data.get("comp_effective_date", data.get("effective_date"))
+            if raw_eff in ("", None):
+                profile.comp_effective_date = None
+            else:
+                from datetime import datetime as dt
+
+                try:
+                    profile.comp_effective_date = dt.strptime(
+                        str(raw_eff)[:10], "%Y-%m-%d"
+                    ).date()
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid effective date (use YYYY-MM-DD)"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            changed.append("comp_effective_date")
+        if "assigned_plan_id" in data or "compensation_plan_id" in data:
+            from .models import CompensationPlan
+
+            org = getattr(request, "organization", None)
+            plan_id = data.get("assigned_plan_id", data.get("compensation_plan_id"))
+            if plan_id in ("", None):
+                profile.assigned_compensation_plan = None
+            else:
+                plan = CompensationPlan.objects.filter(
+                    id=plan_id, organization=org
+                ).first()
+                if not plan:
+                    return Response(
+                        {"error": "Compensation plan not found"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                profile.assigned_compensation_plan = plan
+                if plan.position_name and not profile.position_name:
+                    profile.position_name = plan.position_name
+                    changed.append("position_name")
+            changed.append("assigned_compensation_plan")
+        if "territory" in data or "territory_id" in data:
+            from .integrations.user_import import resolve_or_create_territory_id
+
+            org = getattr(request, "organization", None)
+            territory_raw = data.get("territory", data.get("territory_id"))
+            if territory_raw in ("", None):
+                profile.territory = None
+            else:
+                try:
+                    profile.territory_id = resolve_or_create_territory_id(
+                        org, territory_raw, create_if_missing=True
+                    )
+                except ValueError as exc:
+                    return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            changed.append("territory")
+        if "custom_permissions" in data:
+            from .people_ops import PERMISSION_LABELS
+
+            raw = data.get("custom_permissions")
+            if raw is None:
+                profile.custom_permissions = []
+            elif isinstance(raw, list):
+                allowed = set(PERMISSION_LABELS.keys())
+                profile.custom_permissions = [c for c in raw if c in allowed]
+            else:
+                return Response(
+                    {"error": "custom_permissions must be a list"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            changed.append("custom_permissions")
+        if changed:
+            profile.save()
+        # Manager assignment
+        manager_id = data.get("manager_id") or data.get("parent_participant")
+        if manager_id:
+            org = getattr(request, "organization", None)
+            manager = UserProfile.objects.filter(id=manager_id, organization=org).first()
+            if manager and manager.id != profile.id:
+                HierarchyRelationship.objects.update_or_create(
+                    parent_participant=manager,
+                    child_participant=profile,
+                    defaults={"split_percentage": data.get("split_percentage") or 100, "is_active": True},
+                )
+                changed.append("manager")
+        if "role" in changed and profile.role != old_role:
+            record_audit(
+                request,
+                "role_changed",
+                {
+                    "profile_id": profile.id,
+                    "email": profile.email,
+                    "from": old_role,
+                    "to": profile.role,
+                },
+            )
+        if "personal_target" in changed and str(profile.personal_target) != old_quota:
+            record_audit(
+                request,
+                "quota_changed",
+                {
+                    "profile_id": profile.id,
+                    "email": profile.email,
+                    "from": old_quota,
+                    "to": str(profile.personal_target),
+                },
+            )
+        if (
+            "assigned_compensation_plan" in changed
+            and profile.assigned_compensation_plan_id != old_plan_id
+        ):
+            record_audit(
+                request,
+                "plan_assigned",
+                {
+                    "profile_id": profile.id,
+                    "email": profile.email,
+                    "plan_id": profile.assigned_compensation_plan_id,
+                    "plan_name": getattr(
+                        profile.assigned_compensation_plan, "plan_name", None
+                    ),
+                },
+            )
+        record_audit(
+            request,
+            "people_profile_updated",
+            {"profile_id": profile.id, "email": profile.email, "fields": changed},
+        )
+        return self.get(request, pk)
+
+
+class PeopleInviteActionView(APIView):
+    """POST /api/user-setup/<pk>/invite/  body: {action: resend|revoke|copy_link}"""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        require_admin(request)
+        org = getattr(request, "organization", None)
+        profile = filter_queryset_by_organization(
+            UserProfile.objects.all(), org
+        ).filter(pk=pk).first()
+        if not profile:
+            return Response({"error": "Person not found"}, status=status.HTTP_404_NOT_FOUND)
+        action = (request.data.get("action") or "resend").strip().lower()
+        if action == "revoke":
+            from .people_ops import revoke_pending_invite
+
+            n = revoke_pending_invite(profile)
+            record_audit(
+                request,
+                "invite_revoked",
+                {"profile_id": profile.id, "email": profile.email, "count": n},
+            )
+            return Response({"ok": True, "revoked": n})
+        # resend or copy_link — mint a fresh token (plaintext cannot be recovered from hash)
+        profile.enable_login = True
+        profile.save(update_fields=["enable_login"])
+        from .invites import build_invite_url, create_user_invite
+
+        send_email = action != "copy_link"
+        invite, token, sent, invite_error = create_user_invite(
+            profile, invited_by=request.user, send_email=send_email
+        )
+        record_audit(
+            request,
+            "invite_link_copied" if action == "copy_link" else "invite_resent",
+            {"profile_id": profile.id, "email": profile.email, "sent": sent},
+        )
+        payload = {
+            "ok": True,
+            "sent": sent,
+            "invite_error": invite_error or "",
+            "action": action,
+        }
+        if token:
+            payload["invite_link"] = build_invite_url(token)
+        return Response(payload)
+
+
+class PeopleBulkActionView(APIView):
+    """POST /api/user-setup/bulk/"""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        require_admin(request)
+        action = (request.data.get("action") or "").strip().lower()
+        ids = request.data.get("ids") or []
+        if not isinstance(ids, list) or not ids:
+            return Response({"error": "ids required"}, status=status.HTTP_400_BAD_REQUEST)
+        org = getattr(request, "organization", None)
+        qs = filter_queryset_by_organization(
+            UserProfile.objects.select_related("territory", "assigned_compensation_plan"),
+            org,
+        ).filter(id__in=ids)
+        updated = 0
+        if action == "invite":
+            from .invites import create_user_invite
+
+            for profile in qs:
+                profile.enable_login = True
+                profile.save(update_fields=["enable_login"])
+                create_user_invite(profile, invited_by=request.user)
+                updated += 1
+                record_audit(
+                    request,
+                    "invitation_sent",
+                    {"profile_id": profile.id, "email": profile.email},
+                )
+        elif action == "assign_role":
+            role = (request.data.get("role") or "").strip()
+            if not role:
+                return Response({"error": "role required"}, status=status.HTTP_400_BAD_REQUEST)
+            for profile in qs:
+                old = profile.role
+                profile.role = role
+                profile.save(update_fields=["role"])
+                updated += 1
+                record_audit(
+                    request,
+                    "role_changed",
+                    {
+                        "profile_id": profile.id,
+                        "email": profile.email,
+                        "from": old,
+                        "to": role,
+                    },
+                )
+        elif action == "assign_plan":
+            from .models import CompensationPlan
+
+            plan_id = request.data.get("plan_id") or request.data.get("compensation_plan_id")
+            plan_name = (request.data.get("plan_name") or "").strip()
+            plan = None
+            if plan_id:
+                plan = CompensationPlan.objects.filter(
+                    id=plan_id, organization=org
+                ).first()
+            elif plan_name:
+                plan = CompensationPlan.objects.filter(
+                    organization=org, plan_name__iexact=plan_name
+                ).first()
+            if not plan:
+                return Response(
+                    {"error": "plan_id or plan_name required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            for profile in qs:
+                profile.assigned_compensation_plan = plan
+                if plan.position_name and not profile.position_name:
+                    profile.position_name = plan.position_name
+                profile.save()
+                updated += 1
+                record_audit(
+                    request,
+                    "plan_assigned",
+                    {
+                        "profile_id": profile.id,
+                        "email": profile.email,
+                        "plan_id": plan.id,
+                        "plan_name": plan.plan_name,
+                    },
+                )
+        elif action == "update_quota":
+            quota = request.data.get("quota")
+            if quota in (None, ""):
+                return Response({"error": "quota required"}, status=status.HTTP_400_BAD_REQUEST)
+            effective = request.data.get("effective_date") or request.data.get(
+                "comp_effective_date"
+            )
+            for profile in qs:
+                old = str(profile.personal_target)
+                profile.personal_target = quota
+                fields = ["personal_target"]
+                if effective:
+                    from datetime import datetime as dt
+
+                    try:
+                        profile.comp_effective_date = dt.strptime(
+                            str(effective)[:10], "%Y-%m-%d"
+                        ).date()
+                        fields.append("comp_effective_date")
+                    except ValueError:
+                        pass
+                profile.save(update_fields=fields)
+                updated += 1
+                record_audit(
+                    request,
+                    "quota_changed",
+                    {
+                        "profile_id": profile.id,
+                        "email": profile.email,
+                        "from": old,
+                        "to": str(quota),
+                    },
+                )
+        elif action == "change_territory":
+            from .integrations.user_import import resolve_or_create_territory_id
+
+            territory_raw = request.data.get("territory") or request.data.get("territory_id")
+            if territory_raw in (None, ""):
+                return Response(
+                    {"error": "territory required"}, status=status.HTTP_400_BAD_REQUEST
+                )
+            try:
+                territory_pk = resolve_or_create_territory_id(
+                    org, territory_raw, create_if_missing=True
+                )
+            except ValueError as exc:
+                return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            updated = qs.update(territory_id=territory_pk)
+            record_audit(
+                request,
+                "territory_changed",
+                {"count": updated, "territory_id": territory_pk, "ids": ids[:50]},
+            )
+        elif action == "deactivate":
+            updated = qs.update(account_status="deactivated", enable_login=False)
+        elif action == "set_eligibility":
+            eligible = bool(request.data.get("commission_eligible", True))
+            updated = qs.update(commission_eligible=eligible)
+        elif action == "export":
+            # Return CSV payload for selected participants
+            import csv
+            import io
+
+            from .people_ops import enrich_people_row, resolve_plan_for_profile
+
+            buffer = io.StringIO()
+            writer = csv.DictWriter(
+                buffer,
+                fieldnames=[
+                    "employee_id",
+                    "name",
+                    "email",
+                    "role",
+                    "position",
+                    "department",
+                    "business_unit",
+                    "manager_name",
+                    "region",
+                    "territory",
+                    "status",
+                    "compensation_plan",
+                    "quota",
+                    "eligibility",
+                ],
+            )
+            writer.writeheader()
+            manager_by_child = {}
+            profile_ids = list(qs.values_list("id", flat=True))
+            for rel in HierarchyRelationship.objects.filter(
+                child_participant_id__in=profile_ids, is_active=True
+            ).select_related("parent_participant"):
+                manager_by_child[rel.child_participant_id] = rel.parent_participant
+            for profile in qs:
+                plan = resolve_plan_for_profile(profile, org)
+                row = enrich_people_row(
+                    profile, manager=manager_by_child.get(profile.id), plan=plan
+                )
+                writer.writerow(
+                    {
+                        "employee_id": row["employee_id"],
+                        "name": row["display_name"],
+                        "email": row["email"],
+                        "role": row["role"],
+                        "position": row["position"],
+                        "department": row["department"],
+                        "business_unit": row["business_unit"],
+                        "manager_name": row["manager_name"],
+                        "region": row["region"],
+                        "territory": row["territory_name"],
+                        "status": row["status_label"],
+                        "compensation_plan": row["compensation_plan"],
+                        "quota": row["quota"],
+                        "eligibility": row["compensation_eligibility"],
+                    }
+                )
+            record_audit(
+                request,
+                "people_exported",
+                {"count": len(profile_ids), "ids": ids[:50]},
+            )
+            return Response({"csv": buffer.getvalue(), "count": len(profile_ids)})
+        else:
+            return Response({"error": "Unsupported action"}, status=status.HTTP_400_BAD_REQUEST)
+        if action not in ("change_territory", "export"):
+            record_audit(
+                request,
+                "people_bulk_action",
+                {"action": action, "count": updated, "ids": ids[:50]},
+            )
+        return Response({"updated": updated})
+
+
 class UserProfileUploadView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
@@ -720,8 +1875,29 @@ class UserProfileUploadView(APIView):
             )
 
         result = process_users_csv(organization, decoded_file)
+        # Persist history even for synchronous imports
+        job = ImportJob.objects.create(
+            organization=organization,
+            created_by=request.user,
+            job_type=ImportJob.JOB_USERS,
+            source_filename=uploaded_file.name,
+            row_count=len(rows),
+            status=ImportJob.STATUS_COMPLETED,
+            result=result,
+            started_at=timezone.now(),
+            completed_at=timezone.now(),
+        )
+        try:
+            job.input_file.save(
+                uploaded_file.name,
+                ContentFile(decoded_file.encode("utf-8")),
+                save=True,
+            )
+        except Exception:
+            pass
         payload = {
             "message": "Upload completed successfully",
+            "job_id": job.id,
             **result,
         }
         if getattr(settings, "DEFAULT_ONBOARDING_PASSWORD", ""):
@@ -736,9 +1912,75 @@ class UserProfileUploadView(APIView):
                 "success": result["success"],
                 "failed": result["failed"],
                 "filename": uploaded_file.name,
+                "job_id": job.id,
             },
         )
         return Response(payload)
+
+
+class UserProfileUploadValidateView(APIView):
+    """POST /api/user-setup-upload/validate/ — dry-run CSV validation + preview."""
+
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "upload"
+
+    def post(self, request):
+        require_admin(request)
+        if "file" not in request.FILES:
+            return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+        uploaded_file = request.FILES["file"]
+        if not uploaded_file.name.lower().endswith(".csv"):
+            return Response(
+                {"error": "Only CSV files are supported"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        org = getattr(request, "organization", None)
+        if not org:
+            return Response(
+                {"error": "Organization context missing"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        from .security import CsvValidationError, read_csv_upload
+        from .people_ops import validate_users_csv_rows
+
+        try:
+            _decoded, rows = read_csv_upload(uploaded_file)
+        except CsvValidationError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(validate_users_csv_rows(rows, org))
+
+
+class UserProfileImportHistoryView(APIView):
+    """GET /api/user-setup-upload/history/ — recent employee CSV imports."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        require_admin(request)
+        org = getattr(request, "organization", None)
+        qs = ImportJob.objects.filter(
+            organization=org, job_type=ImportJob.JOB_USERS
+        ).order_by("-created_at")[:30]
+        rows = []
+        for job in qs:
+            result = job.result or {}
+            rows.append(
+                {
+                    "id": job.id,
+                    "filename": job.source_filename,
+                    "status": job.status,
+                    "row_count": job.row_count,
+                    "success": result.get("success"),
+                    "failed": result.get("failed"),
+                    "created_at": job.created_at.isoformat() if job.created_at else None,
+                    "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+                    "created_by": getattr(job.created_by, "email", None) or "",
+                    "error_message": job.error_message or "",
+                }
+            )
+        return Response({"results": rows, "count": len(rows)})
 
 
 class HierarchyRelationshipListCreateView(generics.ListCreateAPIView):
@@ -813,12 +2055,12 @@ def _orders_queryset_for_request(request):
 
     org = getattr(request, "organization", None)
     queryset = filter_queryset_by_organization(
-        Order.objects.select_related("sale_record")
+        Order.objects.select_related("sale_record", "territory", "created_by")
         .prefetch_related(
             Prefetch(
                 "sale_record__commission_set",
                 queryset=filter_queryset_by_organization(
-                    Commission.objects.order_by("id"),
+                    Commission.objects.select_related("compensation_plan").order_by("id"),
                     org,
                 ),
             )
@@ -836,6 +2078,44 @@ def _orders_queryset_for_request(request):
         status_filter = (request.query_params.get("order_status") or "").strip()
         if status_filter:
             queryset = queryset.filter(order_status__iexact=status_filter)
+
+    # Enterprise filters (additive)
+    employee = (request.query_params.get("employee_id") or request.query_params.get("sales_rep") or "").strip()
+    if employee:
+        queryset = queryset.filter(employee_id__iexact=employee)
+    region = (request.query_params.get("region") or "").strip()
+    if region:
+        queryset = queryset.filter(region__icontains=region)
+    business_group = (request.query_params.get("business_group") or "").strip()
+    if business_group:
+        queryset = queryset.filter(business_group__icontains=business_group)
+    product = (request.query_params.get("product") or "").strip()
+    if product:
+        queryset = queryset.filter(
+            Q(product_name__icontains=product) | Q(service_name__icontains=product)
+        )
+    customer = (request.query_params.get("customer") or "").strip()
+    if customer:
+        queryset = queryset.filter(
+            Q(customer_name__icontains=customer) | Q(customer_segment__icontains=customer)
+        )
+    source = (request.query_params.get("source") or "").strip()
+    if source:
+        queryset = queryset.filter(source__iexact=source)
+    date_from = (request.query_params.get("date_from") or "").strip()
+    if date_from:
+        queryset = queryset.filter(order_date__gte=date_from)
+    date_to = (request.query_params.get("date_to") or "").strip()
+    if date_to:
+        queryset = queryset.filter(order_date__lte=date_to)
+    amount_min = (request.query_params.get("amount_min") or "").strip()
+    if amount_min:
+        queryset = queryset.filter(sales_amount__gte=amount_min)
+    amount_max = (request.query_params.get("amount_max") or "").strip()
+    if amount_max:
+        queryset = queryset.filter(sales_amount__lte=amount_max)
+    if (request.query_params.get("missing_rep") or "").strip() in ("1", "true", "yes"):
+        queryset = queryset.filter(Q(employee_id__isnull=True) | Q(employee_id=""))
 
     user = request.user
     try:
@@ -876,7 +2156,9 @@ class OrderListCreateView(generics.ListCreateAPIView):
         # orders that generate commissions for themselves.
         require_admin(self.request)
         order = serializer.save(
-            organization=getattr(self.request, "organization", None)
+            organization=getattr(self.request, "organization", None),
+            created_by=self.request.user,
+            source=serializer.validated_data.get("source") or "manual",
         )
         calculate_commission_for_order(order)
         record_audit(
@@ -899,9 +2181,34 @@ class OrderDetailView(generics.RetrieveUpdateAPIView):
     def get_queryset(self):
         return _orders_queryset_for_request(self.request)
 
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["include_workspace"] = True
+        return ctx
+
     def perform_update(self, serializer):
         if not user_is_admin(self.request):
             raise PermissionDenied("Only administrators can update orders")
+        instance = self.get_object()
+        locked = str(instance.order_status or "").strip().lower() in (
+            "success",
+            "approved",
+            "paid",
+        )
+        if locked:
+            # Approved orders cannot silently change financial identity.
+            protected = ("sales_amount", "employee_id", "order_date", "currency", "order_id")
+            dirty = [
+                field
+                for field in protected
+                if field in serializer.validated_data
+                and serializer.validated_data.get(field) != getattr(instance, field)
+            ]
+            if dirty and not self.request.data.get("force_unlock"):
+                raise PermissionDenied(
+                    "Approved orders are locked. Unlock explicitly to change "
+                    f"{', '.join(dirty)}."
+                )
         order = serializer.save()
         calculate_commission_for_order(order)
         record_audit(
@@ -928,6 +2235,167 @@ class OrderDetailView(generics.RetrieveUpdateAPIView):
             .get(pk=instance.pk)
         )
         return Response(self.get_serializer(refreshed).data)
+
+
+class OrderSummaryView(APIView):
+    """GET /api/orders/summary/ — Transaction Center KPIs + action center."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .transaction_ops import build_orders_summary
+
+        org = getattr(request, "organization", None)
+        base = filter_queryset_by_organization(
+            Order.objects.select_related("sale_record").prefetch_related(
+                "sale_record__commission_set"
+            ),
+            org,
+        )
+        if not user_is_admin(request):
+            try:
+                profile = get_profile_for_user(request.user, organization=org)
+                if profile and profile.employee_id:
+                    base = base.filter(employee_id=profile.employee_id)
+            except Exception:
+                pass
+        return Response(build_orders_summary(org, base))
+
+
+class OrderBulkActionView(APIView):
+    """POST /api/orders/bulk/ — approve | reject | calculate | assign_rep."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        require_admin(request)
+        action = (request.data.get("action") or "").strip().lower()
+        ids = request.data.get("ids") or []
+        if not isinstance(ids, list) or not ids:
+            return Response({"error": "ids required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        qs = _orders_queryset_for_request(request).filter(id__in=ids)
+        updated = 0
+        results = []
+
+        if action == "approve":
+            for order in qs:
+                order.order_status = "Success"
+                order.save(update_fields=["order_status", "updated_at"])
+                commission = calculate_commission_for_order(order)
+                updated += 1
+                results.append(
+                    {
+                        "id": order.id,
+                        "order_id": order.order_id,
+                        "has_commission": commission is not None,
+                    }
+                )
+            record_audit(
+                request,
+                "orders_bulk_approved",
+                {"order_ids": [o.order_id for o in qs], "count": updated},
+            )
+        elif action == "reject":
+            for order in qs:
+                order.order_status = "Rejected"
+                order.save(update_fields=["order_status", "updated_at"])
+                updated += 1
+            record_audit(
+                request,
+                "orders_bulk_rejected",
+                {"order_ids": [o.order_id for o in qs], "count": updated},
+            )
+        elif action == "calculate":
+            for order in qs:
+                if str(order.order_status).lower() != "success":
+                    order.order_status = "Success"
+                    order.save(update_fields=["order_status", "updated_at"])
+                commission = calculate_commission_for_order(order)
+                updated += 1
+                results.append(
+                    {
+                        "id": order.id,
+                        "order_id": order.order_id,
+                        "has_commission": commission is not None,
+                    }
+                )
+            record_audit(
+                request,
+                "orders_bulk_calculate",
+                {"order_ids": [o.order_id for o in qs], "count": updated},
+            )
+        elif action == "assign_rep":
+            employee_id = (request.data.get("employee_id") or "").strip()
+            if not employee_id:
+                return Response(
+                    {"error": "employee_id required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            for order in qs:
+                if str(order.order_status).lower() in ("success", "approved", "paid"):
+                    continue
+                order.employee_id = employee_id
+                credits = list(order.sales_credits or [])
+                if not credits:
+                    credits = [
+                        {
+                            "employee_id": employee_id,
+                            "name": employee_id,
+                            "role": "Primary Sales Rep",
+                            "percent": 100,
+                        }
+                    ]
+                else:
+                    credits[0]["employee_id"] = employee_id
+                    credits[0]["name"] = employee_id
+                order.sales_credits = credits
+                order.save(update_fields=["employee_id", "sales_credits", "updated_at"])
+                updated += 1
+            record_audit(
+                request,
+                "orders_bulk_assign_rep",
+                {
+                    "order_ids": [o.order_id for o in qs],
+                    "employee_id": employee_id,
+                    "count": updated,
+                },
+            )
+        else:
+            return Response(
+                {"error": "Unsupported action"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response({"updated": updated, "results": results})
+
+
+class OrderUploadValidateView(APIView):
+    """POST /api/orders-upload/validate/ — dry-run CSV validation + preview."""
+
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        require_admin(request)
+        if "file" not in request.FILES:
+            return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+        uploaded_file = request.FILES["file"]
+        if not uploaded_file.name.lower().endswith(".csv"):
+            return Response(
+                {"error": "Only CSV files are supported"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        from .security import CsvValidationError, read_csv_upload
+        from .transaction_ops import validate_order_csv_rows
+
+        try:
+            _decoded, rows = read_csv_upload(uploaded_file)
+        except CsvValidationError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        org = getattr(request, "organization", None)
+        return Response(validate_order_csv_rows(rows, org))
 
 
 class OrderUploadView(APIView):
@@ -1967,6 +3435,127 @@ def period_analytics_report(request):
     )
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def command_center_report(request):
+    """
+    Sales Compensation Command Center aggregate.
+    Additive endpoint — does not replace existing report APIs.
+    """
+    if not (
+        user_is_admin(request)
+        or user_can_view_finance_data(request)
+        or user_is_manager(request)
+    ):
+        raise PermissionDenied(
+            "Only administrators, finance, or managers can view the command center."
+        )
+    from .dashboard_ops import build_command_center
+
+    return Response(build_command_center(request))
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def employee_transparency_report(request):
+    """
+    Drill-down: employee sales transactions + commissions + plan applied.
+    Query: employee_id (required), optional start_date/end_date.
+    """
+    from django.db.models import Sum
+
+    employee_id = (request.query_params.get("employee_id") or "").strip()
+    if not employee_id:
+        return Response(
+            {"error": "employee_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    org = getattr(request, "organization", None)
+    profile = get_request_user_profile(request)
+    is_privileged = (
+        user_is_admin(request)
+        or user_can_view_finance_data(request)
+        or user_is_manager(request)
+    )
+    if not is_privileged:
+        if not profile or profile.employee_id != employee_id:
+            raise PermissionDenied("You can only view your own transparency detail.")
+
+    person = filter_queryset_by_organization(UserProfile.objects.all(), org).filter(
+        employee_id=employee_id
+    ).first()
+
+    orders = filter_queryset_by_organization(Order.objects.all(), org).filter(
+        employee_id=employee_id
+    )
+    start_date = parse_date(request.query_params.get("start_date") or "")
+    end_date = parse_date(request.query_params.get("end_date") or "")
+    if start_date and end_date:
+        orders = orders.filter(order_date__range=[start_date, end_date])
+
+    from .people_ops import resolve_plan_for_profile
+
+    plan = resolve_plan_for_profile(person, org) if person else None
+
+    txns = []
+    for order in orders.order_by("-order_date")[:40]:
+        commission = None
+        try:
+            sale = getattr(order, "sale_record", None)
+            if sale:
+                commission = (
+                    Commission.objects.filter(sale=sale)
+                    .select_related("compensation_plan")
+                    .first()
+                )
+        except Exception:
+            commission = None
+        txns.append(
+            {
+                "order_id": order.order_id,
+                "order_date": order.order_date.isoformat() if order.order_date else None,
+                "sales_amount": float(order.sales_amount or 0),
+                "order_status": order.order_status,
+                "plan_name": (
+                    commission.compensation_plan.plan_name
+                    if commission and commission.compensation_plan_id
+                    else (plan.plan_name if plan else "")
+                ),
+                "calculation_method": (
+                    str(getattr(plan, "tier_calculation_method", "") or "")
+                    if plan
+                    else ""
+                ),
+                "commission_amount": float(commission.commission_amount)
+                if commission
+                else None,
+                "commission_status": commission.status if commission else None,
+            }
+        )
+
+    total_sales = orders.aggregate(t=Sum("sales_amount"))["t"] or 0
+    return Response(
+        {
+            "employee_id": employee_id,
+            "employee_name": person.name if person else employee_id,
+            "role": person.role if person else "",
+            "assigned_plan": (
+                {
+                    "id": plan.id,
+                    "plan_name": plan.plan_name,
+                    "commission_table_type": plan.commission_table_type,
+                    "tier_calculation_method": plan.tier_calculation_method,
+                }
+                if plan
+                else None
+            ),
+            "total_sales": float(total_sales),
+            "transactions": txns,
+        }
+    )
+
+
 # =====================================================
 # Phase 2: Approvals, payroll export, bulk recalc
 # =====================================================
@@ -2163,10 +3752,18 @@ def audit_log_list(request):
     """Recent audit events (admin / finance)."""
     require_finance_or_admin(request)
     limit = min(int(request.query_params.get("limit", 100)), 500)
-    logs = AuditLog.objects.select_related("user").order_by("-created_at")
+    logs = AuditLog.objects.select_related("user", "plan_version").order_by("-created_at")
     logs = filter_queryset_by_organization(
         logs, getattr(request, "organization", None)
-    )[:limit]
+    )
+    plan_id = (request.query_params.get("plan_id") or "").strip()
+    if plan_id:
+        logs = logs.filter(
+            Q(plan_version__compensation_plan_id=plan_id)
+            | Q(detail__plan_id=int(plan_id) if plan_id.isdigit() else plan_id)
+            | Q(detail__plan_id=plan_id)
+        )
+    logs = logs[:limit]
     data = [
         {
             "id": row.id,
@@ -2175,6 +3772,7 @@ def audit_log_list(request):
             "detail": row.detail,
             "ip_address": row.ip_address,
             "request_id": row.request_id,
+            "plan_version_id": row.plan_version_id,
             "created_at": row.created_at.isoformat(),
         }
         for row in logs
@@ -2208,3 +3806,77 @@ def import_job_detail(request, job_id):
         "created_at": job.created_at.isoformat(),
         "completed_at": job.completed_at.isoformat() if job.completed_at else None,
     })
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def commission_operations_summary(request):
+    from .commission_ops import build_operations_summary
+
+    return Response(build_operations_summary(request))
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def commission_operations_grid(request):
+    from .commission_ops import build_operations_grid
+
+    return Response(build_operations_grid(request))
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def commission_operations_detail(request):
+    from .commission_ops import build_operations_detail
+
+    data = build_operations_detail(request)
+    if not data:
+        return Response(
+            {"error": "Commission record not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    return Response(data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def commission_operations_bulk(request):
+    from .commission_ops import run_bulk_action
+
+    result, err = run_bulk_action(request, request.data or {})
+    if err:
+        msg = err.get("error", "")
+        code = (
+            status.HTTP_403_FORBIDDEN
+            if ("Only" in msg or "Insufficient" in msg)
+            else status.HTTP_400_BAD_REQUEST
+        )
+        return Response(err, status=code)
+    return Response(result)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def commission_adjustment_create(request):
+    from .commission_ops import create_adjustment, _serialize_adjustment
+
+    adj, err = create_adjustment(request, request.data or {})
+    if err:
+        msg = err.get("error", "")
+        code = (
+            status.HTTP_403_FORBIDDEN
+            if "Only" in msg
+            else status.HTTP_400_BAD_REQUEST
+        )
+        if "not found" in msg.lower():
+            code = status.HTTP_404_NOT_FOUND
+        return Response(err, status=code)
+    return Response(_serialize_adjustment(adj), status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def commission_operations_export(request):
+    from .commission_ops import build_operations_export
+
+    return build_operations_export(request)
+

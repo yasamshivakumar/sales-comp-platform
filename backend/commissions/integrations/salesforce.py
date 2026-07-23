@@ -89,6 +89,11 @@ class SalesforceConnector(BaseConnector):
         instance_url = parsed.get("instance_url")
         if instance_url:
             self.credentials["instance_url"] = instance_url
+        if hasattr(self.integration, "set_encrypted_credentials"):
+            self.integration.set_encrypted_credentials(self.credentials)
+            self.integration.save(
+                update_fields=["credentials", "encrypted_credentials", "updated_at"]
+            )
         return token
 
     def _query(self, soql, limit=None):

@@ -10,7 +10,8 @@ import CompensationPlans from "./CompensationPlans/CompensationPlans";
 import CommissionRules from "./CommissionRules/CommissionRules";
 import UserSetup from "./UserSetup/UserSetup";
 import Orders from "./Orders/Orders";
-import Commissions from "./Dashboard/Commissions";
+import CommissionCenter from "./Commissions/CommissionCenter";
+import IntegrationCenter from "./Integrations/IntegrationCenter";
 import MyStatement from "./Dashboard/MyStatement";
 import AuditLogs from "./Enterprise/AuditLogs";
 import Payouts from "./Enterprise/Payouts";
@@ -75,7 +76,7 @@ function AppRoutes() {
         />
 
         <Route
-          path="/user-setup"
+          path="/user-setup/*"
           element={
             <PrivateRoute>
               <Layout>
@@ -86,7 +87,7 @@ function AppRoutes() {
         />
 
         <Route
-          path="/comp-plans"
+          path="/comp-plans/*"
           element={
             <PrivateRoute>
               <Layout>
@@ -108,7 +109,7 @@ function AppRoutes() {
         />
 
         <Route
-          path="/orders"
+          path="/orders/*"
           element={
             <PrivateRoute>
               <Layout>
@@ -134,7 +135,7 @@ function AppRoutes() {
           element={
             <PrivateRoute>
               <Layout>
-                <Commissions />
+                <CommissionCenter />
               </Layout>
             </PrivateRoute>
           }
@@ -164,7 +165,16 @@ function AppRoutes() {
           }
         />
 
-        <Route path="/integrations" element={<Navigate to="/dashboard?integrations=1" replace />} />
+        <Route
+          path="/integrations"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <IntegrationCenter />
+              </Layout>
+            </PrivateRoute>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );

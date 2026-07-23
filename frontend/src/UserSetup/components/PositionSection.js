@@ -3,7 +3,7 @@ function PositionSection({ renderField }) {
     <div className="form-grid">
       <p className="section-heading">Position assignment</p>
       <p className="hierarchy-hint">
-        Position name is used to match compensation plans during order processing.
+        Optional job position used for org reporting and plan matching later.
       </p>
 
       {renderField("position_name", "Position name")}

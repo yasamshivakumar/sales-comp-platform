@@ -3,6 +3,7 @@ from .models import (
     Employee,
     Sale,
     Commission,
+    CommissionAdjustment,
     UserProfile,
     Order,
     AuditLog,
@@ -16,6 +17,7 @@ admin.site.register(Employee)
 admin.site.register(Sale)
 admin.site.register(UserProfile)
 admin.site.register(Order)
+admin.site.register(CommissionAdjustment)
 
 from .models import CompensationPlan, CompensationTier
 from .models import CompensationPlan, SCRateTable, SCFlatRateTable

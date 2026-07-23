@@ -96,5 +96,6 @@ def order_search_q(term: str) -> Q:
         | Q(position_name__icontains=term)
         | Q(region__icontains=term)
         | Q(customer_segment__icontains=term)
+        | Q(customer_name__icontains=term)
         | Q(business_group__icontains=term)
     )

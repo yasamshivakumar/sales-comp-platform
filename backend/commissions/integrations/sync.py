@@ -239,8 +239,10 @@ def run_pull_sync(integration, sync_type, triggered_by=None, limit=None):
         else:
             raise ValueError(f"Unsupported sync type: {sync_type}")
 
-        if integration.provider == "salesforce" and integration.credentials.get("access_token"):
-            integration.save(update_fields=["credentials", "updated_at"])
+        if integration.provider == "salesforce":
+            # Token may already be sealed+saved by connector; refresh watermark.
+            integration.last_sync_at = timezone.now()
+            integration.save(update_fields=["last_sync_at", "updated_at"])
 
         log.result = result
         log.status = IntegrationSyncLog.STATUS_COMPLETED

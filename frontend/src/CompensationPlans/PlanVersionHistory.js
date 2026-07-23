@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import api, { getApiErrorMessage } from "../api";
 import { useToast } from "../Components/Toast";
-import { commissionTableLabel } from "./PlanHeaderForm";
 
 function VersionBadge({ status }) {
   const tone =
@@ -27,7 +26,6 @@ function PlanVersionHistory({ plan, onVersionsChanged }) {
   const [compareLeft, setCompareLeft] = useState("");
   const [compareRight, setCompareRight] = useState("");
   const [comparison, setComparison] = useState(null);
-  const [quotasDraft, setQuotasDraft] = useState({});
   const [showArchived, setShowArchived] = useState(false);
 
   const loadVersions = useCallback(async () => {
@@ -76,40 +74,6 @@ function PlanVersionHistory({ plan, onVersionsChanged }) {
       onVersionsChanged?.(res.data);
     } catch (err) {
       error(getApiErrorMessage(err, `Failed to ${action} version`));
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const saveQuotas = async (version) => {
-    const text = quotasDraft[version.id];
-    if (text == null) return;
-    const rows = [];
-    for (const line of text.split("\n")) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      const [ym, amount, currency = ""] = trimmed.split(",").map((p) => p.trim());
-      const [year, month] = (ym || "").split("-").map(Number);
-      if (!year || !month || Number.isNaN(Number(amount))) {
-        error(`Invalid quota line: "${trimmed}". Use YYYY-MM,amount[,currency]`);
-        return;
-      }
-      rows.push({
-        year,
-        month,
-        quota_amount: amount,
-        currency,
-      });
-    }
-    setBusyId(version.id);
-    try {
-      await api.patch(`compensation-plans/${plan.id}/versions/${version.id}/`, {
-        quotas: rows,
-      });
-      success(`Quotas saved for version ${version.version_number}.`);
-      await loadVersions();
-    } catch (err) {
-      error(getApiErrorMessage(err, "Failed to save quotas"));
     } finally {
       setBusyId(null);
     }
@@ -182,6 +146,22 @@ function PlanVersionHistory({ plan, onVersionsChanged }) {
           versions” to see them.
         </p>
       ) : (
+        <>
+        <ol className="cp-version-rail" aria-label="Version timeline">
+          {visibleVersions.map((version) => (
+            <li key={`rail-${version.id}`} className="cp-version-rail__item">
+              <span className={`cp-version-rail__dot cp-version-rail__dot--${String(version.status).toLowerCase()}`} />
+              <div>
+                <strong>v{version.version_number}</strong>{" "}
+                <VersionBadge status={version.status} />
+                <p className="muted-mini">
+                  {formatRange(version.effective_from, version.effective_to)}
+                  {version.published_by_email ? ` · ${version.published_by_email}` : ""}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ol>
         <div className="cp-table-card" style={{ marginBottom: 16 }}>
         <div className="comp-plans-table-wrap">
           <table className="comp-plans-table enterprise-table">
@@ -190,10 +170,11 @@ function PlanVersionHistory({ plan, onVersionsChanged }) {
                 <th>Version</th>
                 <th>Status</th>
                 <th>Effective</th>
-                <th>Table</th>
+                <th>Published by</th>
+                <th>Reason / change</th>
+                <th>Summary</th>
                 <th>Rates</th>
                 <th>Rules</th>
-                <th>Quotas</th>
                 <th />
               </tr>
             </thead>
@@ -203,16 +184,23 @@ function PlanVersionHistory({ plan, onVersionsChanged }) {
                   (version.sc_rate_tables?.length || 0) +
                   (version.sc_flat_rate_tables?.length || 0) +
                   (version.sc_lookup_tables?.length || 0);
-                const quotaLines =
-                  quotasDraft[version.id] ??
-                  (version.quotas || [])
-                    .map(
-                      (q) =>
-                        `${q.year}-${String(q.month).padStart(2, "0")},${q.quota_amount}${
-                          q.currency ? `,${q.currency}` : ""
-                        }`
-                    )
-                    .join("\n");
+                const ruleCount = version.commission_rules?.length || 0;
+                const changeSummary = [
+                  rateCount ? `${rateCount} rates` : null,
+                  ruleCount ? `${ruleCount} rules` : null,
+                  (version.quotas || []).length
+                    ? `${version.quotas.length} quotas`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "No components";
+                const reason =
+                  version.description ||
+                  (version.created_from_version_number
+                    ? `Cloned from v${version.created_from_version_number}`
+                    : version.status === "Published"
+                      ? "Published for calculation"
+                      : "Draft in progress");
                 return (
                   <tr key={version.id}>
                     <td>
@@ -227,35 +215,11 @@ function PlanVersionHistory({ plan, onVersionsChanged }) {
                       <VersionBadge status={version.status} />
                     </td>
                     <td>{formatRange(version.effective_from, version.effective_to)}</td>
-                    <td>{commissionTableLabel(version.commission_table_type)}</td>
+                    <td>{version.published_by_email || "—"}</td>
+                    <td>{reason}</td>
+                    <td>{changeSummary}</td>
                     <td>{rateCount}</td>
-                    <td>{version.commission_rules?.length || 0}</td>
-                    <td>
-                      <textarea
-                        className="quota-editor"
-                        rows={2}
-                        value={quotaLines}
-                        disabled={version.status === "Archived" || busyId === version.id}
-                        onChange={(e) =>
-                          setQuotasDraft((prev) => ({
-                            ...prev,
-                            [version.id]: e.target.value,
-                          }))
-                        }
-                        placeholder="2026-01,1000000,INR"
-                      />
-                      {version.status !== "Archived" ? (
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          style={{ marginTop: 6 }}
-                          disabled={busyId === version.id}
-                          onClick={() => saveQuotas(version)}
-                        >
-                          Save quotas
-                        </button>
-                      ) : null}
-                    </td>
+                    <td>{ruleCount}</td>
                     <td>
                       <div className="comp-plans-actions">
                         <button
@@ -264,7 +228,9 @@ function PlanVersionHistory({ plan, onVersionsChanged }) {
                           disabled={busyId === version.id}
                           onClick={() => runAction(version.id, "clone")}
                         >
-                          Clone
+                          {version.status === "Published" || version.status === "Archived"
+                            ? "Rollback / Clone"
+                            : "Clone"}
                         </button>
                         {version.status === "Draft" ? (
                           <button
@@ -295,6 +261,7 @@ function PlanVersionHistory({ plan, onVersionsChanged }) {
           </table>
         </div>
         </div>
+        </>
       )}
 
       <div className="version-compare">
@@ -303,6 +270,7 @@ function PlanVersionHistory({ plan, onVersionsChanged }) {
           <select
             value={compareLeft}
             onChange={(e) => setCompareLeft(e.target.value)}
+            aria-label="Left version"
           >
             <option value="">Left version</option>
             {versions.map((v) => (
@@ -314,6 +282,7 @@ function PlanVersionHistory({ plan, onVersionsChanged }) {
           <select
             value={compareRight}
             onChange={(e) => setCompareRight(e.target.value)}
+            aria-label="Right version"
           >
             <option value="">Right version</option>
             {versions.map((v) => (
@@ -349,19 +318,72 @@ function PlanVersionHistory({ plan, onVersionsChanged }) {
             ) : (
               <p className="muted-mini">No header field differences.</p>
             )}
-            <pre className="version-compare__json">
-              {JSON.stringify(
-                {
-                  rate_tables: comparison.rate_tables,
-                  flat_rate_tables: comparison.flat_rate_tables,
-                  lookup_tables: comparison.lookup_tables,
-                  rules: comparison.rules,
-                  quotas: comparison.quotas,
-                },
-                null,
-                2
-              )}
-            </pre>
+            {[
+              ["rate_tables", "Rate tables"],
+              ["flat_rate_tables", "Flat rates"],
+              ["lookup_tables", "Lookup tables"],
+              ["rules", "Rules"],
+              ["quotas", "Quotas"],
+            ].map(([key, label]) => {
+              const block = comparison[key];
+              if (!block) return null;
+              const leftCount = Array.isArray(block.left)
+                ? block.left.length
+                : block.left
+                  ? Object.keys(block.left).length
+                  : 0;
+              const rightCount = Array.isArray(block.right)
+                ? block.right.length
+                : block.right
+                  ? Object.keys(block.right).length
+                  : 0;
+              const changed = JSON.stringify(block.left) !== JSON.stringify(block.right);
+              return (
+                <div key={key} className="version-compare__section">
+                  <h5>
+                    {label}{" "}
+                    <span className="muted-mini">
+                      ({leftCount} → {rightCount}
+                      {changed ? " · changed" : " · identical"})
+                    </span>
+                  </h5>
+                  {changed ? (
+                    <div className="version-compare__cols">
+                      <div>
+                        <strong>Left</strong>
+                        <ul>
+                          {(Array.isArray(block.left) ? block.left : [block.left])
+                            .filter(Boolean)
+                            .slice(0, 12)
+                            .map((row, idx) => (
+                              <li key={`l-${key}-${idx}`}>
+                                {typeof row === "object"
+                                  ? Object.values(row).filter((v) => v != null && v !== "").slice(0, 4).join(" · ")
+                                  : String(row)}
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <strong>Right</strong>
+                        <ul>
+                          {(Array.isArray(block.right) ? block.right : [block.right])
+                            .filter(Boolean)
+                            .slice(0, 12)
+                            .map((row, idx) => (
+                              <li key={`r-${key}-${idx}`}>
+                                {typeof row === "object"
+                                  ? Object.values(row).filter((v) => v != null && v !== "").slice(0, 4).join(" · ")
+                                  : String(row)}
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         ) : null}
       </div>

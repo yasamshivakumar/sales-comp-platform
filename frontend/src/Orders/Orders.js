@@ -1,68 +1,73 @@
-import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
-import { useToast } from "../Components/Toast";
-import PageHeader from "../Components/PageHeader";
+import { Navigate, Route, Routes, useSearchParams, Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import TransactionCenter from "./TransactionCenter";
+import TransactionWorkspace from "./TransactionWorkspace";
 import OrderForm from "./OrderForm";
 import OrderUpload from "./OrderUpload";
-import OrderList from "./OrderList";
 import "./orders.css";
 
-const TABS = [
-  { id: "queue", label: "Order queue" },
-  { id: "create", label: "Create order" },
-  { id: "import", label: "Import CSV" },
-];
+function CreatePage({ onCreated }) {
+  return (
+    <div className="tx-subpage">
+      <Link className="cp-btn-ghost" to="/orders" style={{ alignSelf: "flex-start" }}>
+        ← Orders
+      </Link>
+      <OrderForm onOrderCreated={onCreated} />
+    </div>
+  );
+}
 
+function ImportPage({ onDone }) {
+  return (
+    <div className="tx-subpage">
+      <OrderUpload onUploadSuccess={onDone} />
+    </div>
+  );
+}
+
+/**
+ * Sales Transaction Operations — routes
+ * /orders           → Operations Center
+ * /orders/new       → Create
+ * /orders/import    → Import wizard
+ * /orders/:id/*     → Detail workspace
+ */
 function Orders() {
-  const { info } = useToast();
   const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState("queue");
-  const [listRefreshKey, setListRefreshKey] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Legacy ?tab= support
+  const legacyTab = searchParams.get("tab");
 
   useEffect(() => {
-    const tab = searchParams.get("tab");
-    if (tab && TABS.some((t) => t.id === tab)) {
-      setActiveTab(tab);
-    }
-  }, [searchParams]);
-
-  const handleUploadSuccess = () => {
-    setListRefreshKey((key) => key + 1);
-    setActiveTab("queue");
-    info("Orders imported. Open Order queue to mark Booked orders as Success.");
-  };
-
-  const handleOrderCreated = () => {
-    setListRefreshKey((key) => key + 1);
-  };
+    // no-op; center reads refreshKey via remount keys when needed
+  }, [legacyTab]);
 
   return (
-    <div className="orders-page">
-      <PageHeader badge="Transactions" title="Orders" />
-
-      <div className="orders-toolbar">
-        <div className="orders-tabs" role="tablist">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              className={`orders-tab${activeTab === tab.id ? " orders-tab--active" : ""}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="orders-workspace">
-        {activeTab === "queue" && <OrderList refreshKey={listRefreshKey} />}
-        {activeTab === "create" && <OrderForm onOrderCreated={handleOrderCreated} />}
-        {activeTab === "import" && <OrderUpload onUploadSuccess={handleUploadSuccess} />}
-      </div>
-    </div>
+    <Routes>
+      <Route
+        index
+        element={
+          legacyTab === "create" ? (
+            <Navigate to="new" replace />
+          ) : legacyTab === "import" ? (
+            <Navigate to="import" replace />
+          ) : (
+            <TransactionCenter refreshKey={refreshKey} />
+          )
+        }
+      />
+      <Route
+        path="new"
+        element={<CreatePage onCreated={() => setRefreshKey((k) => k + 1)} />}
+      />
+      <Route
+        path="import"
+        element={<ImportPage onDone={() => setRefreshKey((k) => k + 1)} />}
+      />
+      <Route path=":orderId/*" element={<TransactionWorkspace />} />
+      <Route path="*" element={<Navigate to="." replace />} />
+    </Routes>
   );
 }
 

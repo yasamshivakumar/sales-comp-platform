@@ -308,3 +308,141 @@ def _webhook_handler(request, webhook_secret, sync_type):
         "log_id": log.pk,
         "result": log.result,
     })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def integration_center_catalog(request):
+    require_admin(request)
+    from .integration_center import build_center_catalog
+
+    return Response(build_center_catalog())
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def integration_center_summary(request):
+    require_admin(request)
+    from .integration_center import build_center_summary
+
+    return Response(build_center_summary(request))
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def integration_center_wizard(request):
+    require_admin(request)
+    from .integration_center import create_connection_from_wizard, _serialize_connection
+
+    integration, err = create_connection_from_wizard(request, request.data or {})
+    if err:
+        return Response(err, status=400)
+    return Response(_serialize_connection(integration), status=201)
+
+
+@api_view(["GET", "PUT"])
+@permission_classes([IsAuthenticated])
+def integration_center_mappings(request, connection_id):
+    require_admin(request)
+    from .integration_center import (
+        _integrations_qs,
+        list_field_mappings,
+        update_field_mappings,
+        validate_mappings,
+    )
+
+    integration = _integrations_qs(request).filter(id=connection_id).first()
+    if not integration:
+        return Response({"error": "Connection not found"}, status=404)
+    if request.method == "GET":
+        return Response(
+            {
+                "mappings": list_field_mappings(integration),
+                "validation": validate_mappings(integration),
+            }
+        )
+    data, err = update_field_mappings(
+        request, connection_id, request.data.get("mappings") or request.data or []
+    )
+    if err:
+        return Response(err, status=400)
+    return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def integration_center_preview(request, connection_id):
+    require_admin(request)
+    from .integration_center import preview_records
+
+    resource = request.query_params.get("resource") or "deals"
+    try:
+        limit = int(request.query_params.get("limit") or 10)
+    except ValueError:
+        limit = 10
+    data, err = preview_records(request, connection_id, resource=resource, limit=limit)
+    if err:
+        return Response(err, status=400)
+    return Response(data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def integration_center_sync(request, connection_id):
+    require_admin(request)
+    from .integration_center import run_center_sync
+
+    sync_type = (request.data or {}).get("sync_type") or "full"
+    data, err = run_center_sync(request, connection_id, sync_type=sync_type)
+    if err:
+        return Response(err, status=400)
+    return Response(data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def integration_center_disconnect(request, connection_id):
+    require_admin(request)
+    from .integration_center import disconnect_connection
+
+    data, err = disconnect_connection(request, connection_id)
+    if err:
+        return Response(err, status=404)
+    return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def integration_center_activity(request):
+    require_admin(request)
+    from .integration_center import list_sync_activity
+
+    connection_id = request.query_params.get("connection_id")
+    return Response(list_sync_activity(request, connection_id=connection_id))
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def integration_center_identities(request):
+    require_admin(request)
+    from .integration_center import list_identity_mappings, upsert_identity_mapping
+
+    if request.method == "GET":
+        connection_id = request.query_params.get("connection_id")
+        return Response({"results": list_identity_mappings(request, connection_id)})
+    data, err = upsert_identity_mapping(request, request.data or {})
+    if err:
+        return Response(err, status=400)
+    return Response(data, status=201)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def integration_center_retry_job(request, job_id):
+    require_admin(request)
+    from .integration_center import retry_failed_job
+
+    data, err = retry_failed_job(request, job_id)
+    if err:
+        return Response(err, status=400)
+    return Response(data)

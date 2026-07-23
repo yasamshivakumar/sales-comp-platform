@@ -11,6 +11,9 @@ const INITIAL_FORM = {
   status: "Active",
   pay_period_type: "Monthly",
   plan_basis: "Role",
+  plan_type: "sales_commission",
+  owner: "",
+  approver: "",
   position_name: "",
   role: "",
   title: "",
@@ -58,6 +61,9 @@ function formFromPlan(plan) {
     status: plan.status || "Active",
     pay_period_type: plan.pay_period_type || "Monthly",
     plan_basis: plan.plan_basis || "Role",
+    plan_type: plan.plan_type || "sales_commission",
+    owner: plan.owner || "",
+    approver: plan.approver || "",
     position_name: plan.position_name || "",
     role: plan.role || "",
     title: plan.title || "",
@@ -106,6 +112,9 @@ function PlanHeaderForm({ initialPlan = null, onPlanCreated, onPlanUpdated, onCa
         role: form.role.trim(),
         status: form.status || "Active",
         plan_basis: form.plan_basis || "Role",
+        plan_type: form.plan_type || "sales_commission",
+        owner: form.owner || "",
+        approver: form.approver || "",
         effective_start_date: form.effective_from,
         effective_end_date: form.effective_to || null,
         pay_period_type: form.pay_period_type || "Monthly",
@@ -197,6 +206,24 @@ function PlanHeaderForm({ initialPlan = null, onPlanCreated, onPlanUpdated, onCa
         <div className="form-field">
           <label>Plan name <span style={req}>*</span></label>
           <input name="plan_name" value={form.plan_name} onChange={handleChange} placeholder="Sales Executive Plan" />
+        </div>
+        <div className="form-field">
+          <label>Plan type</label>
+          <select name="plan_type" value={form.plan_type} onChange={handleChange}>
+            <option value="sales_commission">Sales Commission</option>
+            <option value="bonus_plan">Bonus Plan</option>
+            <option value="manager_override">Manager Override</option>
+            <option value="channel_incentive">Channel Incentive</option>
+            <option value="spiff">SPIFF</option>
+          </select>
+        </div>
+        <div className="form-field">
+          <label>Owner</label>
+          <input name="owner" value={form.owner} onChange={handleChange} placeholder="Sales Operations" />
+        </div>
+        <div className="form-field">
+          <label>Approver</label>
+          <input name="approver" value={form.approver} onChange={handleChange} placeholder="Finance Director" />
         </div>
         <div className="form-field">
           <label>Role <span style={req}>*</span></label>

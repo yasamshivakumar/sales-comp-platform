@@ -242,39 +242,69 @@
   font-size: 0.82rem !important;
 }
 
-.login-glass .auth-text-field .MuiOutlinedInput-root {
-  background: #fff !important;
-  border-radius: 12px !important;
-  box-shadow: 0 4px 14px rgba(0, 18, 46, 0.12);
+/* Labels sit outside .auth-text-field in AuthTextField */
+.login-glass__card .auth-text-field-label,
+.login-glass__card .auth-text-field-wrap > .MuiTypography-root,
+.login-glass__card label {
+  color: rgba(255, 255, 255, 0.9) !important;
 }
 
-.login-glass .auth-text-field .MuiOutlinedInput-notchedOutline {
-  border-color: transparent !important;
+.login-glass .auth-text-field .MuiOutlinedInput-root,
+.login-glass .auth-text-field .MuiInputBase-root {
+  background: #ffffff !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 14px rgba(0, 18, 46, 0.12);
+  color: #0f172a !important;
+}
+
+.login-glass .auth-text-field .MuiOutlinedInput-notchedOutline,
+.login-glass .auth-text-field fieldset {
+  border-color: rgba(15, 23, 42, 0.12) !important;
 }
 
 .login-glass .auth-text-field .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline,
 .login-glass .auth-text-field .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline {
-  border-color: rgba(1, 118, 211, 0.45) !important;
+  border-color: rgba(1, 118, 211, 0.55) !important;
 }
 
-.login-glass .auth-text-field .MuiOutlinedInput-input {
+/* Always dark text on white fields — ignore app dark theme on this page */
+.login-glass .auth-text-field .MuiOutlinedInput-input,
+.login-glass .auth-text-field .MuiInputBase-input,
+.login-glass .auth-text-field input,
+[data-theme="dark"] .login-glass .auth-text-field .MuiOutlinedInput-input,
+[data-theme="dark"] .login-glass .auth-text-field .MuiInputBase-input,
+[data-theme="dark"] .login-glass .auth-text-field input {
   color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  caret-color: #0f172a !important;
   background: transparent !important;
   padding: 12px 14px !important;
   font-size: 0.95rem !important;
+  opacity: 1 !important;
 }
 
-.login-glass .auth-text-field .MuiOutlinedInput-input::placeholder {
-  color: #94a3b8 !important;
-  opacity: 1;
+.login-glass .auth-text-field .MuiOutlinedInput-input::placeholder,
+.login-glass .auth-text-field input::placeholder,
+[data-theme="dark"] .login-glass .auth-text-field input::placeholder {
+  color: #64748b !important;
+  -webkit-text-fill-color: #64748b !important;
+  opacity: 1 !important;
 }
 
 .login-glass .auth-text-field input:-webkit-autofill,
 .login-glass .auth-text-field input:-webkit-autofill:hover,
-.login-glass .auth-text-field input:-webkit-autofill:focus {
+.login-glass .auth-text-field input:-webkit-autofill:focus,
+[data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill,
+[data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill:hover,
+[data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill:focus {
   -webkit-text-fill-color: #0f172a !important;
-  box-shadow: 0 0 0 1000px #fff inset !important;
+  caret-color: #0f172a !important;
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
   transition: background-color 9999s ease-out;
+}
+
+.login-glass .auth-text-field .MuiIconButton-root {
+  color: #475569 !important;
 }
 
 .login-glass__hint {

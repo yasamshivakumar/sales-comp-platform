@@ -20,7 +20,9 @@ function HierarchySection({ form, handleChange, renderField }) {
       api
         .get(`user-setup/?${params.toString()}`)
         .then((res) => {
-          if (!cancelled) setParticipants(res.data || []);
+          if (cancelled) return;
+          const data = res.data;
+          setParticipants(Array.isArray(data) ? data : data?.results || []);
         })
         .catch(() => {
           if (!cancelled) setParticipants([]);

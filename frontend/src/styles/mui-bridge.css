@@ -1,4 +1,4 @@
-/* Enterprise bridge — legacy markup + MUI theme */
+/* Enterprise bridge ? legacy markup + MUI theme */
 
 .panel {
   border-radius: 16px !important;
@@ -279,7 +279,7 @@ table tbody tr:hover {
   color: #94a3b8 !important;
 }
 
-/* Top bar profile chip — keep name/role readable in dark mode */
+/* Top bar profile chip ? keep name/role readable in dark mode */
 [data-theme="dark"] .app-profile-chip {
   color: #f3f4f6 !important;
 }
@@ -412,7 +412,7 @@ table tbody tr:hover {
   max-width: 220px;
 }
 
-/* Dashboard command bar — override global white input defaults */
+/* Dashboard command bar ? override global white input defaults */
 .ra-command-bar .ra-command-date.compact-date-field .MuiOutlinedInput-root {
   background: rgba(255, 255, 255, 0.97) !important;
 }
@@ -447,4 +447,146 @@ table tbody tr:hover {
   border-color: rgba(148, 163, 184, 0.45) !important;
 }
 
-/* Sidebar — legacy MUI overrides (nav uses .sidebar-nav-item now) */
+/* Sidebar ? legacy MUI overrides (nav uses .sidebar-nav-item now) */
+
+/* =========================================================
+   Dark mode ? readable form fields (app-wide)
+   Prevents light text on light surfaces / washed-out inputs
+   ========================================================= */
+
+[data-theme="dark"] .auth-text-field-label {
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .MuiDialog-paper .auth-text-field-label,
+[data-theme="dark"] .MuiDialogContent-root .auth-text-field-label {
+  color: #e2e8f0 !important;
+}
+
+/* Native controls */
+[data-theme="dark"] input:not(.search-bar__input):not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[data-theme="dark"] textarea,
+[data-theme="dark"] select,
+[data-theme="dark"] .input {
+  background: rgba(15, 23, 42, 0.88) !important;
+  border-color: rgba(148, 163, 184, 0.35) !important;
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+  caret-color: #f8fafc !important;
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder,
+[data-theme="dark"] select::placeholder {
+  color: #94a3b8 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
+  opacity: 1 !important;
+}
+
+[data-theme="dark"] input:disabled,
+[data-theme="dark"] textarea:disabled,
+[data-theme="dark"] select:disabled {
+  color: rgba(248, 250, 252, 0.5) !important;
+  -webkit-text-fill-color: rgba(248, 250, 252, 0.5) !important;
+  opacity: 0.7 !important;
+}
+
+/* MUI outlined fields */
+[data-theme="dark"] .MuiOutlinedInput-root,
+[data-theme="dark"] .MuiFilledInput-root,
+[data-theme="dark"] .MuiInputBase-root.MuiOutlinedInput-root {
+  background: rgba(15, 23, 42, 0.88) !important;
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .MuiOutlinedInput-input,
+[data-theme="dark"] .MuiInputBase-input,
+[data-theme="dark"] .MuiSelect-select {
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+  caret-color: #f8fafc !important;
+}
+
+[data-theme="dark"] .MuiOutlinedInput-input::placeholder,
+[data-theme="dark"] .MuiInputBase-input::placeholder {
+  color: #94a3b8 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
+  opacity: 1 !important;
+}
+
+[data-theme="dark"] .MuiOutlinedInput-notchedOutline,
+[data-theme="dark"] .MuiOutlinedInput-root fieldset {
+  border-color: rgba(148, 163, 184, 0.4) !important;
+}
+
+[data-theme="dark"] .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline,
+[data-theme="dark"] .MuiOutlinedInput-root:hover fieldset {
+  border-color: rgba(148, 163, 184, 0.65) !important;
+}
+
+[data-theme="dark"] .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline,
+[data-theme="dark"] .MuiOutlinedInput-root.Mui-focused fieldset {
+  border-color: #3b82f6 !important;
+}
+
+[data-theme="dark"] .MuiInputLabel-root,
+[data-theme="dark"] .MuiFormLabel-root {
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .MuiInputLabel-root.Mui-focused {
+  color: #93c5fd !important;
+}
+
+[data-theme="dark"] .MuiSvgIcon-root.MuiSelect-icon,
+[data-theme="dark"] .MuiSelect-icon {
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .MuiFormHelperText-root {
+  color: #94a3b8 !important;
+}
+
+/* Autofill in dark mode */
+[data-theme="dark"] input:-webkit-autofill,
+[data-theme="dark"] input:-webkit-autofill:hover,
+[data-theme="dark"] input:-webkit-autofill:focus,
+[data-theme="dark"] textarea:-webkit-autofill,
+[data-theme="dark"] select:-webkit-autofill {
+  -webkit-text-fill-color: #f8fafc !important;
+  caret-color: #f8fafc !important;
+  box-shadow: 0 0 0 1000px #0f172a inset !important;
+  transition: background-color 9999s ease-out;
+}
+
+/* Date / number spin buttons stay readable */
+[data-theme="dark"] input[type="date"],
+[data-theme="dark"] input[type="time"],
+[data-theme="dark"] input[type="month"],
+[data-theme="dark"] input[type="datetime-local"],
+[data-theme="dark"] input[type="number"] {
+  color-scheme: dark;
+}
+
+[data-theme="dark"] .tx-filter-drawer__panel input,
+[data-theme="dark"] .tx-filter-drawer__panel select,
+[data-theme="dark"] .tx-filter-drawer__panel textarea,
+[data-theme="dark"] .cp-filter-drawer__panel input,
+[data-theme="dark"] .cp-filter-drawer__panel select,
+[data-theme="dark"] .cp-filter-drawer__panel textarea,
+[data-theme="dark"] .pe-filter-drawer__panel input,
+[data-theme="dark"] .pe-filter-drawer__panel select,
+[data-theme="dark"] .pe-filter-drawer__panel textarea {
+  background: rgba(15, 23, 42, 0.95) !important;
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+  caret-color: #f8fafc !important;
+  border-color: rgba(148, 163, 184, 0.4) !important;
+}
+
+[data-theme="dark"] .tx-filter-drawer__panel input::placeholder,
+[data-theme="dark"] .cp-filter-drawer__panel input::placeholder,
+[data-theme="dark"] .pe-filter-drawer__panel input::placeholder {
+  color: #94a3b8 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
+}

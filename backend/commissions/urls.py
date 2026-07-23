@@ -30,8 +30,15 @@ from .views import (
     CommissionViewSet,
     UserProfileListCreateView,
     UserProfileUploadView,
+    UserProfileUploadValidateView,
+    UserProfileImportHistoryView,
     CompensationPlanListCreateView,
     CompensationPlanDetailView,
+    compensation_plans_summary,
+    compensation_plan_participants,
+    compensation_plan_activity,
+    compensation_plan_insights,
+    compensation_plans_search,
     CompensationTierListCreateView,
     OrderListCreateView,
     HierarchyRelationshipListCreateView,
@@ -51,11 +58,19 @@ from .views import (
     sales_by_region_report,
     employee_earnings_report,
     period_analytics_report,
+    command_center_report,
+    employee_transparency_report,
     approve_commissions_view,
     commission_payroll_export,
     recalculate_commissions_view,
     audit_log_list,
     import_job_detail,
+    commission_operations_summary,
+    commission_operations_grid,
+    commission_operations_detail,
+    commission_operations_bulk,
+    commission_adjustment_create,
+    commission_operations_export,
 )
 
 router = DefaultRouter()
@@ -77,6 +92,56 @@ urlpatterns = [
         "integrations/providers/",
         integration_views.integration_providers,
         name="integration-providers",
+    ),
+    path(
+        "integrations/center/catalog/",
+        integration_views.integration_center_catalog,
+        name="integration-center-catalog",
+    ),
+    path(
+        "integrations/center/summary/",
+        integration_views.integration_center_summary,
+        name="integration-center-summary",
+    ),
+    path(
+        "integrations/center/wizard/",
+        integration_views.integration_center_wizard,
+        name="integration-center-wizard",
+    ),
+    path(
+        "integrations/center/activity/",
+        integration_views.integration_center_activity,
+        name="integration-center-activity",
+    ),
+    path(
+        "integrations/center/identities/",
+        integration_views.integration_center_identities,
+        name="integration-center-identities",
+    ),
+    path(
+        "integrations/center/<int:connection_id>/mappings/",
+        integration_views.integration_center_mappings,
+        name="integration-center-mappings",
+    ),
+    path(
+        "integrations/center/<int:connection_id>/preview/",
+        integration_views.integration_center_preview,
+        name="integration-center-preview",
+    ),
+    path(
+        "integrations/center/<int:connection_id>/sync/",
+        integration_views.integration_center_sync,
+        name="integration-center-sync",
+    ),
+    path(
+        "integrations/center/<int:connection_id>/disconnect/",
+        integration_views.integration_center_disconnect,
+        name="integration-center-disconnect",
+    ),
+    path(
+        "integrations/center/jobs/<int:job_id>/retry/",
+        integration_views.integration_center_retry_job,
+        name="integration-center-retry-job",
     ),
     path(
         "integrations/<int:integration_id>/test/",
@@ -184,6 +249,36 @@ urlpatterns = [
         name="commission-approve",
     ),
     path(
+        "commissions/operations-summary/",
+        commission_operations_summary,
+        name="commission-operations-summary",
+    ),
+    path(
+        "commissions/operations-grid/",
+        commission_operations_grid,
+        name="commission-operations-grid",
+    ),
+    path(
+        "commissions/operations-detail/",
+        commission_operations_detail,
+        name="commission-operations-detail",
+    ),
+    path(
+        "commissions/operations-bulk/",
+        commission_operations_bulk,
+        name="commission-operations-bulk",
+    ),
+    path(
+        "commissions/adjustments/",
+        commission_adjustment_create,
+        name="commission-adjustment-create",
+    ),
+    path(
+        "commissions/operations-export/",
+        commission_operations_export,
+        name="commission-operations-export",
+    ),
+    path(
         "commissions/export/",
         commission_payroll_export,
         name="commission-payroll-export",
@@ -227,9 +322,34 @@ urlpatterns = [
         name="compensation-plans",
     ),
     path(
+        "compensation-plans/summary/",
+        compensation_plans_summary,
+        name="compensation-plans-summary",
+    ),
+    path(
+        "compensation-plans/search/",
+        compensation_plans_search,
+        name="compensation-plans-search",
+    ),
+    path(
         "compensation-plans/<int:pk>/",
         CompensationPlanDetailView.as_view(),
         name="compensation-plan-detail",
+    ),
+    path(
+        "compensation-plans/<int:pk>/participants/",
+        compensation_plan_participants,
+        name="compensation-plan-participants",
+    ),
+    path(
+        "compensation-plans/<int:pk>/activity/",
+        compensation_plan_activity,
+        name="compensation-plan-activity",
+    ),
+    path(
+        "compensation-plans/<int:pk>/insights/",
+        compensation_plan_insights,
+        name="compensation-plan-insights",
     ),
     path(
         "compensation-plans/<int:plan_id>/versions/",
@@ -277,10 +397,28 @@ urlpatterns = [
         name="commission-rule-detail",
     ),
     path("user-setup/", UserProfileListCreateView.as_view(), name="user-setup"),
+    path("user-setup/summary/", views.PeopleSummaryView.as_view(), name="people-summary"),
+    path("user-setup/bulk/", views.PeopleBulkActionView.as_view(), name="people-bulk"),
+    path("user-setup/<int:pk>/", views.PeopleDetailView.as_view(), name="people-detail"),
+    path(
+        "user-setup/<int:pk>/invite/",
+        views.PeopleInviteActionView.as_view(),
+        name="people-invite-action",
+    ),
     path(
         "user-setup-upload/",
         UserProfileUploadView.as_view(),
         name="user-setup-upload",
+    ),
+    path(
+        "user-setup-upload/validate/",
+        UserProfileUploadValidateView.as_view(),
+        name="user-setup-upload-validate",
+    ),
+    path(
+        "user-setup-upload/history/",
+        UserProfileImportHistoryView.as_view(),
+        name="user-setup-upload-history",
     ),
     path(
         "hierarchy-relationships/",
@@ -289,8 +427,15 @@ urlpatterns = [
     ),
     path("compensation-tiers/", CompensationTierListCreateView.as_view()),
     path("orders/", OrderListCreateView.as_view(), name="orders"),
+    path("orders/summary/", views.OrderSummaryView.as_view(), name="orders-summary"),
+    path("orders/bulk/", views.OrderBulkActionView.as_view(), name="orders-bulk"),
     path("orders/<int:pk>/", views.OrderDetailView.as_view(), name="order-detail"),
     path("orders-upload/", views.OrderUploadView.as_view(), name="orders-upload"),
+    path(
+        "orders-upload/validate/",
+        views.OrderUploadValidateView.as_view(),
+        name="orders-upload-validate",
+    ),
     path(
         "reports/commission-summary/",
         commission_summary_report,
@@ -315,5 +460,15 @@ urlpatterns = [
         "reports/period-analytics/",
         period_analytics_report,
         name="period-analytics-report",
+    ),
+    path(
+        "reports/command-center/",
+        command_center_report,
+        name="command-center-report",
+    ),
+    path(
+        "reports/employee-transparency/",
+        employee_transparency_report,
+        name="employee-transparency-report",
     ),
 ]

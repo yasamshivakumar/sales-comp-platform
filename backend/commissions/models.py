@@ -113,11 +113,15 @@ class Commission(models.Model):
     STATUS_MANAGER_APPROVED = "manager_approved"
     STATUS_APPROVED = "approved"
     STATUS_PAID = "paid"
+    STATUS_REJECTED = "rejected"
+    STATUS_FAILED = "failed"
     STATUS_CHOICES = [
         (STATUS_CALCULATED, "Calculated"),
         (STATUS_MANAGER_APPROVED, "Manager approved"),
         (STATUS_APPROVED, "Finance approved"),
         (STATUS_PAID, "Paid"),
+        (STATUS_REJECTED, "Rejected"),
+        (STATUS_FAILED, "Failed"),
     ]
     LOCKED_STATUSES = (
         STATUS_MANAGER_APPROVED,
@@ -235,6 +239,14 @@ class Commission(models.Model):
         blank=True,
     )
     currency = models.CharField(max_length=10, blank=True, default="")
+    reviewer = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="commissions_to_review",
+    )
+    rejection_reason = models.TextField(blank=True, default="")
 
     class Meta:
         indexes = [
@@ -262,7 +274,55 @@ class Commission(models.Model):
         return f"{self.employee.name} - {self.commission_amount}"
 
 
+class CommissionAdjustment(models.Model):
+    """Manual money adjustment layered on engine-calculated commission_amount."""
 
+    TYPE_MANUAL = "manual"
+    TYPE_BONUS = "bonus"
+    TYPE_CORRECTION = "correction"
+    TYPE_CLAWBACK = "clawback"
+    TYPE_CHOICES = [
+        (TYPE_MANUAL, "Manual Adjustment"),
+        (TYPE_BONUS, "Bonus"),
+        (TYPE_CORRECTION, "Correction"),
+        (TYPE_CLAWBACK, "Clawback"),
+    ]
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="commission_adjustments",
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+    commission = models.ForeignKey(
+        Commission,
+        on_delete=models.CASCADE,
+        related_name="adjustments",
+    )
+    adjustment_type = models.CharField(
+        max_length=20,
+        choices=TYPE_CHOICES,
+        default=TYPE_MANUAL,
+        db_index=True,
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    reason = models.TextField()
+    created_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="commission_adjustments_created",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.adjustment_type} {self.amount} on commission #{self.commission_id}"
 
 
 class CompensationPlan(models.Model):
@@ -395,6 +455,45 @@ class CompensationPlan(models.Model):
         max_length=100,
         blank=True,
         null=True
+    )
+
+    PLAN_TYPE_SALES = "sales_commission"
+    PLAN_TYPE_BONUS = "bonus_plan"
+    PLAN_TYPE_OVERRIDE = "manager_override"
+    PLAN_TYPE_CHANNEL = "channel_incentive"
+    PLAN_TYPE_SPIFF = "spiff"
+    PLAN_TYPE_CHOICES = [
+        (PLAN_TYPE_SALES, "Sales Commission"),
+        (PLAN_TYPE_BONUS, "Bonus Plan"),
+        (PLAN_TYPE_OVERRIDE, "Manager Override"),
+        (PLAN_TYPE_CHANNEL, "Channel Incentive"),
+        (PLAN_TYPE_SPIFF, "SPIFF"),
+    ]
+    plan_type = models.CharField(
+        max_length=32,
+        choices=PLAN_TYPE_CHOICES,
+        default=PLAN_TYPE_SALES,
+        db_index=True,
+        help_text="Business classification for catalog filtering and reporting.",
+    )
+    owner = models.CharField(
+        max_length=150,
+        blank=True,
+        default="",
+        help_text="Owning team or function (e.g. Sales Operations).",
+    )
+    approver = models.CharField(
+        max_length=150,
+        blank=True,
+        default="",
+        help_text="Approving role or person (e.g. Finance Director).",
+    )
+    last_modified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="modified_compensation_plans",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -944,6 +1043,42 @@ class UserProfile(models.Model):
         max_length=255,
         blank=True
     )
+    phone = models.CharField(max_length=40, blank=True, default="")
+    department = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Department / org unit (People & Access).",
+    )
+    account_status = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="Optional override: active, suspended, deactivated.",
+    )
+    commission_eligible = models.BooleanField(
+        default=True,
+        help_text="Whether this person is eligible for commission calculations.",
+    )
+    custom_permissions = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Optional permission code overrides for custom roles.",
+    )
+    assigned_compensation_plan = models.ForeignKey(
+        "CompensationPlan",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_participants",
+        help_text="Explicit compensation plan assignment for this participant.",
+    )
+    comp_effective_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Effective date for compensation plan / quota assignment.",
+    )
 
     created_at = models.DateTimeField(
         auto_now_add=True
@@ -988,6 +1123,7 @@ class UserInvite(models.Model):
     token_hash = models.CharField(max_length=64, unique=True, db_index=True)
     expires_at = models.DateTimeField(db_index=True)
     sent_at = models.DateTimeField(null=True, blank=True)
+    opened_at = models.DateTimeField(null=True, blank=True)
     accepted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1071,6 +1207,12 @@ class Order(models.Model):
     )
     region = models.CharField(max_length=100, blank=True, null=True, db_index=True)
     customer_segment = models.CharField(max_length=100, blank=True, null=True, db_index=True)
+    customer_name = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Customer / account name for the transaction.",
+    )
     business_group = models.CharField(max_length=100, blank=True, null=True)
     territory = models.ForeignKey(
         Territory,
@@ -1101,6 +1243,26 @@ class Order(models.Model):
     currency = models.CharField(
         max_length=10,
         default="INR"
+    )
+
+    # Transaction operations enrichment (additive; does not change Success eligibility)
+    source = models.CharField(
+        max_length=32,
+        blank=True,
+        default="manual",
+        help_text="Origin: manual, csv, crm, imported.",
+    )
+    sales_credits = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Credit split rows: [{employee_id, name, role, percent}].",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="orders_created",
     )
 
     needs_recalculation = models.BooleanField(
@@ -1348,12 +1510,47 @@ class ExternalIntegration(models.Model):
     PROVIDER_WEBHOOK = "webhook"
     PROVIDER_HUBSPOT = "hubspot"
     PROVIDER_ZOHO = "zoho"
+    PROVIDER_DYNAMICS = "dynamics"
     PROVIDER_CHOICES = [
         (PROVIDER_SALESFORCE, "Salesforce"),
         (PROVIDER_GENERIC_REST, "Generic REST API"),
         (PROVIDER_WEBHOOK, "Webhook / Zapier"),
         (PROVIDER_HUBSPOT, "HubSpot (REST)"),
         (PROVIDER_ZOHO, "Zoho CRM"),
+        (PROVIDER_DYNAMICS, "Microsoft Dynamics (coming soon)"),
+    ]
+
+    STATUS_CONNECTED = "connected"
+    STATUS_SYNCING = "syncing"
+    STATUS_FAILED = "failed"
+    STATUS_AUTH_EXPIRED = "auth_expired"
+    STATUS_DISCONNECTED = "disconnected"
+    STATUS_CHOICES = [
+        (STATUS_CONNECTED, "Connected"),
+        (STATUS_SYNCING, "Syncing"),
+        (STATUS_FAILED, "Failed"),
+        (STATUS_AUTH_EXPIRED, "Authentication expired"),
+        (STATUS_DISCONNECTED, "Disconnected"),
+    ]
+
+    FREQ_REALTIME = "realtime"
+    FREQ_HOURLY = "hourly"
+    FREQ_DAILY = "daily"
+    FREQ_MANUAL = "manual"
+    FREQ_CHOICES = [
+        (FREQ_REALTIME, "Real-time"),
+        (FREQ_HOURLY, "Hourly"),
+        (FREQ_DAILY, "Daily"),
+        (FREQ_MANUAL, "Manual"),
+    ]
+
+    AUTH_OAUTH = "oauth"
+    AUTH_TOKEN = "token"
+    AUTH_PASSWORD = "password"
+    AUTH_CHOICES = [
+        (AUTH_OAUTH, "OAuth 2.0"),
+        (AUTH_TOKEN, "Access token"),
+        (AUTH_PASSWORD, "Username / password"),
     ]
 
     organization = models.ForeignKey(
@@ -1366,7 +1563,42 @@ class ExternalIntegration(models.Model):
     name = models.CharField(max_length=200)
     provider = models.CharField(max_length=32, choices=PROVIDER_CHOICES, db_index=True)
     is_active = models.BooleanField(default=True)
+    connection_status = models.CharField(
+        max_length=32,
+        choices=STATUS_CHOICES,
+        default=STATUS_CONNECTED,
+        db_index=True,
+    )
+    sync_frequency = models.CharField(
+        max_length=20,
+        choices=FREQ_CHOICES,
+        default=FREQ_MANUAL,
+    )
+    auth_method = models.CharField(
+        max_length=20,
+        choices=AUTH_CHOICES,
+        default=AUTH_TOKEN,
+        blank=True,
+    )
+    connected_org_name = models.CharField(max_length=255, blank=True, default="")
+    connected_user_email = models.EmailField(blank=True, default="")
+    token_expires_at = models.DateTimeField(null=True, blank=True)
+    objects_enabled = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="e.g. {users: true, deals: true, accounts: false, products: false}",
+    )
+    sync_rules = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Trigger and import rules for deals/orders.",
+    )
     credentials = models.JSONField(default=dict, blank=True)
+    encrypted_credentials = models.TextField(
+        blank=True,
+        default="",
+        help_text="Fernet-sealed credential blob (preferred over plaintext JSON).",
+    )
     config = models.JSONField(default=dict, blank=True)
     webhook_secret = models.CharField(
         max_length=64,
@@ -1377,6 +1609,7 @@ class ExternalIntegration(models.Model):
     )
     last_user_sync_at = models.DateTimeField(null=True, blank=True)
     last_order_sync_at = models.DateTimeField(null=True, blank=True)
+    last_sync_at = models.DateTimeField(null=True, blank=True)
     auto_sync_enabled = models.BooleanField(
         default=False,
         help_text="Periodically pull CRM users and deals into Incentra.",
@@ -1401,6 +1634,22 @@ class ExternalIntegration(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.provider})"
+
+    def get_decrypted_credentials(self):
+        from .credential_crypto import credentials_blob_decrypt, unseal_credentials
+
+        if self.encrypted_credentials:
+            return credentials_blob_decrypt(
+                self.encrypted_credentials, fallback=self.credentials
+            )
+        return unseal_credentials(self.credentials)
+
+    def set_encrypted_credentials(self, credentials: dict):
+        from .credential_crypto import credentials_blob_encrypt, seal_credentials
+
+        sealed = seal_credentials(credentials)
+        self.credentials = sealed
+        self.encrypted_credentials = credentials_blob_encrypt(sealed)
 
 
 class IntegrationSyncLog(models.Model):
@@ -1458,6 +1707,122 @@ class IntegrationSyncLog(models.Model):
 
     def __str__(self):
         return f"{self.integration.name} {self.sync_type} ({self.status})"
+
+
+class CRMFieldMapping(models.Model):
+    """Visual field mapping row for a CRM connection (replaces raw JSON for admins)."""
+
+    connection = models.ForeignKey(
+        ExternalIntegration,
+        on_delete=models.CASCADE,
+        related_name="field_mappings",
+    )
+    source_object = models.CharField(max_length=64, db_index=True)
+    source_field = models.CharField(max_length=128)
+    target_field = models.CharField(max_length=128)
+    is_required = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["source_object", "target_field"]
+        unique_together = [("connection", "source_object", "target_field")]
+
+    def __str__(self):
+        return f"{self.source_object}.{self.source_field} → {self.target_field}"
+
+
+class CRMSyncJob(models.Model):
+    """Enterprise sync job record (complements IntegrationSyncLog)."""
+
+    STATUS_PENDING = "pending"
+    STATUS_RUNNING = "running"
+    STATUS_COMPLETED = "completed"
+    STATUS_FAILED = "failed"
+    STATUS_PARTIAL = "partial"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_RUNNING, "Running"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_FAILED, "Failed"),
+        (STATUS_PARTIAL, "Partial"),
+    ]
+
+    connection = models.ForeignKey(
+        ExternalIntegration,
+        on_delete=models.CASCADE,
+        related_name="sync_jobs",
+    )
+    sync_type = models.CharField(max_length=32, db_index=True)
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True
+    )
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    records_processed = models.PositiveIntegerField(default=0)
+    failed_records = models.PositiveIntegerField(default=0)
+    error_details = models.JSONField(default=list, blank=True)
+    result = models.JSONField(default=dict, blank=True)
+    sync_log = models.ForeignKey(
+        IntegrationSyncLog,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="crm_jobs",
+    )
+    triggered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="crm_sync_jobs",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"SyncJob #{self.pk} {self.sync_type} ({self.status})"
+
+
+class CRMIdentityMapping(models.Model):
+    """Maps CRM user IDs to Incentra employees."""
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="crm_identity_mappings",
+        null=True,
+        blank=True,
+    )
+    connection = models.ForeignKey(
+        ExternalIntegration,
+        on_delete=models.CASCADE,
+        related_name="identity_mappings",
+        null=True,
+        blank=True,
+    )
+    crm_provider = models.CharField(max_length=32, db_index=True)
+    crm_user_id = models.CharField(max_length=128, db_index=True)
+    employee_id = models.CharField(max_length=64, db_index=True)
+    employee_email = models.EmailField(blank=True, default="")
+    profile = models.ForeignKey(
+        "UserProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="crm_identity_links",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["crm_provider", "crm_user_id"]
+        unique_together = [("organization", "crm_provider", "crm_user_id")]
+
+    def __str__(self):
+        return f"{self.crm_provider}:{self.crm_user_id} → {self.employee_id}"
 
 
 class CommissionRule(models.Model):

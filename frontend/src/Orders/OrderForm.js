@@ -14,6 +14,7 @@ const INITIAL_FORM = {
   territory: "",
   service_name: "",
   product_name: "",
+  customer_name: "",
   distribution: "",
   region: "",
   customer_segment: "",
@@ -21,6 +22,7 @@ const INITIAL_FORM = {
   sales_amount: "",
   order_status: "Booked",
   currency: "USD",
+  source: "manual",
 };
 
 const PROFILE_DISPLAY_FIELDS = [
@@ -297,6 +299,17 @@ function OrderForm({ onOrderCreated }) {
             value={form.product_name}
             onChange={handleChange}
             placeholder="Enterprise Suite"
+          />
+        </div>
+
+        <div className="form-field">
+          <label htmlFor="customer_name">Customer</label>
+          <input
+            id="customer_name"
+            name="customer_name"
+            value={form.customer_name}
+            onChange={handleChange}
+            placeholder="ABC Corporation"
           />
         </div>
 

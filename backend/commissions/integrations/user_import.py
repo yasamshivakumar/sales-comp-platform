@@ -172,14 +172,27 @@ def process_users_rows(
                 "yes",
             )
 
-            personal_target = row.get("personal_target", 0) or 0
+            personal_target = row.get("personal_target", 0) or row.get("quota", 0) or 0
             personal_target = float(personal_target)
             split_percentage = row.get("split_percentage", 100) or 100
             split_percentage = float(split_percentage)
 
             hire_date = _parse_hire_date(row.get("hire_date", ""))
+            effective_date = _parse_hire_date(
+                row.get("effective_date")
+                or row.get("comp_effective_date")
+                or row.get("plan_effective_date")
+                or ""
+            )
             username = str(row.get("username", "")).strip() or email
-            business_group = str(row.get("business_group", "India")).strip()
+            business_group = str(
+                row.get("business_group")
+                or row.get("business_unit")
+                or "India"
+            ).strip()
+            department = str(
+                row.get("department") or row.get("function_name") or ""
+            ).strip()
             raw_currency = str(row.get("personal_currency", "")).strip()
             personal_currency = (
                 normalize_currency(raw_currency)
@@ -196,6 +209,35 @@ def process_users_rows(
 
             territory_raw = row.get("territory") or row.get("territory_id")
             territory_id = _resolve_territory_id(organization, territory_raw)
+
+            # Plan assignment by name / position
+            plan_hint = str(
+                row.get("compensation_plan")
+                or row.get("plan")
+                or row.get("plan_name")
+                or ""
+            ).strip()
+            position_name_val = str(row.get("position_name", "")).strip()
+            assigned_plan = None
+            if plan_hint or position_name_val:
+                from ..models import CompensationPlan
+
+                plan_qs = CompensationPlan.objects.filter(
+                    organization=organization, status="Active"
+                )
+                if plan_hint:
+                    assigned_plan = plan_qs.filter(plan_name__iexact=plan_hint).first()
+                    if not assigned_plan:
+                        assigned_plan = plan_qs.filter(
+                            position_name__iexact=plan_hint
+                        ).first()
+                if not assigned_plan and position_name_val:
+                    assigned_plan = plan_qs.filter(
+                        position_name__iexact=position_name_val
+                    ).first()
+                if assigned_plan and not position_name_val and assigned_plan.position_name:
+                    position_name_val = assigned_plan.position_name
+
             defaults = {
                 "organization": organization,
                 "enable_login": enable_login,
@@ -212,14 +254,19 @@ def process_users_rows(
                 "personal_target": personal_target,
                 "personal_currency": personal_currency,
                 "business_group": business_group,
+                "department": department,
                 "market": str(row.get("region") or row.get("market") or "").strip(),
                 "title": str(row.get("title", "")).strip(),
                 "pay_period_type": str(row.get("pay_period_type", "Monthly")).strip(),
-                "position_name": str(row.get("position_name", "")).strip(),
+                "position_name": position_name_val,
                 "position_title": str(row.get("position_title", "")).strip(),
             }
             if territory_id:
                 defaults["territory_id"] = territory_id
+            if assigned_plan:
+                defaults["assigned_compensation_plan"] = assigned_plan
+            if effective_date:
+                defaults["comp_effective_date"] = effective_date
 
             if enable_login and UserProfile.objects.filter(
                 email__iexact=email,
@@ -322,8 +369,17 @@ def process_users_rows(
             else:
                 users_updated += 1
 
-            parent_value = str(row.get("parent_participant", "")).strip()
+            parent_value = str(
+                row.get("parent_participant")
+                or row.get("manager")
+                or row.get("manager_email")
+                or row.get("manager_id")
+                or ""
+            ).strip()
             child_value = str(row.get("child_participant", "")).strip()
+            # Manager column: this row is the child
+            if parent_value and not child_value:
+                child_value = profile.employee_id or profile.email
             if parent_value and child_value:
                 org_filter = _org_profile_filter(organization)
 
@@ -340,6 +396,7 @@ def process_users_rows(
                         qs.filter(username=value).first()
                         or qs.filter(employee_id=value).first()
                         or qs.filter(email__iexact=value).first()
+                        or qs.filter(name__iexact=value).first()
                     )
 
                 parent_profile = _resolve_hierarchy_ref(parent_value)

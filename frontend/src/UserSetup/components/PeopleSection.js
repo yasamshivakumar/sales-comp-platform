@@ -12,7 +12,6 @@ function PeopleSection({
       {renderField("last_name", "Last name")}
       {renderField("prefix", "Prefix")}
       {renderField("employee_id", "Employee ID *")}
-      {renderField("personal_target", "Personal target", "number")}
       {renderSelect("personal_currency", "Currency")}
       {renderBusinessGroupSelect
         ? renderBusinessGroupSelect()
