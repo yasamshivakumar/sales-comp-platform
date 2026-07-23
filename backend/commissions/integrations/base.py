@@ -39,10 +39,7 @@ class BaseConnector:
 
         raw = {}
         if hasattr(integration, "get_decrypted_credentials"):
-            try:
-                raw = integration.get_decrypted_credentials() or {}
-            except Exception:
-                raw = integration.credentials or {}
+            raw = integration.get_decrypted_credentials() or {}
         else:
             raw = unseal_credentials(integration.credentials or {})
         self.credentials = raw

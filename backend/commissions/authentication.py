@@ -9,12 +9,14 @@ from rest_framework.exceptions import AuthenticationFailed
 from .tenants import get_profile_for_user
 
 
-def token_ttl_minutes():
-    return getattr(settings, "TOKEN_TTL_MINUTES", 480)
+def token_ttl_minutes(organization=None):
+    from .auth_hardening import effective_token_ttl_minutes
+
+    return effective_token_ttl_minutes(organization)
 
 
-def is_token_expired(token):
-    ttl_minutes = token_ttl_minutes()
+def is_token_expired(token, organization=None):
+    ttl_minutes = token_ttl_minutes(organization)
     if not ttl_minutes:
         return False
     return token.created < timezone.now() - timedelta(minutes=ttl_minutes)
@@ -26,29 +28,28 @@ def issue_user_token(user):
     return Token.objects.create(user=user)
 
 
-def token_expires_at(token):
-    ttl_minutes = token_ttl_minutes()
+def token_expires_at(token, organization=None):
+    ttl_minutes = token_ttl_minutes(organization)
     if not ttl_minutes:
         return None
     return token.created + timedelta(minutes=ttl_minutes)
 
 
-def token_expires_at_iso(token):
-    expires_at = token_expires_at(token)
+def token_expires_at_iso(token, organization=None):
+    expires_at = token_expires_at(token, organization=organization)
     return expires_at.isoformat() if expires_at else None
 
 
-def touch_token_for_activity(token):
+def touch_token_for_activity(token, organization=None):
     """
     Sliding idle timeout: each authenticated request can extend the session.
-    Writes are throttled so busy APIs do not update the row every call.
+    Writes are throttled so busy APIs do not update the row every request.
     """
-    ttl_minutes = token_ttl_minutes()
+    ttl_minutes = token_ttl_minutes(organization)
     if not ttl_minutes:
         return token
 
     now = timezone.now()
-    # Refresh at most every 2 minutes (or sooner for very short TTLs).
     refresh_after = timedelta(minutes=min(2, max(ttl_minutes // 12, 1)))
     if now - token.created < refresh_after:
         return token
@@ -67,13 +68,25 @@ class TenantTokenAuthentication(TokenAuthentication):
             return result
 
         user, token = result
-        if is_token_expired(token):
+        profile = get_profile_for_user(user)
+        organization = profile.organization if profile else None
+        request.organization = organization
+
+        if is_token_expired(token, organization=organization):
             token.delete()
             raise AuthenticationFailed("Session expired. Please sign in again.")
 
-        token = touch_token_for_activity(token)
-        request.session_expires_at = token_expires_at_iso(token)
+        token = touch_token_for_activity(token, organization=organization)
+        request.session_expires_at = token_expires_at_iso(token, organization=organization)
+        request.force_password_change = bool(
+            profile and (profile.force_password_change or False)
+        )
+        try:
+            from .auth_hardening import password_is_expired, touch_auth_session_for_token
 
-        profile = get_profile_for_user(user)
-        request.organization = profile.organization if profile else None
+            if password_is_expired(user, organization):
+                request.force_password_change = True
+            touch_auth_session_for_token(user, token.key)
+        except Exception:
+            pass
         return user, token

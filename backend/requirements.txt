@@ -11,3 +11,5 @@ redis==5.2.1
 sentry-sdk==2.19.2
 mozilla-django-oidc==4.0.1
 python-dateutil==2.9.0
+pyotp==2.9.0
+cryptography==44.0.2

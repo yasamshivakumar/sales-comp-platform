@@ -7,6 +7,7 @@ from . import enterprise_views
 from . import integration_views
 from . import ai_views
 from .oidc_views import oidc_token_exchange
+from . import auth_views
 from .rule_views import (
     CommissionRuleListCreateView,
     CommissionRuleDetailView,
@@ -315,6 +316,32 @@ urlpatterns = [
     path("auth/change-password/", change_password, name="auth-change-password"),
     path("auth/session/", session_status, name="auth-session"),
     path("auth/logout/", logout, name="auth-logout"),
+    path("auth/mfa/verify/", auth_views.mfa_verify, name="auth-mfa-verify"),
+    path("auth/mfa/status/", auth_views.mfa_status, name="auth-mfa-status"),
+    path("auth/mfa/enroll/", auth_views.mfa_enroll_start, name="auth-mfa-enroll"),
+    path(
+        "auth/mfa/enroll/confirm/",
+        auth_views.mfa_enroll_confirm,
+        name="auth-mfa-enroll-confirm",
+    ),
+    path("auth/mfa/disable/", auth_views.mfa_disable, name="auth-mfa-disable"),
+    path("auth/login-history/", auth_views.login_history, name="auth-login-history"),
+    path("auth/sessions/", auth_views.auth_sessions_list, name="auth-sessions"),
+    path(
+        "auth/sessions/revoke-all/",
+        auth_views.auth_sessions_revoke_all,
+        name="auth-sessions-revoke-all",
+    ),
+    path(
+        "auth/trusted-devices/",
+        auth_views.trusted_devices_list,
+        name="auth-trusted-devices",
+    ),
+    path(
+        "auth/trusted-devices/<int:device_pk>/revoke/",
+        auth_views.trusted_device_revoke,
+        name="auth-trusted-device-revoke",
+    ),
     path("user-profile/", get_user_profile, name="user-profile"),
     path(
         "compensation-plans/",

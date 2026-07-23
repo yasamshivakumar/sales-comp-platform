@@ -55,6 +55,32 @@ Before deploying:
 4. Confirm database backup availability before migrations or risky releases.
 5. Confirm there is a rollback owner.
 
+## CRM credential encryption (required in production)
+
+When `DEBUG=False`, the backend **will not start** without:
+
+- `cryptography` (pinned in `backend/requirements.txt`)
+- `CREDENTIALS_ENCRYPTION_KEY` (long random string; do not reuse `SECRET_KEY` in production)
+
+Optional:
+
+- `CREDENTIALS_ENCRYPTION_PREVIOUS_KEYS` — comma-separated old keys for decrypt during rotation
+- `SECRET_MANAGER_BACKEND` — default `encrypted_db` (AWS/Azure/Vault backends are stubs)
+
+**First production rollout after this change:**
+
+1. Set `CREDENTIALS_ENCRYPTION_KEY` on Render **before** deploying.
+2. Deploy.
+3. Run: `python manage.py reencrypt_integration_credentials`
+4. Confirm CRM sync still works; API responses show only `credentials_masked` (`••••••••`).
+
+**Key rotation:**
+
+1. Move the current key into `CREDENTIALS_ENCRYPTION_PREVIOUS_KEYS`.
+2. Set a new `CREDENTIALS_ENCRYPTION_KEY`.
+3. Restart the service, then run: `python manage.py rotate_credentials_encryption_key`
+4. Remove previous keys once rotation succeeds.
+
 ## Backend Deploy On Render
 
 1. Open Render dashboard.

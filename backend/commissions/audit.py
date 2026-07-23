@@ -93,9 +93,22 @@ def record_audit(
             user_email=user_email,
             action=action,
             plan_version=plan_version,
-            detail=detail or {},
+            detail=_safe_audit_detail(detail),
             ip_address=get_client_ip(request) or None,
             request_id=get_request_id(request) or str(uuid.uuid4()),
         )
     except Exception:
         logger.exception("Failed to write audit log for action=%s", action)
+
+
+def _safe_audit_detail(detail):
+    if detail is None:
+        return {}
+    try:
+        from .credential_crypto import redact_secrets
+
+        return redact_secrets(detail)
+    except Exception:
+        if isinstance(detail, dict):
+            return {"_redacted": True}
+        return {}

@@ -88,6 +88,22 @@ if not SECRET_KEY:
 
 DEBUG = _env_bool("DEBUG", "True")
 
+# CRM credential encryption (Fernet). Required when DEBUG=False.
+# Generate with: python -c "import secrets; print(secrets.token_urlsafe(48))"
+CREDENTIALS_ENCRYPTION_KEY = os.getenv("CREDENTIALS_ENCRYPTION_KEY", "").strip()
+CREDENTIALS_ENCRYPTION_PREVIOUS_KEYS = [
+    item.strip()
+    for item in os.getenv("CREDENTIALS_ENCRYPTION_PREVIOUS_KEYS", "").split(",")
+    if item.strip()
+]
+# encrypted_db | aws_secrets_manager | azure_key_vault | hashicorp_vault
+SECRET_MANAGER_BACKEND = os.getenv("SECRET_MANAGER_BACKEND", "encrypted_db").strip().lower()
+
+if not DEBUG and not CREDENTIALS_ENCRYPTION_KEY:
+    raise ValueError(
+        "CREDENTIALS_ENCRYPTION_KEY environment variable is required when DEBUG=False"
+    )
+
 ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS", "localhost,127.0.0.1")
 if not DEBUG:
     SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
@@ -132,7 +148,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "commissions",
+    "commissions.apps.CommissionsConfig",
     "rest_framework",
     "rest_framework.authtoken",
     "corsheaders",
@@ -184,7 +200,7 @@ REST_FRAMEWORK = {
         "commissions.authentication.TenantTokenAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
+        "commissions.permissions.IsAuthenticatedAndPasswordCurrent",
     ],
     "DEFAULT_THROTTLE_CLASSES": [
         "rest_framework.throttling.UserRateThrottle",
@@ -205,6 +221,7 @@ REST_FRAMEWORK = {
 WEBHOOK_SECRET_MIN_LENGTH = int(os.getenv("WEBHOOK_SECRET_MIN_LENGTH", "24"))
 
 TOKEN_TTL_MINUTES = int(os.getenv("TOKEN_TTL_MINUTES", "60"))
+MFA_TOTP_ISSUER = os.getenv("MFA_TOTP_ISSUER", "Incentra")
 
 # --- Upload limits (CSV imports) ---
 MAX_IMPORT_FILE_BYTES = int(os.getenv("MAX_IMPORT_FILE_BYTES", str(10 * 1024 * 1024)))

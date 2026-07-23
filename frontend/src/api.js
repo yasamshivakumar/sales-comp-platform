@@ -262,6 +262,18 @@ export function getAuthSessionValue(key) {
   return sessionStorage.getItem(key);
 }
 
+export function getOrCreateDeviceId() {
+  const key = "incentra_device_id";
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id =
+      (typeof crypto !== "undefined" && crypto.randomUUID && crypto.randomUUID()) ||
+      `dev-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
+
 api.interceptors.request.use((config) => {
   if (isSessionExpired()) {
     logoutDueToSessionExpiry("session-expired");
@@ -271,6 +283,7 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Token ${token}`;
   }
+  config.headers["X-Device-Id"] = getOrCreateDeviceId();
   if (config.data instanceof FormData) {
     delete config.headers["Content-Type"];
   }
@@ -292,7 +305,7 @@ api.interceptors.response.use(
   },
   (error) => {
     const requestUrl = error.config?.url || "";
-    const isAuthRequest = /auth\/(email-login|oidc-exchange)\/?$/.test(requestUrl);
+    const isAuthRequest = /auth\/(email-login|oidc-exchange|mfa\/verify)\/?$/.test(requestUrl);
 
     if (error.response?.status === 401 && !isAuthRequest) {
       logoutDueToSessionExpiry("unauthorized");

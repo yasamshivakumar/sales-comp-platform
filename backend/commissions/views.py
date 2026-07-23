@@ -2551,6 +2551,18 @@ def email_login(request):
             "login_locked_out",
             {"email": email, "ip": ip, "user_agent": user_agent},
         )
+        try:
+            from .auth_hardening import record_login_event
+            from .models import LoginEvent
+
+            record_login_event(
+                email=email,
+                outcome=LoginEvent.OUTCOME_LOCKED,
+                ip_address=ip,
+                user_agent=user_agent,
+            )
+        except Exception:
+            pass
         return Response(
             {'error': 'Too many failed attempts. Try again in a few minutes.'},
             status=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -2591,6 +2603,19 @@ def email_login(request):
             "login_failed",
             {"email": email, "ip": ip, "user_agent": user_agent},
         )
+        try:
+            from .auth_hardening import record_login_event
+            from .models import LoginEvent
+
+            record_login_event(
+                email=email,
+                user=user,
+                outcome=LoginEvent.OUTCOME_FAILED,
+                ip_address=ip,
+                user_agent=user_agent,
+            )
+        except Exception:
+            pass
         return Response(
             {'error': 'Invalid credentials'},
             status=status.HTTP_401_UNAUTHORIZED
@@ -2602,31 +2627,94 @@ def email_login(request):
             {'error': 'User account is inactive'},
             status=status.HTTP_403_FORBIDDEN
         )
-    
-    try:
-        token = issue_user_token(user)
-        clear_login_failures(email, ip)
 
-        # Get user profile for additional info
-        user_profile = UserProfile.objects.filter(email=user.email).first()
+    from .auth_hardening import (
+        create_mfa_pending_token,
+        issue_session_after_auth,
+        mfa_required_for_login,
+        record_login_event,
+    )
+    from .models import LoginEvent
+    from .tenants import get_profile_for_user as _get_profile
+
+    device_id = (request.headers.get("X-Device-Id") or request.data.get("device_id") or "")[:64]
+    remember_device = bool(request.data.get("remember_device"))
+    user_profile = _get_profile(user)
+    org = user_profile.organization if user_profile else None
+
+    try:
+        if mfa_required_for_login(user, org, device_id):
+            mfa_token = create_mfa_pending_token(
+                user,
+                ip=ip,
+                user_agent=user_agent,
+                device_id=device_id,
+                remember=remember_device,
+            )
+            clear_login_failures(email, ip)
+            record_login_event(
+                organization=org,
+                user=user,
+                email=email,
+                outcome=LoginEvent.OUTCOME_MFA_REQUIRED,
+                ip_address=ip,
+                user_agent=user_agent,
+                device_id=device_id,
+            )
+            record_audit(
+                request,
+                "login_mfa_required",
+                {"user_id": user.id, "email": email, "ip": ip},
+                user=user,
+                organization=org,
+            )
+            return Response(
+                {
+                    "mfa_required": True,
+                    "mfa_token": mfa_token,
+                    "email": user.email,
+                    "message": "Enter the code from your authenticator app.",
+                    "device_id": device_id,
+                }
+            )
+
+        token, _session, flags = issue_session_after_auth(
+            user,
+            request=request,
+            organization=org,
+            device_id=device_id,
+            remember_device_flag=remember_device,
+            ip=ip,
+            user_agent=user_agent,
+        )
+        clear_login_failures(email, ip)
 
         logger.info("Successful login for %s from %s", email, ip)
         record_audit(
             request,
             "login_success",
-            {"user_id": user.id, "email": email, "ip": ip, "user_agent": user_agent},
+            {
+                "user_id": user.id,
+                "email": email,
+                "ip": ip,
+                "user_agent": user_agent,
+                "suspicious": flags["suspicious"],
+            },
             user=user,
-            organization=getattr(user_profile, "organization", None) if user_profile else None,
+            organization=org,
         )
 
         return Response({
             'message': 'Login successful',
             'token': token.key,
-            'token_expires_at': token_expires_at_iso(token),
+            'token_expires_at': flags["token_expires_at"],
             'email': user.email,
             'user_id': user.id,
             'role': user_profile.role if user_profile else 'Sales Rep',
             'name': user_profile.name if user_profile else user.get_full_name() or user.username,
+            'must_change_password': flags["must_change_password"],
+            'suspicious_login': flags["suspicious"],
+            'device_id': device_id,
         })
 
     except Exception as e:
@@ -2685,6 +2773,9 @@ def change_password(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    from .auth_hardening import apply_password_update, password_in_history
+    from .tenants import get_profile_for_user as _gp
+
     try:
         # Verify old password
         if not user.check_password(old_password):
@@ -2693,20 +2784,40 @@ def change_password(request):
                 {'error': 'Old password is incorrect'},
                 status=status.HTTP_401_UNAUTHORIZED
             )
-        
-        # Set new password
-        user.set_password(new_password)
-        user.save()
-        
+
+        profile = _gp(user, organization=getattr(request, "organization", None))
+        org = getattr(request, "organization", None) or (
+            profile.organization if profile else None
+        )
+        if password_in_history(user, new_password):
+            return Response(
+                {'error': 'New password must not match a recently used password.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        apply_password_update(user, new_password, organization=org)
+
         # Invalidate all tokens to force re-login on other devices
         token = issue_user_token(user)
+        from .auth_hardening import create_auth_session
+
+        create_auth_session(
+            user,
+            token.key,
+            organization=org,
+            ip=None,
+            user_agent="",
+            device_id="",
+        )
+        record_audit(request, "password_changed", {"user_id": user.id})
 
         logger.info(f"Password changed successfully for user: {user.email}")
 
         return Response({
             'message': 'Password changed successfully',
             'token': token.key,
-            'token_expires_at': token_expires_at_iso(token),
+            'token_expires_at': token_expires_at_iso(token, organization=org),
+            'must_change_password': False,
         })
         
     except Exception as e:
@@ -2726,8 +2837,13 @@ def session_status(request):
     """
     expires = getattr(request, "session_expires_at", None)
     if not expires and getattr(request, "auth", None) is not None:
-        expires = token_expires_at_iso(request.auth)
-    return Response({"token_expires_at": expires})
+        expires = token_expires_at_iso(
+            request.auth, organization=getattr(request, "organization", None)
+        )
+    return Response({
+        "token_expires_at": expires,
+        "must_change_password": bool(getattr(request, "force_password_change", False)),
+    })
 
 
 @api_view(["POST"])
@@ -2737,7 +2853,9 @@ def logout(request):
     Server-side logout: revoke the caller's API token so it cannot be
     replayed after the client clears its own storage.
     """
-    Token.objects.filter(user=request.user).delete()
+    from .auth_hardening import revoke_auth_sessions_for_user
+
+    revoke_auth_sessions_for_user(request.user, reason="logout")
     record_audit(request, "logout", {"user_id": request.user.id})
     return Response({"message": "Logged out"})
 

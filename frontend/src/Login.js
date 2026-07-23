@@ -1,11 +1,17 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, IconButton, InputAdornment } from "@mui/material";
+import { Box, IconButton, InputAdornment, FormControlLabel, Checkbox } from "@mui/material";
 import SecurityIcon from "@mui/icons-material/Security";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
-import api, { getApiErrorMessage, getAuthToken, isSessionExpired, saveAuthSession } from "./api";
+import api, {
+  getApiErrorMessage,
+  getAuthToken,
+  getOrCreateDeviceId,
+  isSessionExpired,
+  saveAuthSession,
+} from "./api";
 import { useToast } from "./Components/Toast";
 import AuthTextField from "./Components/AuthTextField";
 import "./Login.css";
@@ -22,6 +28,9 @@ function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [mfaToken, setMfaToken] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [rememberDevice, setRememberDevice] = useState(true);
   const navigate = useNavigate();
   const { success, error } = useToast();
 
@@ -74,6 +83,20 @@ function Login() {
     };
   }, [navigate, success, error]);
 
+  const finishLogin = (data) => {
+    saveAuthSession(data);
+    if (data.device_id) {
+      localStorage.setItem("incentra_device_id", data.device_id);
+    }
+    success({
+      title: "Welcome back",
+      message: data.must_change_password
+        ? "Please update your password to continue."
+        : `Signed in as ${data.name || data.email}.`,
+    });
+    navigate("/dashboard", { replace: true });
+  };
+
   const handleLogin = async () => {
     if (!email || !password) {
       error({
@@ -95,17 +118,51 @@ function Login() {
       const res = await api.post("auth/email-login/", {
         email: email.trim().toLowerCase(),
         password,
+        device_id: getOrCreateDeviceId(),
+        remember_device: rememberDevice,
       });
-      saveAuthSession(res.data);
-      success({
-        title: "Welcome back",
-        message: `Signed in as ${res.data.name || res.data.email}.`,
-      });
-      navigate("/dashboard", { replace: true });
+      if (res.data?.mfa_required) {
+        setMfaToken(res.data.mfa_token || "");
+        setMfaCode("");
+        success({
+          title: "Authenticator required",
+          message: "Enter the 6-digit code from your authenticator app.",
+        });
+        return;
+      }
+      finishLogin(res.data);
     } catch (err) {
       error({
         title: "Sign in failed",
         message: getApiErrorMessage(err, "We couldn't verify your credentials. Try again."),
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMfaVerify = async () => {
+    if (!mfaCode.trim()) {
+      error({ title: "Code required", message: "Enter your authenticator code." });
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await api.post("auth/mfa/verify/", {
+        mfa_token: mfaToken,
+        code: mfaCode.trim(),
+        remember_device: rememberDevice,
+        device_id: getOrCreateDeviceId(),
+      });
+      setMfaToken("");
+      setMfaCode("");
+      finishLogin(res.data);
+    } catch (err) {
+      const nextToken = err.response?.data?.mfa_token;
+      if (nextToken) setMfaToken(nextToken);
+      error({
+        title: "Verification failed",
+        message: getApiErrorMessage(err, "Invalid authenticator code."),
       });
     } finally {
       setLoading(false);
@@ -147,90 +204,159 @@ function Login() {
           </aside>
 
           <Box className="login-glass__card" sx={{ position: "relative", overflow: "hidden" }}>
-            <h1 className="login-glass__title">Login</h1>
-            <p className="login-glass__subtitle">Access your Incentra workspace</p>
+            <h1 className="login-glass__title">{mfaToken ? "Verify" : "Login"}</h1>
+            <p className="login-glass__subtitle">
+              {mfaToken
+                ? "Enter the code from your authenticator app"
+                : "Access your Incentra workspace"}
+            </p>
 
-            <AuthTextField
-            label="Email"
-            type="email"
-            placeholder="you@company.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !loading && handleLogin()}
-            autoComplete="email"
-            disabled={loading}
-            sx={{ mb: 2 }}
-          />
-          <AuthTextField
-            label="Password"
-            type={showPassword ? "text" : "password"}
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !loading && handleLogin()}
-            autoComplete="current-password"
-            disabled={loading}
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    aria-pressed={showPassword}
-                    edge="end"
-                    size="small"
-                    type="button"
-                    disabled={loading}
-                    onClick={() => setShowPassword((value) => !value)}
-                    onMouseDown={(e) => e.preventDefault()}
-                    sx={{
-                      width: "32px !important",
-                      minWidth: "32px !important",
-                      height: "32px",
-                      p: "4px !important",
-                      bgcolor: "transparent !important",
-                      boxShadow: "none !important",
-                      color: "#64748b",
-                      "&:hover": {
-                        bgcolor: "rgba(15, 23, 42, 0.06) !important",
-                        transform: "none",
-                      },
-                    }}
-                  >
-                    {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-          />
+            {!mfaToken ? (
+              <>
+                <AuthTextField
+                  label="Email"
+                  type="email"
+                  placeholder="you@company.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && !loading && handleLogin()}
+                  autoComplete="email"
+                  disabled={loading}
+                  sx={{ mb: 2 }}
+                />
+                <AuthTextField
+                  label="Password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && !loading && handleLogin()}
+                  autoComplete="current-password"
+                  disabled={loading}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          aria-label={showPassword ? "Hide password" : "Show password"}
+                          aria-pressed={showPassword}
+                          edge="end"
+                          size="small"
+                          type="button"
+                          disabled={loading}
+                          onClick={() => setShowPassword((value) => !value)}
+                          onMouseDown={(e) => e.preventDefault()}
+                          sx={{
+                            width: "32px !important",
+                            minWidth: "32px !important",
+                            height: "32px",
+                            p: "4px !important",
+                          }}
+                        >
+                          {showPassword ? (
+                            <VisibilityOffIcon fontSize="small" />
+                          ) : (
+                            <VisibilityIcon fontSize="small" />
+                          )}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                  sx={{ mb: 1 }}
+                />
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={rememberDevice}
+                      onChange={(e) => setRememberDevice(e.target.checked)}
+                      size="small"
+                      sx={{ color: "rgba(255,255,255,0.7)" }}
+                    />
+                  }
+                  label="Remember this device"
+                  sx={{ color: "rgba(255,255,255,0.85)", mb: 1 }}
+                />
+                <button
+                  type="button"
+                  className="login-glass__submit"
+                  disabled={loading}
+                  onClick={handleLogin}
+                >
+                  {loading ? "Signing in…" : "Sign in"}
+                </button>
+              </>
+            ) : (
+              <>
+                <AuthTextField
+                  label="Authenticator code"
+                  type="text"
+                  placeholder="123456"
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && !loading && handleMfaVerify()}
+                  autoComplete="one-time-code"
+                  disabled={loading}
+                  sx={{ mb: 1 }}
+                />
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={rememberDevice}
+                      onChange={(e) => setRememberDevice(e.target.checked)}
+                      size="small"
+                      sx={{ color: "rgba(255,255,255,0.7)" }}
+                    />
+                  }
+                  label="Trust this device"
+                  sx={{ color: "rgba(255,255,255,0.85)", mb: 1 }}
+                />
+                <button
+                  type="button"
+                  className="login-glass__submit"
+                  disabled={loading}
+                  onClick={handleMfaVerify}
+                >
+                  {loading ? "Verifying…" : "Verify & continue"}
+                </button>
+                <button
+                  type="button"
+                  className="login-glass__submit"
+                  style={{
+                    marginTop: 8,
+                    background: "transparent",
+                    boxShadow: "none",
+                    border: "1px solid rgba(255,255,255,0.35)",
+                  }}
+                  onClick={() => {
+                    setMfaToken("");
+                    setMfaCode("");
+                  }}
+                  disabled={loading}
+                >
+                  Back
+                </button>
+              </>
+            )}
 
-          <button
-            type="button"
-            className="login-glass__submit"
-            disabled={loading}
-            onClick={handleLogin}
-          >
-            {loading ? "Signing in…" : "Sign in"}
-          </button>
+            {oidcEnabled && !mfaToken && (
+              <>
+                <div className="login-glass__divider">or continue with</div>
+                <button
+                  type="button"
+                  className="login-glass__sso"
+                  disabled={loading}
+                  onClick={() => {
+                    window.location.href = `${apiHost}/oidc/authenticate/`;
+                  }}
+                >
+                  Continue with SSO
+                </button>
+              </>
+            )}
 
-          {oidcEnabled && (
-            <>
-              <div className="login-glass__divider">or continue with</div>
-              <button
-                type="button"
-                className="login-glass__sso"
-                disabled={loading}
-                onClick={() => {
-                  window.location.href = `${apiHost}/oidc/authenticate/`;
-                }}
-              >
-                Continue with SSO
-              </button>
-            </>
-          )}
-
-          <p className="login-glass__footer">
-            New here? <strong>Accept your email invite</strong> to set a password before signing in.
-          </p>
+            <p className="login-glass__footer">
+              New here? <strong>Accept your email invite</strong> to set a password before signing
+              in.
+            </p>
           </Box>
         </div>
       </div>

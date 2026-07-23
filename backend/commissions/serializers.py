@@ -930,7 +930,7 @@ class ExternalIntegrationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ExternalIntegration
-        fields = "__all__"
+        exclude = ["encrypted_credentials"]
         read_only_fields = [
             "organization",
             "created_by",
@@ -939,16 +939,22 @@ class ExternalIntegrationSerializer(serializers.ModelSerializer):
             "last_order_sync_at",
             "last_auto_sync_at",
             "last_sync_at",
-            "encrypted_credentials",
             "created_at",
             "updated_at",
         ]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Never expose raw or ciphertext secrets over the API.
+        data.pop("credentials", None)
+        data.pop("encrypted_credentials", None)
+        return data
 
     def get_credentials_masked(self, obj):
         try:
             return _mask_integration_credentials(obj.get_decrypted_credentials())
         except Exception:
-            return _mask_integration_credentials(obj.credentials)
+            return _mask_integration_credentials(getattr(obj, "credentials", None))
 
     def get_webhook_urls(self, obj):
         request = self.context.get("request")

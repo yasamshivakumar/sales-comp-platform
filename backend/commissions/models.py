@@ -10,6 +10,36 @@ class Organization(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # Phase 1.3 — org-level security policy (defaults preserve current behavior)
+    require_mfa = models.BooleanField(
+        default=False,
+        help_text="Require MFA after password login for all users in this org.",
+    )
+    password_history_count = models.PositiveSmallIntegerField(
+        default=5,
+        help_text="Reject new passwords that match one of the last N passwords (0=off).",
+    )
+    password_max_age_days = models.PositiveIntegerField(
+        default=0,
+        help_text="Force password change after N days (0=disabled).",
+    )
+    session_idle_minutes = models.PositiveIntegerField(
+        default=0,
+        help_text="Override TOKEN_TTL_MINUTES for this org (0=use global setting).",
+    )
+    max_concurrent_sessions = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Active API sessions allowed per user (platform enforces 1 DRF token).",
+    )
+    remember_device_days = models.PositiveIntegerField(
+        default=30,
+        help_text="Days a trusted device may skip MFA.",
+    )
+    alert_on_new_login_ip = models.BooleanField(
+        default=True,
+        help_text="Flag and audit logins from previously unseen IP addresses.",
+    )
+
     class Meta:
         ordering = ["name"]
 
@@ -1061,6 +1091,19 @@ class UserProfile(models.Model):
         default=True,
         help_text="Whether this person is eligible for commission calculations.",
     )
+    password_changed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Last password change time (auth User).",
+    )
+    force_password_change = models.BooleanField(
+        default=False,
+        help_text="When true, API access is limited to change-password / logout.",
+    )
+    mfa_enabled = models.BooleanField(
+        default=False,
+        help_text="User has at least one confirmed MFA device.",
+    )
     custom_permissions = models.JSONField(
         default=list,
         blank=True,
@@ -1636,20 +1679,21 @@ class ExternalIntegration(models.Model):
         return f"{self.name} ({self.provider})"
 
     def get_decrypted_credentials(self):
-        from .credential_crypto import credentials_blob_decrypt, unseal_credentials
+        from .secrets import get_secret_manager
 
-        if self.encrypted_credentials:
-            return credentials_blob_decrypt(
-                self.encrypted_credentials, fallback=self.credentials
-            )
-        return unseal_credentials(self.credentials)
+        return get_secret_manager().decrypt_credentials(
+            self.encrypted_credentials or None,
+            legacy_credentials=self.credentials or {},
+        )
 
     def set_encrypted_credentials(self, credentials: dict):
-        from .credential_crypto import credentials_blob_encrypt, seal_credentials
+        from .credential_crypto import public_credential_metadata
+        from .secrets import get_secret_manager
 
-        sealed = seal_credentials(credentials)
-        self.credentials = sealed
-        self.encrypted_credentials = credentials_blob_encrypt(sealed)
+        manager = get_secret_manager()
+        self.encrypted_credentials = manager.encrypt_credentials(credentials or {})
+        # Never persist secret values in the JSON column (metadata only).
+        self.credentials = public_credential_metadata(credentials or {})
 
 
 class IntegrationSyncLog(models.Model):
@@ -2041,3 +2085,143 @@ class CommissionRuleResult(models.Model):
 
     def __str__(self):
         return f"{self.rule.name}: {self.result_name}"
+
+
+# ---------------------------------------------------------------------------
+# Phase 1.3 — Authentication hardening
+# ---------------------------------------------------------------------------
+
+
+class LoginEvent(models.Model):
+    OUTCOME_SUCCESS = "success"
+    OUTCOME_FAILED = "failed"
+    OUTCOME_LOCKED = "locked"
+    OUTCOME_MFA_REQUIRED = "mfa_required"
+    OUTCOME_MFA_FAILED = "mfa_failed"
+    OUTCOME_CHOICES = [
+        (OUTCOME_SUCCESS, "Success"),
+        (OUTCOME_FAILED, "Failed"),
+        (OUTCOME_LOCKED, "Locked out"),
+        (OUTCOME_MFA_REQUIRED, "MFA required"),
+        (OUTCOME_MFA_FAILED, "MFA failed"),
+    ]
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="login_events",
+        null=True,
+        blank=True,
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="login_events",
+    )
+    email = models.EmailField(db_index=True, blank=True, default="")
+    outcome = models.CharField(max_length=20, choices=OUTCOME_CHOICES, db_index=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=300, blank=True, default="")
+    device_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    suspicious = models.BooleanField(default=False, db_index=True)
+    suspicion_reason = models.CharField(max_length=255, blank=True, default="")
+    detail = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
+class PasswordHistory(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="password_history",
+    )
+    password_hash = models.CharField(max_length=128)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name_plural = "password histories"
+
+
+class TrustedDevice(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="trusted_devices",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="trusted_devices",
+        null=True,
+        blank=True,
+    )
+    device_id = models.CharField(max_length=64, db_index=True)
+    device_name = models.CharField(max_length=120, blank=True, default="")
+    user_agent = models.CharField(max_length=300, blank=True, default="")
+    last_ip = models.GenericIPAddressField(null=True, blank=True)
+    trusted_until = models.DateTimeField(db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "device_id"],
+                name="uniq_trusted_device_per_user",
+            ),
+        ]
+
+
+class UserMfaDevice(models.Model):
+    TYPE_TOTP = "totp"
+    TYPE_CHOICES = [(TYPE_TOTP, "Authenticator app (TOTP)")]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="mfa_devices",
+    )
+    device_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default=TYPE_TOTP)
+    name = models.CharField(max_length=100, blank=True, default="Authenticator")
+    secret_encrypted = models.TextField()
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
+class UserAuthSession(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="auth_sessions",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="auth_sessions",
+        null=True,
+        blank=True,
+    )
+    session_key = models.CharField(max_length=64, unique=True, db_index=True)
+    token_key_hash = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=300, blank=True, default="")
+    device_id = models.CharField(max_length=64, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    revoke_reason = models.CharField(max_length=64, blank=True, default="")
+
+    class Meta:
+        ordering = ["-created_at"]

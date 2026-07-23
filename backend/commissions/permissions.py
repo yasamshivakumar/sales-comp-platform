@@ -1,4 +1,6 @@
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.permissions import IsAuthenticated
+
 
 def get_request_user_profile(request):
     from .tenants import get_profile_for_user
@@ -50,3 +52,27 @@ def require_finance_or_admin(request):
             "Only administrators or finance users can access this resource"
         )
 
+
+_FORCE_PASSWORD_CHANGE_ALLOWLIST = (
+    "/api/auth/change-password",
+    "/api/auth/logout",
+    "/api/auth/session",
+    "/api/user-profile",
+    "/api/auth/mfa/",
+)
+
+
+class IsAuthenticatedAndPasswordCurrent(IsAuthenticated):
+    """Block API use when the user must change an expired password."""
+
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        if not getattr(request, "force_password_change", False):
+            return True
+        path = (request.path or "").rstrip("/")
+        for allowed in _FORCE_PASSWORD_CHANGE_ALLOWLIST:
+            base = allowed.rstrip("/")
+            if path == base or path.startswith(base):
+                return True
+        return False

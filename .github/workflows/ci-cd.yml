@@ -45,6 +45,7 @@ jobs:
     env:
       SECRET_KEY: ci-test-secret-key
       DEBUG: "True"
+      CREDENTIALS_ENCRYPTION_KEY: ci-credentials-encryption-key
       DB_NAME: sales_comp_db
       DB_USER: postgres
       DB_PASSWORD: postgres
