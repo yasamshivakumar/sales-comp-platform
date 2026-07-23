@@ -342,7 +342,10 @@ if (typeof window !== "undefined") {
 
 export function getApiErrorMessage(err, fallback = "Request failed") {
   if (!err.response) {
-    return `Cannot reach API (${apiBaseURL}). Start the backend: cd backend → python manage.py runserver`;
+    if (isDevelopment) {
+      return `Cannot reach API (${apiBaseURL}). Start the backend: cd backend → python manage.py runserver`;
+    }
+    return `Cannot reach the Incentra API right now. Wait a moment and try again. If this continues, the backend may be restarting after a deploy.`;
   }
   const data = err.response.data;
   if (typeof data === "string") {
