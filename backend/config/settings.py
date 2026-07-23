@@ -99,10 +99,8 @@ CREDENTIALS_ENCRYPTION_PREVIOUS_KEYS = [
 # encrypted_db | aws_secrets_manager | azure_key_vault | hashicorp_vault
 SECRET_MANAGER_BACKEND = os.getenv("SECRET_MANAGER_BACKEND", "encrypted_db").strip().lower()
 
-if not DEBUG and not CREDENTIALS_ENCRYPTION_KEY:
-    raise ValueError(
-        "CREDENTIALS_ENCRYPTION_KEY environment variable is required when DEBUG=False"
-    )
+# Do NOT hard-fail here: Render build runs collectstatic with DEBUG=False before
+# runtime env is fully validated. AppConfig.ready() enforces the key at boot.
 
 ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS", "localhost,127.0.0.1")
 if not DEBUG:

@@ -35,3 +35,7 @@ services:
         value: "True"
       - key: USE_ASYNC_IMPORTS
         value: "False"
+      - key: CREDENTIALS_ENCRYPTION_KEY
+        sync: false
+      - key: SECRET_MANAGER_BACKEND
+        value: encrypted_db

@@ -69,7 +69,9 @@ Optional:
 
 **First production rollout after this change:**
 
-1. Set `CREDENTIALS_ENCRYPTION_KEY` on Render **before** deploying.
+1. Set `CREDENTIALS_ENCRYPTION_KEY` on Render **before** (or right after) deploying.
+   - Build (`collectstatic`) no longer requires the key.
+   - **Gunicorn will refuse to start** in production without it.
 2. Deploy.
 3. Run: `python manage.py reencrypt_integration_credentials`
 4. Confirm CRM sync still works; API responses show only `credentials_masked` (`••••••••`).
