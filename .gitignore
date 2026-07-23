@@ -2,17 +2,37 @@
 __pycache__/
 *.pyc
 
-# Environment files
+# Environment / secrets — never commit real values (examples are OK)
 .env
-.env.local
+.env.*
+!.env.example
+!**/.env.example
 *.env.local
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+backend/.env
+frontend/.env
+
+# Common secret / credential filenames
+*.pem
+*.p12
+*.pfx
+*.key
+id_rsa
+id_rsa.pub
+credentials.json
+service-account*.json
+secrets.json
+*.secret
 
 # Frontend
 frontend/node_modules/
 frontend/build/
-frontend/.env
-frontend/.env.local
-frontend/.env.production.local
 
 # Backend Virtual Environments
 backend/myenv/
