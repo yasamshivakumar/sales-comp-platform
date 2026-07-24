@@ -46,29 +46,49 @@ const LOGIN_AUTOFILL_CSS = `
   animation-duration: 0.001s !important;
 }
 .login-glass .MuiOutlinedInput-root,
-.login-glass .MuiInputBase-root {
+.login-glass .MuiInputBase-root,
+.login-glass .auth-text-field .MuiOutlinedInput-root,
+.login-glass .auth-text-field .MuiInputBase-root {
   background-color: #ffffff !important;
+  min-height: 48px !important;
+  box-sizing: border-box !important;
+  border-radius: 12px !important;
 }
 .login-glass .MuiOutlinedInput-input,
-.login-glass .MuiInputBase-input {
+.login-glass .MuiInputBase-input,
+.login-glass .auth-text-field .MuiOutlinedInput-input,
+.login-glass .auth-text-field .MuiInputBase-input,
+.login-glass .auth-text-field input {
   color: #0f172a !important;
   -webkit-text-fill-color: #0f172a !important;
   caret-color: #0f172a !important;
   background-color: #ffffff !important;
   opacity: 1 !important;
+  padding: 12px 14px !important;
+  font-size: 0.95rem !important;
+  line-height: 1.35 !important;
+  height: auto !important;
+  box-sizing: border-box !important;
 }
 `;
 
-/** Keep autofilled credentials readable on white login fields */
+/** Keep autofilled credentials readable + same size as Login.css on white fields */
 const loginFieldSx = {
   "& .MuiOutlinedInput-root": {
     backgroundColor: "#ffffff !important",
+    minHeight: "48px !important",
+    borderRadius: "12px !important",
   },
   "& .MuiOutlinedInput-input": {
     color: "#0f172a !important",
     WebkitTextFillColor: "#0f172a !important",
     caretColor: "#0f172a !important",
     backgroundColor: "#ffffff !important",
+    padding: "12px 14px !important",
+    fontSize: "0.95rem !important",
+    lineHeight: "1.35 !important",
+    height: "auto !important",
+    boxSizing: "border-box !important",
   },
   "& .MuiOutlinedInput-input:-webkit-autofill": {
     WebkitTextFillColor: "#0f172a !important",
@@ -76,6 +96,8 @@ const loginFieldSx = {
     boxShadow: "0 0 0 1000px #ffffff inset !important",
     caretColor: "#0f172a !important",
     transition: "background-color 99999s ease-out 0s",
+    padding: "12px 14px !important",
+    fontSize: "0.95rem !important",
   },
 };
 

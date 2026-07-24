@@ -250,11 +250,15 @@
 }
 
 .login-glass .auth-text-field .MuiOutlinedInput-root,
-.login-glass .auth-text-field .MuiInputBase-root {
+.login-glass .auth-text-field .MuiInputBase-root,
+.login-glass .auth-text-field .MuiOutlinedInput-root.MuiInputBase-sizeSmall,
+.login-glass .auth-text-field .MuiInputBase-root.MuiInputBase-sizeSmall {
   background: #ffffff !important;
   border-radius: 12px !important;
   box-shadow: 0 4px 14px rgba(0, 18, 46, 0.12);
   color: #0f172a !important;
+  min-height: 48px !important;
+  box-sizing: border-box !important;
 }
 
 .login-glass .auth-text-field .MuiOutlinedInput-notchedOutline,
@@ -267,9 +271,15 @@
   border-color: rgba(1, 118, 211, 0.55) !important;
 }
 
-/* Always dark text on white fields — ignore app dark theme on this page */
+/*
+ * Always dark text + fixed size on white fields.
+ * Production CSS chunk order often lets mui-bridge (8.5px / 0.875rem) win;
+ * keep login fields identical to local with higher-specificity locks.
+ */
 .login-glass .auth-text-field .MuiOutlinedInput-input,
 .login-glass .auth-text-field .MuiInputBase-input,
+.login-glass .auth-text-field .MuiInputBase-inputSizeSmall,
+.login-glass .auth-text-field .MuiOutlinedInput-input.MuiInputBase-inputSizeSmall,
 .login-glass .auth-text-field input,
 [data-theme="dark"] .login-glass .auth-text-field .MuiOutlinedInput-input,
 [data-theme="dark"] .login-glass .auth-text-field .MuiInputBase-input,
@@ -280,7 +290,17 @@
   background-color: #ffffff !important;
   padding: 12px 14px !important;
   font-size: 0.95rem !important;
+  line-height: 1.35 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  box-sizing: border-box !important;
   opacity: 1 !important;
+}
+
+.login-glass .auth-text-field .MuiInputAdornment-root {
+  margin-right: 6px !important;
+  height: 100% !important;
+  max-height: none !important;
 }
 
 .login-glass .auth-text-field .MuiOutlinedInput-input::placeholder,
