@@ -1,27 +1,5 @@
 import { useMemo, useState } from "react";
-
-function buildMultiLine(series, keys, width, height, pad = 18) {
-  const values = [];
-  keys.forEach((k) => {
-    (series || []).forEach((r) => values.push(Number(r[k] ?? 0)));
-  });
-  const max = Math.max(...values, 1);
-  const min = 0;
-  const range = max - min || 1;
-  const innerW = width - pad * 2;
-  const innerH = height - pad * 2;
-  const paths = {};
-  keys.forEach((k) => {
-    const pts = (series || []).map((r, i) => {
-      const v = Number(r[k] ?? 0);
-      const x = pad + (i / Math.max((series || []).length - 1, 1)) * innerW;
-      const y = pad + innerH - ((v - min) / range) * innerH;
-      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
-    });
-    paths[k] = pts.join(" ");
-  });
-  return { paths, max };
-}
+import { formatMoney } from "../utils/currency";
 
 const COLORS = {
   revenue: "#1e3a5f",
@@ -29,43 +7,94 @@ const COLORS = {
   payout: "#b45309",
 };
 
-function CommandCenterCharts({ series, currency, costRatio, period, onPeriodChange }) {
-  const [metrics, setMetrics] = useState({
-    revenue: true,
-    commission: true,
-    payout: false,
+function buildSeriesGeometry(series, keys, width, height, pad = 28) {
+  const values = [];
+  keys.forEach((k) => {
+    (series || []).forEach((r) => values.push(Number(r[k] ?? r.sales ?? 0)));
   });
+  const max = Math.max(...values, 1);
+  const min = 0;
+  const range = max - min || 1;
+  const innerW = width - pad * 2;
+  const innerH = height - pad * 2;
+  const n = Math.max((series || []).length - 1, 1);
 
-  const activeKeys = useMemo(
-    () => Object.keys(metrics).filter((k) => metrics[k]),
-    [metrics]
-  );
+  const paths = {};
+  const pointsByKey = {};
+  keys.forEach((k) => {
+    const pts = [];
+    const path = (series || [])
+      .map((r, i) => {
+        const v = Number(r[k] ?? (k === "revenue" ? r.sales : 0) ?? 0);
+        const x = pad + (i / n) * innerW;
+        const y = pad + innerH - ((v - min) / range) * innerH;
+        pts.push({ x, y, v, i, label: r.label || r.period });
+        return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(" ");
+    paths[k] = path;
+    pointsByKey[k] = pts;
+  });
+  return { paths, pointsByKey, max, pad, innerW };
+}
 
-  const { paths } = useMemo(
-    () => buildMultiLine(series || [], activeKeys.length ? activeKeys : ["revenue"], 720, 220),
-    [series, activeKeys]
+function CommandCenterCharts({ series, currency, period, onPeriodChange, rangeLabel }) {
+  const [hover, setHover] = useState(null);
+  const activeKeys = ["revenue", "commission", "payout"];
+  const width = 900;
+  const height = 320;
+
+  const { paths, pointsByKey, max, pad, innerW } = useMemo(
+    () => buildSeriesGeometry(series || [], ["revenue", "commission", "payout"], width, height),
+    [series]
   );
 
   const has = (series || []).some(
-    (r) => (r.revenue || r.sales || 0) > 0 || (r.commission || 0) > 0
+    (r) => (r.revenue || r.sales || 0) > 0 || (r.commission || 0) > 0 || (r.payout || 0) > 0
   );
 
-  const ratioStatus =
-    costRatio == null
-      ? { label: "—", tone: "neutral" }
-      : costRatio < 5
-        ? { label: "Healthy", tone: "good" }
-        : costRatio < 12
-          ? { label: "Monitor", tone: "warn" }
-          : { label: "Elevated", tone: "bad" };
+  const onMove = (e) => {
+    if (!series?.length) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * width;
+    const n = Math.max(series.length - 1, 1);
+    const idx = Math.round(((x - pad) / innerW) * n);
+    const clamped = Math.max(0, Math.min(series.length - 1, idx));
+    const row = series[clamped];
+    setHover({
+      idx: clamped,
+      label: row.label || row.period,
+      revenue: row.revenue ?? row.sales ?? 0,
+      commission: row.commission ?? 0,
+      payout: row.payout ?? 0,
+      x: pad + (clamped / n) * innerW,
+    });
+  };
 
-  const toggle = (key) => setMetrics((m) => ({ ...m, [key]: !m[key] }));
+  const exportCsv = () => {
+    const lines = ["period,revenue,commission,payout"];
+    (series || []).forEach((r) => {
+      lines.push(
+        `${r.label || r.period},${r.revenue ?? r.sales ?? 0},${r.commission ?? 0},${r.payout ?? 0}`
+      );
+    });
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "performance-trend.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
-    <section className="ecc-perf">
-      <div className="ecc-panel ecc-perf__chart">
-        <div className="ecc-panel__head">
-          <h2>Revenue vs Commission Trend</h2>
+    <section className="ecc-panel ecc-trend">
+      <div className="ecc-panel__head">
+        <div>
+          <h2>Performance Trend</h2>
+          <p className="ecc-quiet">{rangeLabel || "Selected period"}</p>
+        </div>
+        <div className="ecc-trend__tools">
           <div className="ecc-seg">
             {[
               ["monthly", "Month"],
@@ -82,77 +111,87 @@ function CommandCenterCharts({ series, currency, costRatio, period, onPeriodChan
               </button>
             ))}
           </div>
+          <button type="button" className="ecc-btn ecc-btn--sm" onClick={exportCsv}>
+            Export
+          </button>
         </div>
-        <div className="ecc-metric-toggles">
-          {[
-            ["revenue", "Revenue"],
-            ["commission", "Commission"],
-            ["payout", "Payout"],
-          ].map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              className={metrics[key] ? "is-on" : ""}
-              style={{ "--tone": COLORS[key] }}
-              onClick={() => toggle(key)}
-            >
-              <i />
-              {label}
-            </button>
-          ))}
-        </div>
-        {!has ? (
-          <p className="ecc-quiet">No trend data for this period</p>
-        ) : (
-          <>
-            <svg viewBox="0 0 720 220" className="ecc-line-chart" preserveAspectRatio="none">
-              {[0, 1, 2, 3].map((i) => (
-                <line
-                  key={i}
-                  x1="18"
-                  x2="702"
-                  y1={18 + i * 50}
-                  y2={18 + i * 50}
-                  stroke="#e8edf3"
-                  strokeWidth="1"
-                />
-              ))}
-              {activeKeys.map((k) => (
-                <path
-                  key={k}
-                  d={paths[k]}
-                  fill="none"
-                  stroke={COLORS[k]}
-                  strokeWidth="2.25"
-                />
-              ))}
-            </svg>
-            <div className="ecc-chart-labels">
-              {(series || []).map((r) => (
-                <span key={r.period || r.label}>{r.label || r.period}</span>
-              ))}
-            </div>
-            <p className="ecc-quiet">{currency}</p>
-          </>
-        )}
       </div>
 
-      <aside className="ecc-panel ecc-ratio">
-        <h2>Commission Cost Ratio</h2>
-        <div className={`ecc-ratio__value tone-${ratioStatus.tone}`}>
-          {costRatio != null ? `${costRatio}%` : "—"}
+      <div className="ecc-legend-inline">
+        {activeKeys.map((k) => (
+          <span key={k}>
+            <i style={{ background: COLORS[k] }} />
+            {k.charAt(0).toUpperCase() + k.slice(1)}
+          </span>
+        ))}
+        <span className="ecc-quiet">Scale max {formatMoney(max, currency, { compact: true })}</span>
+      </div>
+
+      {!has ? (
+        <p className="ecc-quiet">No trend data for this period</p>
+      ) : (
+        <div className="ecc-trend__canvas" onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+          <svg viewBox={`0 0 ${width} ${height}`} className="ecc-line-chart" preserveAspectRatio="none">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <line
+                key={i}
+                x1={pad}
+                x2={width - pad}
+                y1={pad + i * ((height - pad * 2) / 4)}
+                y2={pad + i * ((height - pad * 2) / 4)}
+                stroke="#e8edf3"
+                strokeWidth="1"
+              />
+            ))}
+            {hover ? (
+              <line
+                x1={hover.x}
+                x2={hover.x}
+                y1={pad}
+                y2={height - pad}
+                stroke="#94a3b8"
+                strokeDasharray="4 4"
+                strokeWidth="1"
+              />
+            ) : null}
+            {activeKeys.map((k) => (
+              <path key={k} d={paths[k]} fill="none" stroke={COLORS[k]} strokeWidth="2.5" />
+            ))}
+            {hover
+              ? activeKeys.map((k) => {
+                  const pt = pointsByKey[k]?.[hover.idx];
+                  if (!pt) return null;
+                  return <circle key={k} cx={pt.x} cy={pt.y} r="4" fill={COLORS[k]} />;
+                })
+              : null}
+          </svg>
+          {hover ? (
+            <div
+              className="ecc-tooltip"
+              style={{ left: `${(hover.x / width) * 100}%` }}
+            >
+              <strong>{hover.label}</strong>
+              <div>
+                <span style={{ color: COLORS.revenue }}>Revenue</span>
+                {formatMoney(hover.revenue, currency, { compact: true })}
+              </div>
+              <div>
+                <span style={{ color: COLORS.commission }}>Commission</span>
+                {formatMoney(hover.commission, currency, { compact: true })}
+              </div>
+              <div>
+                <span style={{ color: COLORS.payout }}>Payout</span>
+                {formatMoney(hover.payout, currency, { compact: true })}
+              </div>
+            </div>
+          ) : null}
         </div>
-        <div className={`ecc-ratio__status tone-${ratioStatus.tone}`}>
-          {ratioStatus.label}
-        </div>
-        <p className="ecc-quiet">Commission as % of revenue</p>
-        <div className="ecc-ratio__gauge" aria-hidden>
-          <div
-            className="ecc-ratio__fill"
-            style={{ width: `${Math.min(((costRatio || 0) / 20) * 100, 100)}%` }}
-          />
-        </div>
-      </aside>
+      )}
+      <div className="ecc-chart-labels">
+        {(series || []).map((r) => (
+          <span key={r.period || r.label}>{r.label || r.period}</span>
+        ))}
+      </div>
     </section>
   );
 }

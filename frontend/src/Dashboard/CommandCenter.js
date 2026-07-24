@@ -11,7 +11,7 @@ import "./commandCenter.css";
 
 const LazyCharts = lazy(() => import("./CommandCenterCharts"));
 
-function buildSparkPath(points, width = 64, height = 24) {
+function buildSparkPath(points, width = 72, height = 28) {
   if (!points?.length) return "";
   const max = Math.max(...points, 1);
   const min = Math.min(...points, 0);
@@ -26,15 +26,32 @@ function buildSparkPath(points, width = 64, height = 24) {
 }
 
 function formatKpiValue(card, currency) {
-  if (card.value == null) return "—";
+  if (card.value == null || card.value === "") return "—";
+  if (card.format === "text") return String(card.value);
   if (card.format === "percent") return `${card.value}%`;
   if (card.format === "number") return Number(card.value).toLocaleString();
   return formatMoney(card.value, currency, { compact: true });
 }
 
+function statusDotClass(status, key) {
+  if (key === "risk") {
+    const v = String(status || "").toLowerCase();
+    if (status === "attention" || v === "high") return "is-bad";
+    if (status === "down" || v === "medium") return "is-warn";
+    return "is-good";
+  }
+  if (status === "attention" || status === "down") return "is-warn";
+  if (status === "up" || status === "stable") return "is-good";
+  return "is-neutral";
+}
+
 function DeltaLine({ delta, explanation }) {
   if (delta == null) {
-    return <span className="ecc-delta is-none">No comparison available</span>;
+    return (
+      <span className="ecc-delta">
+        <span className="ecc-delta__ctx">{explanation || "Current period"}</span>
+      </span>
+    );
   }
   const up = delta >= 0;
   return (
@@ -42,18 +59,18 @@ function DeltaLine({ delta, explanation }) {
       <strong>
         {up ? "↑" : "↓"} {Math.abs(delta)}%
       </strong>
-      <span>{explanation || "vs last period"}</span>
+      <span className="ecc-delta__ctx">{explanation || "vs previous period"}</span>
     </span>
   );
 }
 
-function ExecutiveKpiGrid({ cards, currency, onDrill }) {
+function ExecutiveKpiHeader({ cards, currency, onDrill }) {
   return (
-    <section className="ecc-kpis" aria-label="Executive KPIs">
-      {(cards || []).map((c) => (
+    <section className="ecc-kpi-strip" aria-label="Executive KPIs">
+      {(cards || []).slice(0, 6).map((c) => (
         <article
           key={c.key}
-          className={`ecc-kpi status-${c.status || "neutral"}`}
+          className="ecc-kpi"
           role="button"
           tabIndex={0}
           onClick={() => onDrill?.(c.href)}
@@ -63,33 +80,18 @@ function ExecutiveKpiGrid({ cards, currency, onDrill }) {
         >
           <div className="ecc-kpi__top">
             <span className="ecc-kpi__label">{c.label}</span>
-            <span className={`ecc-kpi__pill status-${c.status || "neutral"}`}>
-              {c.status === "attention"
-                ? "Watch"
-                : c.status === "up"
-                  ? "Up"
-                  : c.status === "down"
-                    ? "Down"
-                    : c.status === "stable"
-                      ? "Stable"
-                      : "—"}
-            </span>
+            <i className={`ecc-kpi__dot ${statusDotClass(c.status, c.key)}`} aria-hidden />
           </div>
-          <div className="ecc-kpi__value">{formatKpiValue(c, currency)}</div>
+          <div className={`ecc-kpi__value ${c.format === "text" ? `risk-${String(c.value).toLowerCase()}` : ""}`}>
+            {formatKpiValue(c, currency)}
+          </div>
           <div className="ecc-kpi__foot">
             <DeltaLine delta={c.delta_pct} explanation={c.explanation} />
             {c.sparkline?.length > 1 ? (
-              <svg className="ecc-spark" viewBox="0 0 64 24" aria-hidden>
-                <path
-                  d={buildSparkPath(c.sparkline)}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                />
+              <svg className="ecc-spark" viewBox="0 0 72 28" aria-hidden>
+                <path d={buildSparkPath(c.sparkline)} fill="none" stroke="currentColor" strokeWidth="1.6" />
               </svg>
-            ) : (
-              <span className="ecc-spark-placeholder" />
-            )}
+            ) : null}
           </div>
         </article>
       ))}
@@ -97,63 +99,95 @@ function ExecutiveKpiGrid({ cards, currency, onDrill }) {
   );
 }
 
-function ActionCenter({ alerts, currency }) {
-  const buckets = useMemo(() => {
-    const list = alerts || [];
-    return {
-      critical: list.filter((a) => a.severity === "high"),
-      warning: list.filter((a) => a.severity === "medium"),
-      info: list.filter((a) => a.severity === "low" || !a.severity),
-    };
+function HealthScore({ health }) {
+  const score = health?.score ?? 0;
+  const r = 54;
+  const c = 2 * Math.PI * r;
+  const offset = c - (Math.max(0, Math.min(100, score)) / 100) * c;
+  const tone =
+    score >= 80 ? "good" : score >= 65 ? "stable" : score >= 45 ? "warn" : "bad";
+
+  return (
+    <section className="ecc-panel ecc-health">
+      <h2>Business Health Score</h2>
+      <div className="ecc-health__ring-wrap">
+        <svg viewBox="0 0 140 140" className="ecc-health__ring" aria-hidden>
+          <circle cx="70" cy="70" r={r} fill="none" stroke="#e8edf3" strokeWidth="10" />
+          <circle
+            cx="70"
+            cy="70"
+            r={r}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="10"
+            strokeLinecap="round"
+            strokeDasharray={c}
+            strokeDashoffset={offset}
+            transform="rotate(-90 70 70)"
+            className={`tone-${tone}`}
+          />
+        </svg>
+        <div className="ecc-health__center">
+          <strong>{score}</strong>
+          <span>{health?.label || "—"}</span>
+        </div>
+      </div>
+      <ul className="ecc-health__parts">
+        {(health?.components || []).map((p) => (
+          <li key={p.code}>
+            <span>{p.label}</span>
+            <strong>{p.score}</strong>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function ActionPanel({ alerts, currency }) {
+  const items = useMemo(() => {
+    const list = [...(alerts || [])];
+    list.sort((a, b) => (a.severity_rank || 9) - (b.severity_rank || 9));
+    return list.slice(0, 6);
   }, [alerts]);
 
-  const renderBucket = (key, title, items) => (
-    <div className={`ecc-action-col sev-${key}`}>
-      <header>
-        <i aria-hidden />
-        <h3>{title}</h3>
-        <span>{items.length}</span>
-      </header>
+  const sevLabel = (s) => (s === "high" ? "Critical" : s === "medium" ? "Warning" : "Information");
+  const cta = (s) => (s === "high" ? "Resolve" : s === "medium" ? "Review" : "Open");
+
+  return (
+    <aside className="ecc-panel ecc-action-panel">
+      <div className="ecc-panel__head">
+        <h2>Action Center</h2>
+        <span className="ecc-count">{items.length}</span>
+      </div>
       {!items.length ? (
-        <p className="ecc-quiet">None</p>
+        <p className="ecc-quiet">No open exceptions</p>
       ) : (
-        <ul>
+        <ul className="ecc-action-list">
           {items.map((a) => (
-            <li key={a.code}>
-              <Link to={a.href || "/commissions"} className="ecc-action-item">
-                <strong>{a.title}</strong>
-                <span>
-                  {a.count} {a.count === 1 ? "item" : "items"}
-                  {a.impact_amount != null && a.impact_amount > 0
-                    ? ` · ${formatMoney(a.impact_amount, currency, { compact: true })}`
-                    : ""}
-                </span>
-                <em>{a.action_label || "Review"}</em>
+            <li key={a.code} className={`sev-${a.severity || "low"}`}>
+              <span className="ecc-action-list__sev">{sevLabel(a.severity)}</span>
+              <strong>{a.title}</strong>
+              <span className="ecc-action-list__meta">
+                {a.count} {a.count === 1 ? "item" : "items"}
+                {a.impact_amount != null && a.impact_amount > 0
+                  ? ` · ${formatMoney(a.impact_amount, currency, { compact: true })} impact`
+                  : ""}
+              </span>
+              <Link className="ecc-action-list__cta" to={a.href || "/commissions"}>
+                {a.action_label || cta(a.severity)}
               </Link>
             </li>
           ))}
         </ul>
       )}
-    </div>
-  );
-
-  return (
-    <section className="ecc-panel">
-      <div className="ecc-panel__head">
-        <h2>Action Center</h2>
-      </div>
-      <div className="ecc-actions">
-        {renderBucket("critical", "Critical", buckets.critical)}
-        {renderBucket("warning", "Warnings", buckets.warning)}
-        {renderBucket("info", "Information", buckets.info)}
-      </div>
-    </section>
+    </aside>
   );
 }
 
-function QuotaPerformance({ distribution, employees, currency, avg }) {
+function QuotaBoard({ distribution, employees, avg }) {
   const bands = [
-    { key: "over_achievers", label: "Above Target", color: "#0f766e" },
+    { key: "over_achievers", label: "Above", color: "#0f766e" },
     { key: "on_track", label: "On Track", color: "#1d4ed8" },
     { key: "at_risk", label: "At Risk", color: "#b45309" },
     { key: "critical", label: "Critical", color: "#b91c1c" },
@@ -168,7 +202,7 @@ function QuotaPerformance({ distribution, employees, currency, avg }) {
     return { ...b, count, start, sweep };
   });
 
-  const describeArc = (startDeg, sweepDeg, r = 42) => {
+  const describeArc = (startDeg, sweepDeg, r = 40) => {
     if (sweepDeg <= 0) return "";
     const toRad = (d) => (d * Math.PI) / 180;
     const x1 = 50 + r * Math.cos(toRad(startDeg));
@@ -179,27 +213,25 @@ function QuotaPerformance({ distribution, employees, currency, avg }) {
     return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
   };
 
-  const rows = (employees || []).slice(0, 8);
+  const rows = (employees || []).slice(0, 6);
 
   return (
     <section className="ecc-panel">
       <div className="ecc-panel__head">
         <h2>Quota Performance</h2>
-        <span className="ecc-metric-chip">{avg != null ? `${avg}% avg` : "—"}</span>
       </div>
-      <div className="ecc-quota">
-        <div className="ecc-donut-wrap">
+      <div className="ecc-quota-board">
+        <div className="ecc-quota-board__donut">
           <svg viewBox="0 0 100 100" className="ecc-donut" aria-hidden>
-            <circle cx="50" cy="50" r="42" fill="none" stroke="#e8edf3" strokeWidth="10" />
+            <circle cx="50" cy="50" r="40" fill="none" stroke="#e8edf3" strokeWidth="9" />
             {arcs.map((a) =>
               a.sweep > 0 ? (
                 <path
                   key={a.key}
-                  d={describeArc(a.start, Math.max(a.sweep - 0.6, 0.1))}
+                  d={describeArc(a.start, Math.max(a.sweep - 0.8, 0.1))}
                   fill="none"
                   stroke={a.color}
-                  strokeWidth="10"
-                  strokeLinecap="butt"
+                  strokeWidth="9"
                 />
               ) : null
             )}
@@ -214,72 +246,51 @@ function QuotaPerformance({ distribution, employees, currency, avg }) {
             {bands.map((b) => (
               <li key={b.key}>
                 <i style={{ background: b.color }} />
-                <span>{b.label}</span>
+                {b.label}
                 <strong>{distribution?.[b.key] || 0}</strong>
               </li>
             ))}
           </ul>
         </div>
-        <div className="ecc-table-wrap">
-          <table className="ecc-table">
-            <thead>
-              <tr>
-                <th>Employee</th>
-                <th>Quota</th>
-                <th>Achievement</th>
-                <th>Attainment</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {!rows.length ? (
-                <tr>
-                  <td colSpan={5} className="ecc-quiet">
-                    No employee quota data
-                  </td>
-                </tr>
-              ) : (
-                rows.map((r) => {
-                  const pct = r.attainment_pct;
-                  const width = Math.min(Math.max(pct || 0, 0), 100);
-                  return (
-                    <tr key={r.employee_id || r.email}>
-                      <td>
-                        <strong>{r.employee_name || r.email}</strong>
-                      </td>
-                      <td>{formatMoney(r.quota, currency, { compact: true })}</td>
-                      <td>{formatMoney(r.achievement, currency, { compact: true })}</td>
-                      <td>
-                        <div className="ecc-bar">
-                          <span>{pct != null ? `${pct}%` : "—"}</span>
-                          <div className="ecc-bar__track">
-                            <i
-                              className={`status-${r.status || "unknown"}`}
-                              style={{ width: `${width}%` }}
-                            />
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        <span className={`ecc-status status-${r.status || "unknown"}`}>
-                          {r.status_label || "—"}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+        <div className="ecc-leaderboard">
+          <div className="ecc-leaderboard__head">
+            <span>Employee</span>
+            <span>Attainment</span>
+          </div>
+          {!rows.length ? (
+            <p className="ecc-quiet">No quota leaders</p>
+          ) : (
+            rows.map((r) => {
+              const pct = r.attainment_pct;
+              const width = Math.min(Math.max(pct || 0, 0), 100);
+              return (
+                <div key={r.employee_id || r.email} className="ecc-leaderboard__row">
+                  <div>
+                    <strong>{r.employee_name || r.email}</strong>
+                    <span className={`ecc-status status-${r.status || "unknown"}`}>
+                      {r.status_label || "—"}
+                    </span>
+                  </div>
+                  <div className="ecc-hbar">
+                    <span>{pct != null ? `${pct}%` : "—"}</span>
+                    <div className="ecc-hbar__track">
+                      <i className={`status-${r.status || "unknown"}`} style={{ width: `${width}%` }} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </section>
   );
 }
 
-function TerritoryCards({ board, currency }) {
+function TerritoryRanking({ board, currency }) {
   const [mode, setMode] = useState("top");
   const rows = (mode === "top" ? board?.top : board?.worst) || [];
+  const maxSales = Math.max(...rows.map((r) => r.sales || 0), 1);
 
   return (
     <section className="ecc-panel">
@@ -289,11 +300,7 @@ function TerritoryCards({ board, currency }) {
           <button type="button" className={mode === "top" ? "is-active" : ""} onClick={() => setMode("top")}>
             Top
           </button>
-          <button
-            type="button"
-            className={mode === "worst" ? "is-active" : ""}
-            onClick={() => setMode("worst")}
-          >
+          <button type="button" className={mode === "worst" ? "is-active" : ""} onClick={() => setMode("worst")}>
             Lowest
           </button>
         </div>
@@ -301,54 +308,63 @@ function TerritoryCards({ board, currency }) {
       {!rows.length ? (
         <p className="ecc-quiet">No territory data</p>
       ) : (
-        <div className="ecc-terr-cards">
-          {rows.slice(0, 6).map((r) => (
-            <article key={`${r.territory}-${r.region}`} className="ecc-terr-card">
-              <h3>{r.territory}</h3>
-              <p className="ecc-quiet">{r.region}</p>
-              <dl>
-                <div>
-                  <dt>Revenue</dt>
-                  <dd>{formatMoney(r.sales, currency, { compact: true })}</dd>
+        <ol className="ecc-rank">
+          {rows.slice(0, 5).map((r, idx) => (
+            <li key={`${r.territory}-${r.region}`}>
+              <span className="ecc-rank__n">#{idx + 1}</span>
+              <div className="ecc-rank__body">
+                <div className="ecc-rank__title">
+                  <strong>{r.territory}</strong>
+                  <span>{formatMoney(r.sales, currency, { compact: true })}</span>
                 </div>
-                <div>
-                  <dt>Growth</dt>
-                  <dd>
+                <div className="ecc-rank__bar">
+                  <i style={{ width: `${Math.round(((r.sales || 0) / maxSales) * 100)}%` }} />
+                </div>
+                <div className="ecc-rank__meta">
+                  <span>Attainment {r.attainment_pct != null ? `${r.attainment_pct}%` : "—"}</span>
+                  <span>
+                    Efficiency{" "}
+                    {r.commission_pct != null ? `${r.commission_pct}%` : "—"}
+                  </span>
+                  <span>
+                    Growth{" "}
                     {r.growth_pct != null
                       ? `${r.growth_pct >= 0 ? "+" : ""}${r.growth_pct}%`
                       : "—"}
-                  </dd>
+                  </span>
                 </div>
-                <div>
-                  <dt>Attainment</dt>
-                  <dd>{r.attainment_pct != null ? `${r.attainment_pct}%` : "—"}</dd>
-                </div>
-                <div>
-                  <dt>Commission</dt>
-                  <dd>{formatMoney(r.commission || 0, currency, { compact: true })}</dd>
-                </div>
-              </dl>
-            </article>
+              </div>
+            </li>
           ))}
-        </div>
+        </ol>
       )}
     </section>
   );
 }
 
-function PlanPerformanceTable({ plans, currency }) {
+function PlanTable({ plans, currency }) {
   const [sortKey, setSortKey] = useState("revenue_generated");
   const [asc, setAsc] = useState(false);
+  const [q, setQ] = useState("");
+  const [healthFilter, setHealthFilter] = useState("all");
+
   const rows = useMemo(() => {
-    const list = [...(plans || [])];
+    let list = [...(plans || [])];
+    if (q.trim()) {
+      const needle = q.trim().toLowerCase();
+      list = list.filter((p) => (p.plan_name || "").toLowerCase().includes(needle));
+    }
+    if (healthFilter !== "all") {
+      list = list.filter((p) => (p.status || "") === healthFilter);
+    }
     list.sort((a, b) => {
       const av = a[sortKey] ?? -Infinity;
       const bv = b[sortKey] ?? -Infinity;
       if (typeof av === "string") return asc ? av.localeCompare(bv) : bv.localeCompare(av);
       return asc ? av - bv : bv - av;
     });
-    return list.slice(0, 10);
-  }, [plans, sortKey, asc]);
+    return list.slice(0, 8);
+  }, [plans, sortKey, asc, q, healthFilter]);
 
   const sort = (key) => {
     if (sortKey === key) setAsc((v) => !v);
@@ -358,6 +374,9 @@ function PlanPerformanceTable({ plans, currency }) {
     }
   };
 
+  const badgeClass = (s) =>
+    s === "Needs Review" ? "status-critical" : s === "Healthy" ? "status-over_achiever" : "status-on_track";
+
   return (
     <section className="ecc-panel">
       <div className="ecc-panel__head">
@@ -366,8 +385,22 @@ function PlanPerformanceTable({ plans, currency }) {
           Plans
         </Link>
       </div>
+      <div className="ecc-table-tools">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search plans"
+          aria-label="Search plans"
+        />
+        <select value={healthFilter} onChange={(e) => setHealthFilter(e.target.value)}>
+          <option value="all">All health</option>
+          <option value="Healthy">Healthy</option>
+          <option value="Monitor">Monitor</option>
+          <option value="Needs Review">Needs Review</option>
+        </select>
+      </div>
       <div className="ecc-table-wrap">
-        <table className="ecc-table ecc-table--plans">
+        <table className="ecc-table">
           <thead>
             <tr>
               <th>
@@ -386,23 +419,23 @@ function PlanPerformanceTable({ plans, currency }) {
                 </button>
               </th>
               <th>
-                <button type="button" onClick={() => sort("employees_covered")}>
-                  Employees
-                </button>
-              </th>
-              <th>
                 <button type="button" onClick={() => sort("roi")}>
                   ROI
                 </button>
               </th>
-              <th>Status</th>
+              <th>
+                <button type="button" onClick={() => sort("employees_covered")}>
+                  Employees
+                </button>
+              </th>
+              <th>Health</th>
             </tr>
           </thead>
           <tbody>
             {!rows.length ? (
               <tr>
                 <td colSpan={6} className="ecc-quiet">
-                  No plan performance data
+                  No plans match
                 </td>
               </tr>
             ) : (
@@ -413,20 +446,10 @@ function PlanPerformanceTable({ plans, currency }) {
                   </td>
                   <td>{formatMoney(p.revenue_generated, currency, { compact: true })}</td>
                   <td>{formatMoney(p.commission_cost, currency, { compact: true })}</td>
-                  <td>{p.employees_covered ?? "—"}</td>
                   <td>{p.roi_label || "—"}</td>
+                  <td>{p.employees_covered ?? "—"}</td>
                   <td>
-                    <span
-                      className={`ecc-status ${
-                        p.status === "Needs Review"
-                          ? "status-critical"
-                          : p.status === "Healthy"
-                            ? "status-over_achiever"
-                            : "status-on_track"
-                      }`}
-                    >
-                      {p.status || "—"}
-                    </span>
+                    <span className={`ecc-status ${badgeClass(p.status)}`}>{p.status || "—"}</span>
                   </td>
                 </tr>
               ))
@@ -445,12 +468,17 @@ function InsightCards({ items }) {
         <h2>Executive Insights</h2>
       </div>
       <div className="ecc-insight-grid">
-        {(items || []).map((i) => (
+        {(items || []).slice(0, 4).map((i) => (
           <article key={i.code} className={`ecc-insight tone-${i.tone || "neutral"}`}>
             <span className="ecc-insight__dot" aria-hidden />
-            <div>
+            <div className="ecc-insight__body">
               <h3>{i.title || "Insight"}</h3>
               <p>{i.text}</p>
+              {i.href ? (
+                <Link className="ecc-insight__cta" to={i.href}>
+                  {i.cta || "Open"}
+                </Link>
+              ) : null}
             </div>
           </article>
         ))}
@@ -463,13 +491,13 @@ function ActivityTimeline({ items }) {
   return (
     <section className="ecc-panel">
       <div className="ecc-panel__head">
-        <h2>Recent Activity</h2>
+        <h2>Business Activity</h2>
         <Link className="ecc-ghost-link" to="/audit-logs">
-          Activity
+          Full audit
         </Link>
       </div>
       {!items?.length ? (
-        <p className="ecc-quiet">No recent activity</p>
+        <p className="ecc-quiet">No recent business events</p>
       ) : (
         <ol className="ecc-timeline">
           {items.map((ev) => {
@@ -544,86 +572,65 @@ function CommandCenter() {
     primaryCurrencyFromPayload(cc) ||
     "INR";
 
-  const kpiCards = cc?.executive_kpis?.length
-    ? cc.executive_kpis
-    : [
-        {
-          key: "revenue",
-          label: "Revenue",
-          value: cc?.kpis?.total_sales,
-          format: "money",
-          delta_pct: cc?.kpis?.sales_delta_pct,
-          status: "neutral",
-          explanation: "vs last period",
-          sparkline: [],
-          href: "/orders",
-        },
-        {
-          key: "liability",
-          label: "Commission Liability",
-          value: cc?.kpis?.commission_liability,
-          format: "money",
-          delta_pct: cc?.kpis?.liability_delta_pct,
-          status: "neutral",
-          href: "/commissions",
-        },
-        {
-          key: "paid",
-          label: "Commission Paid",
-          value: cc?.kpis?.commission_paid,
-          format: "money",
-          delta_pct: cc?.kpis?.paid_delta_pct,
-          status: "neutral",
-          href: "/payouts",
-        },
-        {
-          key: "forecast",
-          label: "Forecasted Commission",
-          value: cc?.kpis?.forecasted_commission,
-          format: "money",
-          delta_pct: null,
-          status: "neutral",
-          href: "/commissions",
-        },
-        {
-          key: "attainment",
-          label: "Quota Attainment",
-          value: cc?.kpis?.quota_attainment,
-          format: "percent",
-          delta_pct: cc?.kpis?.attainment_delta_pct,
-          status: "neutral",
-          href: "/user-setup",
-        },
-        {
-          key: "active_plans",
-          label: "Active Plans",
-          value: cc?.kpis?.active_plans,
-          format: "number",
-          delta_pct: null,
-          status: "neutral",
-          href: "/comp-plans",
-        },
-        {
-          key: "employees",
-          label: "Employees Covered",
-          value: cc?.kpis?.active_participants,
-          format: "number",
-          delta_pct: cc?.kpis?.participants_delta_pct,
-          status: "neutral",
-          href: "/user-setup",
-        },
-        {
-          key: "pending_actions",
-          label: "Pending Actions",
-          value: cc?.action_center?.length || 0,
-          format: "number",
-          delta_pct: null,
-          status: "neutral",
-          href: "/commissions",
-        },
-      ];
-
-  const costRatio = cc?.kpis?.avg_commission_rate;
+  const kpiCards = useMemo(() => {
+    if (cc?.executive_kpis?.length) return cc.executive_kpis;
+    const risk = cc?.kpis?.leakage_risk || "low";
+    return [
+      {
+        key: "revenue",
+        label: "Revenue",
+        value: cc?.kpis?.total_sales,
+        format: "money",
+        delta_pct: cc?.kpis?.sales_delta_pct,
+        explanation: cc?.kpis?.sales_delta_pct != null ? "vs previous period" : "Current period",
+        sparkline: [],
+        href: "/orders",
+      },
+      {
+        key: "liability",
+        label: "Commission Liability",
+        value: cc?.kpis?.commission_liability,
+        format: "money",
+        delta_pct: cc?.kpis?.liability_delta_pct,
+        explanation: "vs previous period",
+        href: "/commissions",
+      },
+      {
+        key: "paid",
+        label: "Paid",
+        value: cc?.kpis?.commission_paid,
+        format: "money",
+        delta_pct: cc?.kpis?.paid_delta_pct,
+        href: "/payouts",
+      },
+      {
+        key: "forecast",
+        label: "Forecast",
+        value: cc?.kpis?.forecasted_commission,
+        format: "money",
+        delta_pct: null,
+        explanation: "Current period",
+        href: "/commissions",
+      },
+      {
+        key: "attainment",
+        label: "Quota Attainment",
+        value: cc?.kpis?.quota_attainment,
+        format: "percent",
+        delta_pct: cc?.kpis?.attainment_delta_pct,
+        href: "/user-setup",
+      },
+      {
+        key: "risk",
+        label: "Risk Score",
+        value: risk === "high" ? "High" : risk === "medium" ? "Medium" : "Low",
+        format: "text",
+        status: risk === "high" ? "attention" : risk === "medium" ? "down" : "stable",
+        explanation: "Current period",
+        href: "/commissions",
+      },
+    ];
+  }, [cc]);
 
   return (
     <div className="ecc-root">
@@ -631,85 +638,82 @@ function CommandCenter() {
         <div className="ecc-header__main">
           <div>
             <h1>Performance Command Center</h1>
-            <p className="ecc-sub">Business performance and exceptions requiring action</p>
+            <p className="ecc-sub">Revenue · Commission · Quota · Risk</p>
           </div>
-          <button type="button" className="ecc-btn" onClick={load} disabled={loading}>
-            {loading ? "Refreshing…" : "Refresh"}
-          </button>
-        </div>
-        <div className="ecc-filters">
-          <label>
-            Period
-            <select value={period} onChange={(e) => setPeriod(e.target.value)}>
-              <option value="monthly">Month</option>
-              <option value="quarterly">Quarter</option>
-              <option value="annual">Year</option>
-              <option value="rolling12">Rolling 12</option>
-            </select>
-          </label>
-          <label>
-            Business Unit
-            <select value={businessGroup} onChange={(e) => setBusinessGroup(e.target.value)}>
-              <option value="all">All</option>
-              {BUSINESS_GROUP_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Region
-            <input
-              value={region}
-              onChange={(e) => setRegion(e.target.value)}
-              placeholder="All regions"
-            />
-          </label>
+          <div className="ecc-header__actions">
+            <div className="ecc-filters ecc-filters--inline">
+              <select value={period} onChange={(e) => setPeriod(e.target.value)} aria-label="Period">
+                <option value="monthly">Month</option>
+                <option value="quarterly">Quarter</option>
+                <option value="annual">Year</option>
+                <option value="rolling12">Rolling 12</option>
+              </select>
+              <select
+                value={businessGroup}
+                onChange={(e) => setBusinessGroup(e.target.value)}
+                aria-label="Business unit"
+              >
+                <option value="all">All units</option>
+                {BUSINESS_GROUP_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={region}
+                onChange={(e) => setRegion(e.target.value)}
+                placeholder="Region"
+                aria-label="Region"
+              />
+            </div>
+            <button type="button" className="ecc-btn" onClick={load} disabled={loading}>
+              {loading ? "…" : "Refresh"}
+            </button>
+          </div>
         </div>
       </header>
 
       {error ? <div className="ecc-error">{error}</div> : null}
 
       {loading && !cc ? (
-        <p className="ecc-quiet">Loading…</p>
+        <p className="ecc-quiet">Loading command center…</p>
       ) : (
         <>
-          <ExecutiveKpiGrid
+          <ExecutiveKpiHeader
             cards={kpiCards}
             currency={currency}
             onDrill={(href) => href && navigate(href)}
           />
 
-          {chartsReady ? (
-            <Suspense fallback={<div className="ecc-panel ecc-chart-skeleton">Loading charts…</div>}>
-              <LazyCharts
-                series={cc?.trend_series || cc?.revenue_vs_commission}
-                currency={currency}
-                costRatio={costRatio}
-                period={period}
-                onPeriodChange={setPeriod}
-              />
-            </Suspense>
-          ) : (
-            <div className="ecc-panel ecc-chart-skeleton">Loading charts…</div>
-          )}
+          <div className="ecc-cockpit">
+            <HealthScore health={cc?.business_health} />
+            {chartsReady ? (
+              <Suspense fallback={<div className="ecc-panel ecc-chart-skeleton">Loading trend…</div>}>
+                <LazyCharts
+                  series={cc?.trend_series || cc?.revenue_vs_commission}
+                  currency={currency}
+                  period={period}
+                  onPeriodChange={setPeriod}
+                  rangeLabel={`${cc?.start_date || ""} → ${cc?.end_date || ""}`}
+                />
+              </Suspense>
+            ) : (
+              <div className="ecc-panel ecc-chart-skeleton">Loading trend…</div>
+            )}
+            <ActionPanel alerts={cc?.action_center} currency={currency} />
+          </div>
 
-          <ActionCenter alerts={cc?.action_center} currency={currency} />
+          <div className="ecc-mid">
+            <QuotaBoard
+              distribution={cc?.attainment_distribution}
+              employees={cc?.quota_center}
+              avg={cc?.kpis?.quota_attainment}
+            />
+            <TerritoryRanking board={cc?.territory_board} currency={currency} />
+          </div>
 
-          <QuotaPerformance
-            distribution={cc?.attainment_distribution}
-            employees={cc?.quota_center || cc?.top_performers}
-            currency={currency}
-            avg={cc?.kpis?.quota_attainment}
-          />
-
-          <TerritoryCards board={cc?.territory_board} currency={currency} />
-
-          <PlanPerformanceTable
-            plans={cc?.plan_performance}
-            currency={currency}
-          />
+          <PlanTable plans={cc?.plan_performance} currency={currency} />
 
           <div className="ecc-bottom-grid">
             <InsightCards items={cc?.executive_insights} />

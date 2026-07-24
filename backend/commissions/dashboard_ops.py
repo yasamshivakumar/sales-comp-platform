@@ -1060,6 +1060,63 @@ def build_command_center(request):
     paid_delta = _delta_pct(paid, prev_paid)
     attain_delta = kpis_structured["average_attainment"]["delta_pct"]
 
+    risk_label = (
+        "High" if leakage_risk == "high" else "Medium" if leakage_risk == "medium" else "Low"
+    )
+    risk_rank = {"high": 3, "medium": 2, "low": 1}.get(leakage_risk, 1)
+
+    # Composite Business Health Score (0–100)
+    scorecards = operational_health.get("scorecards") or []
+    score_map = {c["code"]: c.get("score", 70) for c in scorecards}
+    revenue_score = (
+        90
+        if sales_delta is not None and sales_delta >= 5
+        else 75
+        if sales_delta is not None and sales_delta >= 0
+        else 55
+        if sales_delta is not None
+        else (80 if sales_f > 0 else 50)
+    )
+    quota_score = (
+        min(100, int(avg_attainment))
+        if avg_attainment is not None
+        else score_map.get("configuration", 70)
+    )
+    commission_score = score_map.get("calculation", 70)
+    plans_score = score_map.get("configuration", 70)
+    approvals_score = score_map.get("approval", 70)
+    business_health_score = int(
+        round(
+            revenue_score * 0.25
+            + quota_score * 0.25
+            + commission_score * 0.2
+            + plans_score * 0.15
+            + approvals_score * 0.15
+        )
+    )
+    business_health = {
+        "score": max(0, min(100, business_health_score)),
+        "label": (
+            "Strong"
+            if business_health_score >= 80
+            else "Stable"
+            if business_health_score >= 65
+            else "At Risk"
+            if business_health_score >= 45
+            else "Critical"
+        ),
+        "components": [
+            {"code": "revenue", "label": "Revenue", "score": revenue_score},
+            {"code": "quota", "label": "Quota", "score": int(quota_score)},
+            {"code": "commission", "label": "Commission", "score": commission_score},
+            {"code": "plans", "label": "Plans", "score": plans_score},
+            {"code": "approvals", "label": "Approvals", "score": approvals_score},
+        ],
+    }
+
+    def _ctx(delta):
+        return "vs previous period" if delta is not None else "Current period"
+
     executive_kpis = [
         {
             "key": "revenue",
@@ -1069,7 +1126,7 @@ def build_command_center(request):
             "delta_pct": sales_delta,
             "unusual": _unusual(sales_delta),
             "status": _kpi_status(sales_delta, _unusual(sales_delta)),
-            "explanation": "vs last period",
+            "explanation": _ctx(sales_delta),
             "sparkline": spark_sales,
             "href": "/orders",
         },
@@ -1081,31 +1138,31 @@ def build_command_center(request):
             "delta_pct": liability_delta,
             "unusual": _unusual(liability_delta),
             "status": _kpi_status(liability_delta, _unusual(liability_delta)),
-            "explanation": "vs last period",
+            "explanation": _ctx(liability_delta),
             "sparkline": spark_comm,
             "href": "/commissions",
         },
         {
             "key": "paid",
-            "label": "Commission Paid",
+            "label": "Paid",
             "value": _money(paid),
             "format": "money",
             "delta_pct": paid_delta,
             "unusual": _unusual(paid_delta),
             "status": _kpi_status(paid_delta, _unusual(paid_delta)),
-            "explanation": "vs last period",
+            "explanation": _ctx(paid_delta),
             "sparkline": spark_paid,
             "href": "/payouts",
         },
         {
             "key": "forecast",
-            "label": "Forecasted Commission",
+            "label": "Forecast",
             "value": forecasted,
             "format": "money",
             "delta_pct": None,
             "unusual": False,
             "status": "neutral",
-            "explanation": "period run-rate",
+            "explanation": "Current period",
             "sparkline": spark_comm,
             "href": "/commissions",
         },
@@ -1117,45 +1174,28 @@ def build_command_center(request):
             "delta_pct": attain_delta,
             "unusual": _unusual(attain_delta),
             "status": _kpi_status(attain_delta, _unusual(attain_delta)),
-            "explanation": "vs last period",
+            "explanation": _ctx(attain_delta),
             "sparkline": [],
             "href": "/user-setup",
         },
         {
-            "key": "active_plans",
-            "label": "Active Plans",
-            "value": active_plans,
-            "format": "number",
+            "key": "risk",
+            "label": "Risk Score",
+            "value": risk_label,
+            "format": "text",
             "delta_pct": None,
-            "unusual": False,
-            "status": "neutral",
-            "explanation": "currently published",
-            "sparkline": [],
-            "href": "/comp-plans",
-        },
-        {
-            "key": "employees",
-            "label": "Employees Covered",
-            "value": active_participants,
-            "format": "number",
-            "delta_pct": _delta_pct(active_participants, prev_participants),
-            "unusual": False,
-            "status": _kpi_status(_delta_pct(active_participants, prev_participants)),
-            "explanation": "vs last period",
-            "sparkline": [],
-            "href": "/user-setup",
-        },
-        {
-            "key": "pending_actions",
-            "label": "Pending Actions",
-            "value": len(action_center),
-            "format": "number",
-            "delta_pct": None,
-            "unusual": len(action_center) >= 3,
-            "status": "attention" if action_center else "stable",
-            "explanation": "items needing review",
+            "unusual": leakage_risk == "high",
+            "status": (
+                "attention"
+                if leakage_risk == "high"
+                else "down"
+                if leakage_risk == "medium"
+                else "stable"
+            ),
+            "explanation": "Current period",
             "sparkline": [],
             "href": "/commissions",
+            "risk_rank": risk_rank,
         },
     ]
 
@@ -1194,6 +1234,8 @@ def build_command_center(request):
                 "text": "Revenue %s %s%%"
                 % ("increased" if sales_delta >= 0 else "decreased", abs(sales_delta)),
                 "tone": "positive" if sales_delta >= 0 else "caution",
+                "cta": "View Orders",
+                "href": "/orders",
             }
         )
     attention_plans = blocked + plans_expiring + missing_rules
@@ -1204,6 +1246,8 @@ def build_command_center(request):
                 "title": "Compensation Risk",
                 "text": "%s plans require review" % attention_plans,
                 "tone": "caution",
+                "cta": "Review Plans",
+                "href": "/comp-plans",
             }
         )
     weak_terr = [
@@ -1219,6 +1263,8 @@ def build_command_center(request):
                 "text": "%s territor%s below target"
                 % (len(weak_terr), "y" if len(weak_terr) == 1 else "ies"),
                 "tone": "caution",
+                "cta": "View Territories",
+                "href": "/analytics/reports",
             }
         )
     over = attainment_distribution.get("over_achievers") or 0
@@ -1229,6 +1275,8 @@ def build_command_center(request):
                 "title": "Quota Strength",
                 "text": "%s employees above target" % over,
                 "tone": "positive",
+                "cta": "Open People",
+                "href": "/user-setup",
             }
         )
     if avg_rate is not None:
@@ -1238,6 +1286,8 @@ def build_command_center(request):
                 "title": "Commission Cost",
                 "text": "Cost ratio at %s%%" % avg_rate,
                 "tone": "positive" if avg_rate < 5 else "caution" if avg_rate < 12 else "critical",
+                "cta": "Open Commissions",
+                "href": "/commissions",
             }
         )
     if not executive_insights:
@@ -1247,8 +1297,41 @@ def build_command_center(request):
                 "title": "Performance",
                 "text": "Stable for selected period",
                 "tone": "neutral",
+                "cta": "Open Analytics",
+                "href": "/analytics",
             }
         )
+
+    BUSINESS_ACTIVITY_PREFIXES = (
+        "commission",
+        "commissions_",
+        "payout",
+        "payroll",
+        "crm_",
+        "integration_",
+        "compensation_plan",
+        "plan_version",
+        "quota_",
+        "order_",
+        "orders_",
+        "field_mapping",
+        "ai_compensation",
+        "report_exported",
+        "sync",
+    )
+    BUSINESS_ACTIVITY_BLOCK = (
+        "login",
+        "logout",
+        "signed",
+        "session",
+        "mfa_",
+        "password",
+        "invite_",
+        "profile_updated",
+        "report_viewed",
+        "people_profile",
+        "trusted_device",
+    )
 
     recent_activity = []
     try:
@@ -1258,7 +1341,13 @@ def build_command_center(request):
         audit_qs = AuditLog.objects.all().order_by("-created_at")
         if org is not None:
             audit_qs = audit_qs.filter(organization=org)
-        for row in audit_qs[:8]:
+        for row in audit_qs[:60]:
+            action = str(row.action or "")
+            low = action.lower()
+            if any(low.startswith(b) or b in low for b in BUSINESS_ACTIVITY_BLOCK):
+                continue
+            if not any(low.startswith(p) for p in BUSINESS_ACTIVITY_PREFIXES):
+                continue
             recent_activity.append(
                 {
                     "id": row.id,
@@ -1268,6 +1357,8 @@ def build_command_center(request):
                     "severity": row.severity or "info",
                 }
             )
+            if len(recent_activity) >= 8:
+                break
     except Exception:
         recent_activity = []
 
@@ -1308,6 +1399,7 @@ def build_command_center(request):
             ),
         },
         "executive_kpis": executive_kpis,
+        "business_health": business_health,
         "kpi_cards": kpis_structured,
         "processing_status": {
             "orders_imported": orders_imported,
