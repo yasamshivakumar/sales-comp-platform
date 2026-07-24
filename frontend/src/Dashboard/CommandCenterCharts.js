@@ -5,6 +5,7 @@ const COLORS = {
   revenue: "#1e3a5f",
   commission: "#0f766e",
   payout: "#b45309",
+  previous: "#94a3b8",
 };
 
 function buildSeriesGeometry(series, keys, width, height, pad = 28) {
@@ -35,19 +36,97 @@ function buildSeriesGeometry(series, keys, width, height, pad = 28) {
     paths[k] = path;
     pointsByKey[k] = pts;
   });
-  return { paths, pointsByKey, max, pad, innerW };
+  return { paths, pointsByKey, max, pad, innerW, range, min, innerH };
 }
 
-function CommandCenterCharts({ series, currency, period, onPeriodChange, rangeLabel }) {
-  const [hover, setHover] = useState(null);
-  const activeKeys = ["revenue", "commission", "payout"];
-  const width = 900;
-  const height = 320;
+function alignPrevious(current, previous) {
+  if (!previous?.length || !current?.length) return [];
+  const n = current.length;
+  const out = [];
+  for (let i = 0; i < n; i += 1) {
+    const src = previous[Math.min(i, previous.length - 1)] || {};
+    out.push({
+      period: current[i].period,
+      label: current[i].label,
+      revenue: src.revenue ?? src.sales ?? 0,
+      commission: src.commission ?? 0,
+      payout: src.payout ?? 0,
+    });
+  }
+  return out;
+}
 
-  const { paths, pointsByKey, max, pad, innerW } = useMemo(
-    () => buildSeriesGeometry(series || [], ["revenue", "commission", "payout"], width, height),
-    [series]
+function CommandCenterCharts({
+  series,
+  previousSeries,
+  currency,
+  period,
+  onPeriodChange,
+  rangeLabel,
+}) {
+  const [hover, setHover] = useState(null);
+  const [compare, setCompare] = useState(true);
+  const activeKeys = ["revenue", "commission", "payout"];
+  const width = 960;
+  const height = 360;
+
+  const alignedPrev = useMemo(
+    () => alignPrevious(series || [], previousSeries || []),
+    [series, previousSeries]
   );
+
+  const geometry = useMemo(() => {
+    const combined = [...(series || [])];
+    if (compare) {
+      alignedPrev.forEach((r) => combined.push(r));
+    }
+    // Build geometry from current series but scale using combined max
+    const base = buildSeriesGeometry(series || [], ["revenue", "commission", "payout"], width, height);
+    if (!compare || !alignedPrev.length) return base;
+    const values = combined.flatMap((r) => [
+      Number(r.revenue ?? r.sales ?? 0),
+      Number(r.commission ?? 0),
+      Number(r.payout ?? 0),
+    ]);
+    const localMax = Math.max(...values, 1);
+    const padLocal = 28;
+    const innerWLocal = width - padLocal * 2;
+    const innerH = height - padLocal * 2;
+    const n = Math.max((series || []).length - 1, 1);
+    const paths = {};
+    const pointsByKey = {};
+    ["revenue", "commission", "payout"].forEach((k) => {
+      const pts = [];
+      paths[k] = (series || [])
+        .map((r, i) => {
+          const v = Number(r[k] ?? (k === "revenue" ? r.sales : 0) ?? 0);
+          const x = padLocal + (i / n) * innerWLocal;
+          const y = padLocal + innerH - (v / localMax) * innerH;
+          pts.push({ x, y, v, i, label: r.label || r.period });
+          return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+        })
+        .join(" ");
+      pointsByKey[k] = pts;
+    });
+    return { paths, pointsByKey, max: localMax, pad: padLocal, innerW: innerWLocal };
+  }, [series, alignedPrev, compare]);
+
+  const { paths, pointsByKey, max, pad, innerW } = geometry;
+
+  const prevPath = useMemo(() => {
+    if (!compare || !alignedPrev.length) return "";
+    const localMax = max || 1;
+    const innerH = height - pad * 2;
+    const n = Math.max((series || []).length - 1, 1);
+    return alignedPrev
+      .map((r, i) => {
+        const v = Number(r.revenue ?? 0);
+        const x = pad + (i / n) * innerW;
+        const y = pad + innerH - (v / localMax) * innerH;
+        return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(" ");
+  }, [alignedPrev, compare, series, pad, innerW, max]);
 
   const has = (series || []).some(
     (r) => (r.revenue || r.sales || 0) > 0 || (r.commission || 0) > 0 || (r.payout || 0) > 0
@@ -61,21 +140,25 @@ function CommandCenterCharts({ series, currency, period, onPeriodChange, rangeLa
     const idx = Math.round(((x - pad) / innerW) * n);
     const clamped = Math.max(0, Math.min(series.length - 1, idx));
     const row = series[clamped];
+    const prev = alignedPrev[clamped];
     setHover({
       idx: clamped,
       label: row.label || row.period,
       revenue: row.revenue ?? row.sales ?? 0,
       commission: row.commission ?? 0,
       payout: row.payout ?? 0,
+      prevRevenue: prev?.revenue,
       x: pad + (clamped / n) * innerW,
     });
   };
 
   const exportCsv = () => {
-    const lines = ["period,revenue,commission,payout"];
-    (series || []).forEach((r) => {
+    const lines = ["period,revenue,commission,payout,previous_revenue"];
+    (series || []).forEach((r, i) => {
       lines.push(
-        `${r.label || r.period},${r.revenue ?? r.sales ?? 0},${r.commission ?? 0},${r.payout ?? 0}`
+        `${r.label || r.period},${r.revenue ?? r.sales ?? 0},${r.commission ?? 0},${r.payout ?? 0},${
+          alignedPrev[i]?.revenue ?? ""
+        }`
       );
     });
     const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
@@ -97,9 +180,9 @@ function CommandCenterCharts({ series, currency, period, onPeriodChange, rangeLa
         <div className="ecc-trend__tools">
           <div className="ecc-seg">
             {[
-              ["monthly", "Month"],
-              ["quarterly", "Quarter"],
-              ["annual", "Year"],
+              ["monthly", "Monthly"],
+              ["quarterly", "Quarterly"],
+              ["annual", "Yearly"],
             ].map(([val, label]) => (
               <button
                 key={val}
@@ -111,6 +194,13 @@ function CommandCenterCharts({ series, currency, period, onPeriodChange, rangeLa
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            className={`ecc-btn ecc-btn--sm ${compare ? "is-active" : ""}`}
+            onClick={() => setCompare((v) => !v)}
+          >
+            Previous period
+          </button>
           <button type="button" className="ecc-btn ecc-btn--sm" onClick={exportCsv}>
             Export
           </button>
@@ -124,7 +214,12 @@ function CommandCenterCharts({ series, currency, period, onPeriodChange, rangeLa
             {k.charAt(0).toUpperCase() + k.slice(1)}
           </span>
         ))}
-        <span className="ecc-quiet">Scale max {formatMoney(max, currency, { compact: true })}</span>
+        {compare ? (
+          <span>
+            <i style={{ background: COLORS.previous }} />
+            Previous revenue
+          </span>
+        ) : null}
       </div>
 
       {!has ? (
@@ -143,6 +238,15 @@ function CommandCenterCharts({ series, currency, period, onPeriodChange, rangeLa
                 strokeWidth="1"
               />
             ))}
+            {compare && prevPath ? (
+              <path
+                d={prevPath}
+                fill="none"
+                stroke={COLORS.previous}
+                strokeWidth="2"
+                strokeDasharray="5 4"
+              />
+            ) : null}
             {hover ? (
               <line
                 x1={hover.x}
@@ -155,21 +259,18 @@ function CommandCenterCharts({ series, currency, period, onPeriodChange, rangeLa
               />
             ) : null}
             {activeKeys.map((k) => (
-              <path key={k} d={paths[k]} fill="none" stroke={COLORS[k]} strokeWidth="2.5" />
+              <path key={k} d={paths[k]} fill="none" stroke={COLORS[k]} strokeWidth="2.75" />
             ))}
             {hover
               ? activeKeys.map((k) => {
                   const pt = pointsByKey[k]?.[hover.idx];
                   if (!pt) return null;
-                  return <circle key={k} cx={pt.x} cy={pt.y} r="4" fill={COLORS[k]} />;
+                  return <circle key={k} cx={pt.x} cy={pt.y} r="4.5" fill={COLORS[k]} />;
                 })
               : null}
           </svg>
           {hover ? (
-            <div
-              className="ecc-tooltip"
-              style={{ left: `${(hover.x / width) * 100}%` }}
-            >
+            <div className="ecc-tooltip" style={{ left: `${(hover.x / width) * 100}%` }}>
               <strong>{hover.label}</strong>
               <div>
                 <span style={{ color: COLORS.revenue }}>Revenue</span>
@@ -183,6 +284,12 @@ function CommandCenterCharts({ series, currency, period, onPeriodChange, rangeLa
                 <span style={{ color: COLORS.payout }}>Payout</span>
                 {formatMoney(hover.payout, currency, { compact: true })}
               </div>
+              {compare && hover.prevRevenue != null ? (
+                <div>
+                  <span style={{ color: COLORS.previous }}>Prev revenue</span>
+                  {formatMoney(hover.prevRevenue, currency, { compact: true })}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -192,6 +299,9 @@ function CommandCenterCharts({ series, currency, period, onPeriodChange, rangeLa
           <span key={r.period || r.label}>{r.label || r.period}</span>
         ))}
       </div>
+      <p className="ecc-quiet ecc-trend__scale">
+        Peak {formatMoney(max, currency, { compact: true })}
+      </p>
     </section>
   );
 }

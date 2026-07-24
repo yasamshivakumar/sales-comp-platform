@@ -520,6 +520,21 @@ def build_command_center(request):
                 "commission_ratio_pct": ratio,
                 "roi": roi,
                 "roi_label": f"{roi}x" if roi is not None else "—",
+                "attainment_pct": (
+                    round(
+                        sum(r["attainment_pct"] for r in _matched) / len(_matched),
+                        1,
+                    )
+                    if (
+                        _matched := [
+                            r
+                            for r in quota_center
+                            if r.get("plan_id") == plan.id
+                            and r.get("attainment_pct") is not None
+                        ]
+                    )
+                    else None
+                ),
                 "status": (
                     "Needs Review"
                     if (roi is not None and roi < 1) or (rev == 0 and comm_cost > 0)
@@ -527,6 +542,10 @@ def build_command_center(request):
                     if roi is not None and roi >= 3
                     else "Monitor"
                 ),
+                "detail": {
+                    "missing_rules": False,
+                    "blocked": False,
+                },
             }
         )
     plan_performance.sort(key=lambda r: r["revenue_generated"], reverse=True)
@@ -630,6 +649,51 @@ def build_command_center(request):
                 else None,
                 "margin": round(s - c, 2),
                 "commission_pct": round((c / s) * 100, 2) if s > 0 else None,
+            }
+        )
+        cursor = next_m
+
+    # Previous-period trend (aligned by index for comparison overlay)
+    previous_trend = []
+    cursor = date(prev_start.year, prev_start.month, 1)
+    prev_end_month = date(prev_end.year, prev_end.month, 1)
+    while cursor <= prev_end_month:
+        if cursor.month == 12:
+            next_m = date(cursor.year + 1, 1, 1)
+        else:
+            next_m = date(cursor.year, cursor.month + 1, 1)
+        m_end = next_m - timedelta(days=1)
+        range_end = min(m_end, prev_end)
+        range_start = max(cursor, prev_start)
+        m_sales = (
+            prev_orders.filter(order_date__range=[range_start, range_end]).aggregate(
+                t=Sum("sales_amount")
+            )["t"]
+            or 0
+        )
+        m_comm = (
+            commissions.filter(
+                sale__order__order_date__range=[range_start, range_end]
+            ).aggregate(t=Sum("commission_amount"))["t"]
+            or 0
+        )
+        m_paid = (
+            commissions.filter(
+                status=Commission.STATUS_PAID,
+                sale__order__order_date__range=[range_start, range_end],
+            ).aggregate(t=Sum("commission_amount"))["t"]
+            or 0
+        )
+        s = _money(m_sales)
+        c = _money(m_comm)
+        previous_trend.append(
+            {
+                "period": cursor.strftime("%Y-%m"),
+                "label": cursor.strftime("%b %Y"),
+                "revenue": s,
+                "sales": s,
+                "commission": c,
+                "payout": _money(m_paid),
             }
         )
         cursor = next_m
@@ -1105,17 +1169,20 @@ def build_command_center(request):
             if business_health_score >= 45
             else "Critical"
         ),
+        "data_status": "Healthy" if leakage_risk == "low" and business_health_score >= 65 else "Attention",
         "components": [
-            {"code": "revenue", "label": "Revenue", "score": revenue_score},
-            {"code": "quota", "label": "Quota", "score": int(quota_score)},
-            {"code": "commission", "label": "Commission", "score": commission_score},
-            {"code": "plans", "label": "Plans", "score": plans_score},
-            {"code": "approvals", "label": "Approvals", "score": approvals_score},
+            {"code": "revenue", "label": "Revenue Health", "score": revenue_score},
+            {"code": "quota", "label": "Quota Health", "score": int(quota_score)},
+            {"code": "commission", "label": "Commission Health", "score": commission_score},
+            {"code": "plans", "label": "Plan Health", "score": plans_score},
+            {"code": "approvals", "label": "Approval Health", "score": approvals_score},
         ],
     }
 
-    def _ctx(delta):
-        return "vs previous period" if delta is not None else "Current period"
+    liability_of_rev = (
+        f"{avg_rate}% of revenue" if avg_rate is not None else "Commission cost ratio unavailable"
+    )
+    risk_issues = len(action_center)
 
     executive_kpis = [
         {
@@ -1126,7 +1193,11 @@ def build_command_center(request):
             "delta_pct": sales_delta,
             "unusual": _unusual(sales_delta),
             "status": _kpi_status(sales_delta, _unusual(sales_delta)),
-            "explanation": _ctx(sales_delta),
+            "context": (
+                f"{'+' if sales_delta >= 0 else ''}{sales_delta}% vs previous period"
+                if sales_delta is not None
+                else "No previous period"
+            ),
             "sparkline": spark_sales,
             "href": "/orders",
         },
@@ -1137,8 +1208,23 @@ def build_command_center(request):
             "format": "money",
             "delta_pct": liability_delta,
             "unusual": _unusual(liability_delta),
-            "status": _kpi_status(liability_delta, _unusual(liability_delta)),
-            "explanation": _ctx(liability_delta),
+            "status": (
+                "stable"
+                if avg_rate is not None and avg_rate < 5
+                else "attention"
+                if avg_rate is not None and avg_rate >= 12
+                else _kpi_status(liability_delta, _unusual(liability_delta))
+            ),
+            "context": liability_of_rev,
+            "context_status": (
+                "Healthy"
+                if avg_rate is not None and avg_rate < 5
+                else "Monitor"
+                if avg_rate is not None and avg_rate < 12
+                else "Elevated"
+                if avg_rate is not None
+                else None
+            ),
             "sparkline": spark_comm,
             "href": "/commissions",
         },
@@ -1150,7 +1236,11 @@ def build_command_center(request):
             "delta_pct": paid_delta,
             "unusual": _unusual(paid_delta),
             "status": _kpi_status(paid_delta, _unusual(paid_delta)),
-            "explanation": _ctx(paid_delta),
+            "context": (
+                f"{'+' if paid_delta >= 0 else ''}{paid_delta}% vs previous period"
+                if paid_delta is not None
+                else "No previous period"
+            ),
             "sparkline": spark_paid,
             "href": "/payouts",
         },
@@ -1162,7 +1252,7 @@ def build_command_center(request):
             "delta_pct": None,
             "unusual": False,
             "status": "neutral",
-            "explanation": "Current period",
+            "context": "Period run-rate projection",
             "sparkline": spark_comm,
             "href": "/commissions",
         },
@@ -1174,14 +1264,18 @@ def build_command_center(request):
             "delta_pct": attain_delta,
             "unusual": _unusual(attain_delta),
             "status": _kpi_status(attain_delta, _unusual(attain_delta)),
-            "explanation": _ctx(attain_delta),
+            "context": (
+                f"{'+' if attain_delta >= 0 else ''}{attain_delta}% vs previous period"
+                if attain_delta is not None
+                else "Team average attainment"
+            ),
             "sparkline": [],
             "href": "/user-setup",
         },
         {
             "key": "risk",
             "label": "Risk Score",
-            "value": risk_label,
+            "value": risk_label.upper() if risk_label else "LOW",
             "format": "text",
             "delta_pct": None,
             "unusual": leakage_risk == "high",
@@ -1192,7 +1286,11 @@ def build_command_center(request):
                 if leakage_risk == "medium"
                 else "stable"
             ),
-            "explanation": "Current period",
+            "context": (
+                f"{risk_issues} issue{'s' if risk_issues != 1 else ''} require attention"
+                if risk_issues
+                else "No open exceptions"
+            ),
             "sparkline": [],
             "href": "/commissions",
             "risk_rank": risk_rank,
@@ -1233,6 +1331,7 @@ def build_command_center(request):
                 "title": "Revenue Trend",
                 "text": "Revenue %s %s%%"
                 % ("increased" if sales_delta >= 0 else "decreased", abs(sales_delta)),
+                "reason": "Period-over-period sales movement",
                 "tone": "positive" if sales_delta >= 0 else "caution",
                 "cta": "View Orders",
                 "href": "/orders",
@@ -1240,11 +1339,19 @@ def build_command_center(request):
         )
     attention_plans = blocked + plans_expiring + missing_rules
     if attention_plans:
+        reason_bits = []
+        if missing_rules:
+            reason_bits.append("Missing rules")
+        if plans_expiring:
+            reason_bits.append("Expiring soon")
+        if blocked:
+            reason_bits.append("Blocked plans")
         executive_insights.append(
             {
                 "code": "plans_attention",
                 "title": "Compensation Risk",
                 "text": "%s plans require review" % attention_plans,
+                "reason": ", ".join(reason_bits) or "Plan configuration gaps",
                 "tone": "caution",
                 "cta": "Review Plans",
                 "href": "/comp-plans",
@@ -1262,6 +1369,7 @@ def build_command_center(request):
                 "title": "Quota Risk",
                 "text": "%s territor%s below target"
                 % (len(weak_terr), "y" if len(weak_terr) == 1 else "ies"),
+                "reason": "Below 50% attainment",
                 "tone": "caution",
                 "cta": "View Territories",
                 "href": "/analytics/reports",
@@ -1274,6 +1382,7 @@ def build_command_center(request):
                 "code": "over_achievers",
                 "title": "Quota Strength",
                 "text": "%s employees above target" % over,
+                "reason": "Above 100% attainment",
                 "tone": "positive",
                 "cta": "Open People",
                 "href": "/user-setup",
@@ -1285,6 +1394,7 @@ def build_command_center(request):
                 "code": "commission_cost",
                 "title": "Commission Cost",
                 "text": "Cost ratio at %s%%" % avg_rate,
+                "reason": "Commission as percent of revenue",
                 "tone": "positive" if avg_rate < 5 else "caution" if avg_rate < 12 else "critical",
                 "cta": "Open Commissions",
                 "href": "/commissions",
@@ -1296,6 +1406,7 @@ def build_command_center(request):
                 "code": "stable",
                 "title": "Performance",
                 "text": "Stable for selected period",
+                "reason": "No material exceptions detected",
                 "tone": "neutral",
                 "cta": "Open Analytics",
                 "href": "/analytics",
@@ -1316,7 +1427,6 @@ def build_command_center(request):
         "orders_",
         "field_mapping",
         "ai_compensation",
-        "report_exported",
         "sync",
     )
     BUSINESS_ACTIVITY_BLOCK = (
@@ -1329,6 +1439,8 @@ def build_command_center(request):
         "invite_",
         "profile_updated",
         "report_viewed",
+        "report_exported",
+        "report_",
         "people_profile",
         "trusted_device",
     )
@@ -1442,6 +1554,7 @@ def build_command_center(request):
         "territory_board": territory_board,
         "revenue_vs_commission": rev_comm,
         "trend_series": rev_comm,
+        "previous_trend_series": previous_trend,
         "commission_trend": [
             {"period": r["period"], "label": r["label"], "value": r["commission"]}
             for r in rev_comm
