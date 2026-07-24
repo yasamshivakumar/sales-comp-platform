@@ -27,6 +27,7 @@ MODULES = (
     "roles_permissions",
     "api_keys",
     "audit_log",
+    "documents",
 )
 
 SEVERITY_INFO = "info"
@@ -143,6 +144,21 @@ ACTION_CATALOG = {
         "organization_settings", SEVERITY_WARNING, "settings", "Organization settings updated", ICON_EDIT
     ),
     "profile_updated": _entry("people_access", SEVERITY_INFO, "user", "Account profile updated", ICON_EDIT),
+    "document_uploaded": _entry("documents", SEVERITY_SUCCESS, "document", "Document uploaded", ICON_IMPORT),
+    "document_viewed": _entry("documents", SEVERITY_INFO, "document", "Document viewed", ICON_EXPORT),
+    "document_downloaded": _entry("documents", SEVERITY_INFO, "document", "Document downloaded", ICON_EXPORT),
+    "document_version_updated": _entry(
+        "documents", SEVERITY_WARNING, "document", "Document version updated", ICON_EDIT
+    ),
+    "document_version_restored": _entry(
+        "documents", SEVERITY_WARNING, "document", "Document version restored", ICON_EDIT
+    ),
+    "document_approved": _entry("documents", SEVERITY_SUCCESS, "document", "Document approved", ICON_EDIT),
+    "document_reviewed": _entry("documents", SEVERITY_INFO, "document", "Document reviewed", ICON_EDIT),
+    "document_published": _entry("documents", SEVERITY_SUCCESS, "document", "Document published", ICON_EDIT),
+    "document_archived": _entry("documents", SEVERITY_WARNING, "document", "Document archived", ICON_DELETE),
+    "document_deleted": _entry("documents", SEVERITY_CRITICAL, "document", "Document deleted", ICON_DELETE),
+    "document_updated": _entry("documents", SEVERITY_INFO, "document", "Document updated", ICON_EDIT),
     "audit_export": _entry("audit_log", SEVERITY_INFO, "audit", "Audit log exported", ICON_EXPORT),
     "report_created": _entry("reports", SEVERITY_SUCCESS, "report", "Report created", ICON_EDIT),
     "report_viewed": _entry("reports", SEVERITY_INFO, "report", "Report viewed", ICON_EXPORT),

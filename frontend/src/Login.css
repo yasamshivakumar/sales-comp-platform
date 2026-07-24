@@ -277,7 +277,7 @@
   color: #0f172a !important;
   -webkit-text-fill-color: #0f172a !important;
   caret-color: #0f172a !important;
-  background: transparent !important;
+  background-color: #ffffff !important;
   padding: 12px 14px !important;
   font-size: 0.95rem !important;
   opacity: 1 !important;
@@ -291,13 +291,26 @@
   opacity: 1 !important;
 }
 
-/* Chrome/Edge autocomplete paints a bright fill + often light text in dark mode.
-   Keep login fields white with dark, readable text in every autofill state. */
+/*
+ * Autofill fix: dark-theme global rules set light text (#f8fafc). Combined with
+ * white login fields that becomes invisible white-on-white. Force dark text +
+ * solid white fill for every autofill state (Chrome / Edge / Safari).
+ */
+.login-glass input:-webkit-autofill,
+.login-glass input:-webkit-autofill:hover,
+.login-glass input:-webkit-autofill:focus,
+.login-glass input:-webkit-autofill:active,
+.login-glass textarea:-webkit-autofill,
 .login-glass .auth-text-field input:-webkit-autofill,
 .login-glass .auth-text-field input:-webkit-autofill:hover,
 .login-glass .auth-text-field input:-webkit-autofill:focus,
 .login-glass .auth-text-field input:-webkit-autofill:active,
-.login-glass .auth-text-field textarea:-webkit-autofill,
+.login-glass .auth-text-field .MuiOutlinedInput-input:-webkit-autofill,
+.login-glass .auth-text-field .MuiInputBase-input:-webkit-autofill,
+[data-theme="dark"] .login-glass input:-webkit-autofill,
+[data-theme="dark"] .login-glass input:-webkit-autofill:hover,
+[data-theme="dark"] .login-glass input:-webkit-autofill:focus,
+[data-theme="dark"] .login-glass input:-webkit-autofill:active,
 [data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill,
 [data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill:hover,
 [data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill:focus,
@@ -312,6 +325,7 @@
   -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
   box-shadow: 0 0 0 1000px #ffffff inset !important;
   transition: background-color 99999s ease-in-out 0s !important;
+  filter: none !important;
 }
 
 .login-glass .auth-text-field .MuiIconButton-root {

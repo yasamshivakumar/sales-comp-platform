@@ -8,6 +8,7 @@ import ManageAccountsOutlinedIcon from "@mui/icons-material/ManageAccountsOutlin
 import InsightsOutlinedIcon from "@mui/icons-material/InsightsOutlined";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import SavingsOutlinedIcon from "@mui/icons-material/SavingsOutlined";
+import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 
 /**
  * Enterprise ICM navigation — personal account lives in the avatar menu only.
@@ -22,6 +23,7 @@ export const PATH_TITLES = {
   "/analytics": "Analytics",
   "/user-setup": "People & Access",
   "/audit-logs": "Activity & Compliance",
+  "/documents": "Compensation Governance Center",
   "/integrations": "CRM Integrations",
   "/profile": "My Profile",
   "/profile/preferences": "My Preferences",
@@ -31,6 +33,7 @@ export const PATH_TITLES = {
 const repMenu = [
   { name: "Incentive Details", path: "/statement", icon: AccountBalanceWalletOutlinedIcon },
   { name: "Analytics", path: "/analytics", icon: InsightsOutlinedIcon },
+  { name: "Governance Center", path: "/documents", icon: FolderOutlinedIcon },
 ];
 
 const adminMenu = [
@@ -43,6 +46,7 @@ const adminMenu = [
   { name: "Analytics", path: "/analytics", icon: InsightsOutlinedIcon },
   { name: "People & Access", path: "/user-setup", icon: ManageAccountsOutlinedIcon },
   { name: "Activity & Compliance", path: "/audit-logs", icon: FactCheckOutlinedIcon },
+  { name: "Governance Center", path: "/documents", icon: FolderOutlinedIcon },
 ];
 
 const financeMenu = [
@@ -51,12 +55,14 @@ const financeMenu = [
   { name: "Payouts", path: "/payouts", icon: SavingsOutlinedIcon },
   { name: "Analytics", path: "/analytics", icon: InsightsOutlinedIcon },
   { name: "Activity & Compliance", path: "/audit-logs", icon: FactCheckOutlinedIcon },
+  { name: "Governance Center", path: "/documents", icon: FolderOutlinedIcon },
 ];
 
 const managerMenu = [
   { name: "Dashboard", path: "/dashboard", icon: SpaceDashboardOutlinedIcon },
   { name: "Commissions", path: "/commissions", icon: PaymentsOutlinedIcon },
   { name: "Analytics", path: "/analytics", icon: InsightsOutlinedIcon },
+  { name: "Governance Center", path: "/documents", icon: FolderOutlinedIcon },
 ];
 
 export function getMenuItems(profile) {

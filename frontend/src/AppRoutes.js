@@ -22,6 +22,8 @@ import ReportBuilder from "./Analytics/ReportBuilder";
 import ScheduledReports from "./Analytics/ScheduledReports";
 import SavedReports from "./Analytics/SavedReports";
 import MyProfile from "./Account/MyProfile";
+import DocumentLibrary from "./Documents/DocumentLibrary";
+import DocumentDetail from "./Documents/DocumentDetail";
 import { getAuthToken, enforceValidSession } from "./api";
 
 function PrivateRoute({ children }) {
@@ -181,6 +183,26 @@ function AppRoutes() {
             <PrivateRoute>
               <Layout>
                 <IntegrationCenter />
+              </Layout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/documents"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <DocumentLibrary />
+              </Layout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/documents/:id"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <DocumentDetail />
               </Layout>
             </PrivateRoute>
           }

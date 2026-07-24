@@ -314,30 +314,42 @@ table tbody tr:hover {
 
 .auth-text-field input:-webkit-autofill,
 .auth-text-field input:-webkit-autofill:hover,
-.auth-text-field input:-webkit-autofill:focus {
-  -webkit-box-shadow: 0 0 0 100px #fff inset !important;
+.auth-text-field input:-webkit-autofill:focus,
+.auth-text-field input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #fff inset !important;
+  box-shadow: 0 0 0 1000px #fff inset !important;
   -webkit-text-fill-color: #0f172a !important;
+  color: #0f172a !important;
   caret-color: #0f172a !important;
 }
 
+/* Dark app forms ? NOT login (login fields stay white; see block below) */
 [data-theme="dark"] .auth-text-field input:-webkit-autofill,
 [data-theme="dark"] .auth-text-field input:-webkit-autofill:hover,
-[data-theme="dark"] .auth-text-field input:-webkit-autofill:focus {
-  -webkit-box-shadow: 0 0 0 100px #0f172a inset !important;
+[data-theme="dark"] .auth-text-field input:-webkit-autofill:focus,
+[data-theme="dark"] .auth-text-field input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #0f172a inset !important;
+  box-shadow: 0 0 0 1000px #0f172a inset !important;
   -webkit-text-fill-color: #f8fafc !important;
+  color: #f8fafc !important;
   caret-color: #f8fafc !important;
 }
 
-/* Login page keeps white inputs ? dark autofill fill would hide the email */
+/* Login page: never apply dark autofill fill (would hide credentials) */
 [data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill,
 [data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill:hover,
 [data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill:focus,
-[data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill:active {
+[data-theme="dark"] .login-glass .auth-text-field input:-webkit-autofill:active,
+.login-glass .auth-text-field input:-webkit-autofill,
+.login-glass .auth-text-field input:-webkit-autofill:hover,
+.login-glass .auth-text-field input:-webkit-autofill:focus,
+.login-glass .auth-text-field input:-webkit-autofill:active {
   -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
   box-shadow: 0 0 0 1000px #ffffff inset !important;
   -webkit-text-fill-color: #0f172a !important;
   color: #0f172a !important;
   caret-color: #0f172a !important;
+  background-color: #ffffff !important;
 }
 
 .MuiOutlinedInput-root fieldset {
@@ -569,7 +581,7 @@ table tbody tr:hover {
   color: #94a3b8 !important;
 }
 
-/* Autofill in dark mode (exclude login ? those fields stay white) */
+/* Autofill in dark mode ? exclude login glass (white fields + dark text) */
 [data-theme="dark"] input:-webkit-autofill,
 [data-theme="dark"] input:-webkit-autofill:hover,
 [data-theme="dark"] input:-webkit-autofill:focus,
@@ -585,13 +597,18 @@ table tbody tr:hover {
 [data-theme="dark"] .login-glass input:-webkit-autofill,
 [data-theme="dark"] .login-glass input:-webkit-autofill:hover,
 [data-theme="dark"] .login-glass input:-webkit-autofill:focus,
-[data-theme="dark"] .login-glass input:-webkit-autofill:active {
+[data-theme="dark"] .login-glass input:-webkit-autofill:active,
+.login-glass input:-webkit-autofill,
+.login-glass input:-webkit-autofill:hover,
+.login-glass input:-webkit-autofill:focus,
+.login-glass input:-webkit-autofill:active {
   -webkit-text-fill-color: #0f172a !important;
   color: #0f172a !important;
   caret-color: #0f172a !important;
   -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
   box-shadow: 0 0 0 1000px #ffffff inset !important;
   background-color: #ffffff !important;
+  filter: none !important;
 }
 
 /* Date / number spin buttons stay readable */

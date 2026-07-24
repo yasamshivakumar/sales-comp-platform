@@ -15,6 +15,7 @@ import EligibilityTab from "./tabs/EligibilityTab";
 import ApprovalWorkflowTab from "./tabs/ApprovalWorkflowTab";
 import HistoryTab from "./tabs/HistoryTab";
 import SimulationTab from "./tabs/SimulationTab";
+import DocumentsTab from "./tabs/DocumentsTab";
 import "./compPlans.css";
 
 function CompensationPlans() {
@@ -30,6 +31,7 @@ function CompensationPlans() {
         <Route path="rates" element={<RatesTab />} />
         <Route path="rules" element={<RulesTab />} />
         <Route path="quotas" element={<QuotasTab />} />
+        <Route path="documents" element={<DocumentsTab />} />
         <Route path="bonuses" element={<BonusesTab />} />
         <Route path="accelerators" element={<AcceleratorsTab />} />
         <Route path="eligibility" element={<EligibilityTab />} />

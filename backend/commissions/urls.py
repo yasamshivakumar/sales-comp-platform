@@ -37,6 +37,18 @@ from .report_views import (
     analytics_schedule_list,
     analytics_schedule_detail,
 )
+from .document_views import (
+    document_summary,
+    document_list_create,
+    document_detail,
+    document_new_version,
+    document_download,
+    document_approve,
+    document_review,
+    document_publish,
+    document_restore_version,
+    plan_documents,
+)
 from .views import (
     EmployeeViewSet,
     CommissionViewSet,
@@ -562,5 +574,49 @@ urlpatterns = [
         "analytics/schedules/<int:pk>/",
         analytics_schedule_detail,
         name="analytics-schedule-detail",
+    ),
+    # Compensation Document Repository
+    path("documents/summary/", document_summary, name="documents-summary"),
+    path("documents/", document_list_create, name="documents"),
+    path("documents/<int:pk>/", document_detail, name="document-detail"),
+    path(
+        "documents/<int:pk>/versions/",
+        document_new_version,
+        name="document-new-version",
+    ),
+    path(
+        "documents/<int:pk>/approve/",
+        document_approve,
+        name="document-approve",
+    ),
+    path(
+        "documents/<int:pk>/review/",
+        document_review,
+        name="document-review",
+    ),
+    path(
+        "documents/<int:pk>/publish/",
+        document_publish,
+        name="document-publish",
+    ),
+    path(
+        "documents/<int:pk>/versions/<int:version_id>/restore/",
+        document_restore_version,
+        name="document-version-restore",
+    ),
+    path(
+        "documents/<int:pk>/download/",
+        document_download,
+        name="document-download",
+    ),
+    path(
+        "documents/<int:pk>/versions/<int:version_id>/download/",
+        document_download,
+        name="document-version-download",
+    ),
+    path(
+        "compensation-plans/<int:plan_id>/documents/",
+        plan_documents,
+        name="plan-documents",
     ),
 ]

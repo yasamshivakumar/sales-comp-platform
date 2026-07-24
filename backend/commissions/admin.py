@@ -13,6 +13,8 @@ from .models import (
     ReportField,
     ReportFilter,
     ReportSchedule,
+    CompensationDocument,
+    CompensationDocumentVersion,
 )
 
 admin.site.register(Organization)
@@ -406,3 +408,14 @@ class CommissionAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+@admin.register(CompensationDocument)
+class CompensationDocumentAdmin(admin.ModelAdmin):
+    list_display = ("name", "document_type", "status", "organization", "updated_at")
+    list_filter = ("document_type", "status")
+    search_fields = ("name",)
+
+
+@admin.register(CompensationDocumentVersion)
+class CompensationDocumentVersionAdmin(admin.ModelAdmin):
+    list_display = ("document", "version_number", "status", "approval_status", "created_at")
+    list_filter = ("status", "approval_status")

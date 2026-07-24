@@ -8,14 +8,15 @@ import { displayVersionLabel, formatEffectiveRange } from "./compPlanUtils";
 
 const TABS = [
   { to: "overview", label: "Overview" },
-  { to: "versions", label: "Versions" },
-  { to: "rates", label: "Rate Tables" },
+  { to: "participants", label: "Participants" },
   { to: "rules", label: "Rules" },
   { to: "quotas", label: "Quotas" },
+  { to: "versions", label: "Versions" },
+  { to: "documents", label: "Documents" },
+  { to: "rates", label: "Rate Tables" },
   { to: "bonuses", label: "Bonuses" },
   { to: "accelerators", label: "Accelerators" },
   { to: "eligibility", label: "Eligibility" },
-  { to: "participants", label: "Participants" },
   { to: "simulation", label: "Simulation" },
   { to: "approval", label: "Approval Workflow" },
   { to: "history", label: "Audit History" },

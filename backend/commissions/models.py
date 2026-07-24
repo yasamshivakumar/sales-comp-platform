@@ -1,5 +1,8 @@
+from datetime import date
+
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 
 
 class Organization(models.Model):
@@ -277,6 +280,21 @@ class Commission(models.Model):
         related_name="commissions_to_review",
     )
     rejection_reason = models.TextField(blank=True, default="")
+    supporting_document = models.ForeignKey(
+        "CompensationDocument",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="commission_references",
+        help_text="Policy / plan document referenced for this calculation.",
+    )
+    supporting_document_version = models.ForeignKey(
+        "CompensationDocumentVersion",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="commission_references",
+    )
 
     class Meta:
         indexes = [
@@ -2541,3 +2559,264 @@ class ReportSchedule(models.Model):
 
     class Meta:
         ordering = ["-updated_at"]
+
+
+# =====================================================
+# Compensation Document Repository (governance)
+# =====================================================
+
+
+class CompensationDocument(models.Model):
+    """Logical compensation document (versioned; never overwritten)."""
+
+    TYPE_COMP_PLAN = "compensation_plan"
+    TYPE_COMMISSION_POLICY = "commission_policy"
+    TYPE_QUOTA_LETTER = "quota_letter"
+    TYPE_EMPLOYEE_AGREEMENT = "employee_agreement"
+    TYPE_APPROVAL = "approval_document"
+    TYPE_EXCEPTION = "exception_approval"
+    TYPE_OTHER = "other"
+    TYPE_CHOICES = (
+        (TYPE_COMP_PLAN, "Compensation Plan"),
+        (TYPE_COMMISSION_POLICY, "Commission Policy"),
+        (TYPE_QUOTA_LETTER, "Quota Letter"),
+        (TYPE_EMPLOYEE_AGREEMENT, "Employee Agreement"),
+        (TYPE_APPROVAL, "Approval Document"),
+        (TYPE_EXCEPTION, "Exception Approval"),
+        (TYPE_OTHER, "Other"),
+    )
+
+    STATUS_DRAFT = "draft"
+    STATUS_PENDING_REVIEW = "pending_review"
+    STATUS_APPROVED = "approved"
+    STATUS_PUBLISHED = "published"
+    STATUS_ACTIVE = "published"  # legacy alias
+    STATUS_EXPIRED = "expired"
+    STATUS_ARCHIVED = "archived"
+    STATUS_CHOICES = (
+        (STATUS_DRAFT, "Draft"),
+        (STATUS_PENDING_REVIEW, "Pending Review"),
+        (STATUS_APPROVED, "Approved"),
+        (STATUS_PUBLISHED, "Published"),
+        (STATUS_EXPIRED, "Expired"),
+        (STATUS_ARCHIVED, "Archived"),
+    )
+
+    APPROVAL_NOT_STARTED = "not_started"
+    APPROVAL_PENDING = "pending"
+    APPROVAL_IN_REVIEW = "in_review"
+    APPROVAL_APPROVED = "approved"
+    APPROVAL_REJECTED = "rejected"
+    APPROVAL_STATUS_CHOICES = (
+        (APPROVAL_NOT_STARTED, "Not started"),
+        (APPROVAL_PENDING, "Pending"),
+        (APPROVAL_IN_REVIEW, "In review"),
+        (APPROVAL_APPROVED, "Approved"),
+        (APPROVAL_REJECTED, "Rejected"),
+    )
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="compensation_documents",
+        db_index=True,
+    )
+    name = models.CharField(max_length=255)
+    document_type = models.CharField(
+        max_length=40, choices=TYPE_CHOICES, default=TYPE_OTHER, db_index=True
+    )
+    related_plan = models.ForeignKey(
+        "CompensationPlan",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="documents",
+    )
+    linked_rules = models.ManyToManyField(
+        "CommissionRule",
+        blank=True,
+        related_name="supporting_documents",
+    )
+    business_unit = models.CharField(max_length=128, blank=True, default="")
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT, db_index=True
+    )
+    current_version = models.ForeignKey(
+        "CompensationDocumentVersion",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    approval_required = models.BooleanField(default=True)
+    approval_status = models.CharField(
+        max_length=20,
+        choices=APPROVAL_STATUS_CHOICES,
+        default=APPROVAL_NOT_STARTED,
+        db_index=True,
+    )
+    description = models.TextField(blank=True, default="")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_compensation_documents",
+    )
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_compensation_documents",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_compensation_documents",
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="uploaded_compensation_documents",
+    )
+    last_activity_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def touch_activity(self, save=True):
+        self.last_activity_at = timezone.now()
+        if save:
+            self.save(update_fields=["last_activity_at", "updated_at"])
+
+    def refresh_lifecycle(self, save=True):
+        """Derive lifecycle from dates/approval without overriding archived."""
+        if self.status == self.STATUS_ARCHIVED:
+            return self.status
+        today = date.today()
+        cv = self.current_version
+        if cv and cv.effective_to and cv.effective_to < today:
+            self.status = self.STATUS_EXPIRED
+        elif self.approval_status in (
+            self.APPROVAL_PENDING,
+            self.APPROVAL_IN_REVIEW,
+        ) or (
+            cv and cv.approval_status == CompensationDocumentVersion.APPROVAL_PENDING
+        ):
+            self.status = self.STATUS_PENDING_REVIEW
+        elif self.status in (self.STATUS_APPROVED, self.STATUS_PUBLISHED) or (
+            self.approval_status == self.APPROVAL_APPROVED
+        ):
+            if cv and cv.effective_from and cv.effective_from > today:
+                self.status = self.STATUS_APPROVED
+            elif self.status != self.STATUS_DRAFT:
+                self.status = self.STATUS_PUBLISHED
+        if save:
+            self.save(update_fields=["status", "updated_at"])
+        return self.status
+
+    class Meta:
+        ordering = ["-updated_at"]
+        indexes = [
+            models.Index(
+                fields=["organization", "status", "-updated_at"],
+                name="compdoc_org_status_upd_idx",
+            ),
+            models.Index(
+                fields=["organization", "document_type"],
+                name="compdoc_org_type_idx",
+            ),
+            models.Index(
+                fields=["organization", "related_plan"],
+                name="compdoc_org_plan_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.organization_id})"
+
+
+class CompensationDocumentVersion(models.Model):
+    """Immutable file version for a compensation document."""
+
+    APPROVAL_PENDING = "pending"
+    APPROVAL_APPROVED = "approved"
+    APPROVAL_REJECTED = "rejected"
+    APPROVAL_NOT_REQUIRED = "not_required"
+    APPROVAL_CHOICES = (
+        (APPROVAL_PENDING, "Pending"),
+        (APPROVAL_APPROVED, "Approved"),
+        (APPROVAL_REJECTED, "Rejected"),
+        (APPROVAL_NOT_REQUIRED, "Not required"),
+    )
+
+    STATUS_ACTIVE = "active"
+    STATUS_ARCHIVED = "archived"
+    STATUS_CHOICES = (
+        (STATUS_ACTIVE, "Active"),
+        (STATUS_ARCHIVED, "Archived"),
+    )
+
+    document = models.ForeignKey(
+        CompensationDocument,
+        on_delete=models.CASCADE,
+        related_name="versions",
+    )
+    version_number = models.PositiveIntegerField(default=1)
+    version_label = models.CharField(max_length=32, blank=True, default="")
+    file = models.FileField(upload_to="compensation_docs/%Y/%m/", blank=True)
+    storage_backend = models.CharField(max_length=32, default="local", blank=True)
+    storage_key = models.CharField(max_length=512, blank=True, default="")
+    file_name = models.CharField(max_length=255, blank=True, default="")
+    content_type = models.CharField(max_length=128, blank=True, default="")
+    file_size = models.PositiveIntegerField(default=0)
+    effective_from = models.DateField(null=True, blank=True)
+    effective_to = models.DateField(null=True, blank=True)
+    description = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE, db_index=True
+    )
+    approval_status = models.CharField(
+        max_length=20,
+        choices=APPROVAL_CHOICES,
+        default=APPROVAL_NOT_REQUIRED,
+        db_index=True,
+    )
+    approver = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="documents_to_approve",
+    )
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="uploaded_document_versions",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-version_number", "-created_at"]
+        unique_together = (("document", "version_number"),)
+        indexes = [
+            models.Index(
+                fields=["document", "-version_number"],
+                name="compdocver_doc_ver_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.document_id} v{self.version_number}"
+
+    @property
+    def display_version(self):
+        return self.version_label or f"v{self.version_number}"

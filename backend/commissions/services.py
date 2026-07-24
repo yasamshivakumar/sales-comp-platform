@@ -1045,6 +1045,17 @@ def calculate_commission_for_order(order, replace_existing=True, force=False):
         representative_order, commission_amount
     )
 
+    supporting_doc = None
+    supporting_ver = None
+    try:
+        from .document_views import resolve_supporting_document_for_plan
+
+        supporting_doc, supporting_ver = resolve_supporting_document_for_plan(
+            plan, organization=getattr(representative_order, "organization", None)
+        )
+    except Exception:
+        supporting_doc, supporting_ver = None, None
+
     commission = Commission.objects.create(
         organization=getattr(representative_order, "organization", None),
         employee=employee,
@@ -1066,6 +1077,8 @@ def calculate_commission_for_order(order, replace_existing=True, force=False):
         source_order_count=source_order_count,
         source_sales_total=total_sales,
         currency=_aggregate_currency_for_order(representative_order),
+        supporting_document=supporting_doc,
+        supporting_document_version=supporting_ver,
     )
 
     if parent_employee and parent_amount > 0:

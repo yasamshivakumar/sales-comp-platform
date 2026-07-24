@@ -19,6 +19,26 @@ import "./Login.css";
 const apiHost = process.env.REACT_APP_API_HOST || "http://localhost:8000";
 const oidcEnabled = process.env.REACT_APP_OIDC_ENABLED === "true";
 
+/** Keep autofilled credentials readable on white login fields */
+const loginFieldSx = {
+  "& .MuiOutlinedInput-root": {
+    backgroundColor: "#ffffff",
+  },
+  "& .MuiOutlinedInput-input": {
+    color: "#0f172a",
+    WebkitTextFillColor: "#0f172a",
+    caretColor: "#0f172a",
+    backgroundColor: "#ffffff",
+  },
+  "& .MuiOutlinedInput-input:-webkit-autofill": {
+    WebkitTextFillColor: "#0f172a",
+    WebkitBoxShadow: "0 0 0 1000px #ffffff inset",
+    boxShadow: "0 0 0 1000px #ffffff inset",
+    caretColor: "#0f172a",
+    transition: "background-color 99999s ease-out 0s",
+  },
+};
+
 function hasValidSession() {
   return Boolean(getAuthToken()) && !isSessionExpired();
 }
@@ -222,7 +242,7 @@ function Login() {
                   onKeyDown={(e) => e.key === "Enter" && !loading && handleLogin()}
                   autoComplete="email"
                   disabled={loading}
-                  sx={{ mb: 2 }}
+                  sx={{ mb: 2, ...loginFieldSx }}
                 />
                 <AuthTextField
                   label="Password"
@@ -261,7 +281,7 @@ function Login() {
                       </InputAdornment>
                     ),
                   }}
-                  sx={{ mb: 1 }}
+                  sx={{ mb: 1, ...loginFieldSx }}
                 />
                 <FormControlLabel
                   control={
@@ -295,7 +315,7 @@ function Login() {
                   onKeyDown={(e) => e.key === "Enter" && !loading && handleMfaVerify()}
                   autoComplete="one-time-code"
                   disabled={loading}
-                  sx={{ mb: 1 }}
+                  sx={{ mb: 1, ...loginFieldSx }}
                 />
                 <FormControlLabel
                   control={

@@ -42,6 +42,7 @@ const MODULE_OPTIONS = [
   { value: "roles_permissions", label: "Roles & Permissions" },
   { value: "audit_log", label: "Audit Log" },
   { value: "organization_settings", label: "Organization Settings" },
+  { value: "documents", label: "Compensation Governance" },
 ];
 
 const ICON_MAP = {
