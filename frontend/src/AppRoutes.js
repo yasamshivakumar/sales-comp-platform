@@ -15,7 +15,13 @@ import IntegrationCenter from "./Integrations/IntegrationCenter";
 import MyStatement from "./Dashboard/MyStatement";
 import AuditLogs from "./Enterprise/AuditLogs";
 import Payouts from "./Enterprise/Payouts";
-import SalesByRegion from "./Dashboard/SalesByRegion";
+import AnalyticsLayout from "./Analytics/AnalyticsLayout";
+import ReportLibrary from "./Analytics/ReportLibrary";
+import ReportViewer from "./Analytics/ReportViewer";
+import ReportBuilder from "./Analytics/ReportBuilder";
+import ScheduledReports from "./Analytics/ScheduledReports";
+import SavedReports from "./Analytics/SavedReports";
+import MyProfile from "./Account/MyProfile";
 import { getAuthToken, enforceValidSession } from "./api";
 
 function PrivateRoute({ children }) {
@@ -52,28 +58,11 @@ function AppRoutes() {
           }
         />
 
-        <Route
-          path="/sales-insights"
-          element={
-            <PrivateRoute>
-              <Layout>
-                <SalesByRegion />
-              </Layout>
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/regional-sales"
-          element={<Navigate to="/sales-insights" replace />}
-        />
-        <Route
-          path="/sales-analysis"
-          element={<Navigate to="/sales-insights" replace />}
-        />
-        <Route
-          path="/sales-by-region"
-          element={<Navigate to="/sales-insights" replace />}
-        />
+        {/* Sales Insights removed — territory KPIs live on Dashboard */}
+        <Route path="/sales-insights" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/regional-sales" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/sales-analysis" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/sales-by-region" element={<Navigate to="/dashboard" replace />} />
 
         <Route
           path="/user-setup/*"
@@ -166,6 +155,27 @@ function AppRoutes() {
         />
 
         <Route
+          path="/profile"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <MyProfile />
+              </Layout>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/profile/preferences"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <MyProfile focus="preferences" />
+              </Layout>
+            </PrivateRoute>
+          }
+        />
+
+        <Route
           path="/integrations"
           element={
             <PrivateRoute>
@@ -175,6 +185,27 @@ function AppRoutes() {
             </PrivateRoute>
           }
         />
+        <Route path="/settings" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/settings/*" element={<Navigate to="/dashboard" replace />} />
+
+        <Route
+          path="/analytics"
+          element={
+            <PrivateRoute>
+              <Layout>
+                <AnalyticsLayout />
+              </Layout>
+            </PrivateRoute>
+          }
+        >
+          <Route index element={<Navigate to="reports" replace />} />
+          <Route path="dashboard" element={<Navigate to="/dashboard" replace />} />
+          <Route path="reports" element={<ReportLibrary />} />
+          <Route path="reports/:id" element={<ReportViewer />} />
+          <Route path="saved" element={<SavedReports />} />
+          <Route path="builder" element={<ReportBuilder />} />
+          <Route path="schedules" element={<ScheduledReports />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   );

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import api, { getApiErrorMessage } from "../api";
 import "./integrationCenter.css";
 
@@ -590,11 +590,27 @@ export default function IntegrationCenter() {
   const [loading, setLoading] = useState(false);
   const [devOpen, setDevOpen] = useState(false);
   const [configText, setConfigText] = useState("");
+  const [isAdmin, setIsAdmin] = useState(null);
 
   const selected = useMemo(
     () => (summary?.connections || []).find((c) => c.id === selectedId) || null,
     [summary, selectedId]
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get("user-profile/")
+      .then((res) => {
+        if (!cancelled) setIsAdmin(Boolean(res.data?.is_admin));
+      })
+      .catch(() => {
+        if (!cancelled) setIsAdmin(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -620,8 +636,9 @@ export default function IntegrationCenter() {
   }, [selectedId]);
 
   useEffect(() => {
+    if (isAdmin !== true) return;
     load();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!selectedId || tab !== "mapping") return;
@@ -680,6 +697,13 @@ export default function IntegrationCenter() {
     }
   };
 
+  if (isAdmin === null) {
+    return <p className="ic-sub">Checking access…</p>;
+  }
+  if (!isAdmin) {
+    return <Navigate to="/profile" replace />;
+  }
+
   const kpis = summary?.kpis || {};
 
   return (
@@ -694,6 +718,9 @@ export default function IntegrationCenter() {
           </p>
         </div>
         <div className="ic-header__actions">
+          <Link className="btn-secondary" to="/dashboard">
+            Back to Dashboard
+          </Link>
           <button type="button" className="btn-secondary" onClick={load} disabled={loading}>
             Refresh
           </button>

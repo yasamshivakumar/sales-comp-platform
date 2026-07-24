@@ -26,6 +26,17 @@ from .explanation_views import (
     commission_explanation_ask_view,
     commission_what_if_view,
 )
+from .report_views import (
+    analytics_datasources,
+    analytics_report_list,
+    analytics_report_detail,
+    analytics_report_duplicate,
+    analytics_report_preview,
+    analytics_report_run,
+    analytics_report_export,
+    analytics_schedule_list,
+    analytics_schedule_detail,
+)
 from .views import (
     EmployeeViewSet,
     CommissionViewSet,
@@ -52,6 +63,7 @@ from .views import (
     session_status,
     logout,
     get_user_profile,
+    organization_settings,
     employee_directory,
     employee_user_detail,
     commission_summary_report,
@@ -60,6 +72,7 @@ from .views import (
     employee_earnings_report,
     period_analytics_report,
     command_center_report,
+    command_center_export,
     employee_transparency_report,
     approve_commissions_view,
     commission_payroll_export,
@@ -352,6 +365,11 @@ urlpatterns = [
     ),
     path("user-profile/", get_user_profile, name="user-profile"),
     path(
+        "organization/settings/",
+        organization_settings,
+        name="organization-settings",
+    ),
+    path(
         "compensation-plans/",
         CompensationPlanListCreateView.as_view(),
         name="compensation-plans",
@@ -502,8 +520,47 @@ urlpatterns = [
         name="command-center-report",
     ),
     path(
+        "reports/command-center/export/",
+        command_center_export,
+        name="command-center-export",
+    ),
+    path(
         "reports/employee-transparency/",
         employee_transparency_report,
         name="employee-transparency-report",
+    ),
+    # Self-service Report Builder
+    path("analytics/datasources/", analytics_datasources, name="analytics-datasources"),
+    path("analytics/reports/", analytics_report_list, name="analytics-reports"),
+    path(
+        "analytics/reports/preview/",
+        analytics_report_preview,
+        name="analytics-reports-preview",
+    ),
+    path(
+        "analytics/reports/<int:pk>/",
+        analytics_report_detail,
+        name="analytics-report-detail",
+    ),
+    path(
+        "analytics/reports/<int:pk>/duplicate/",
+        analytics_report_duplicate,
+        name="analytics-report-duplicate",
+    ),
+    path(
+        "analytics/reports/<int:pk>/run/",
+        analytics_report_run,
+        name="analytics-report-run",
+    ),
+    path(
+        "analytics/reports/<int:pk>/export/",
+        analytics_report_export,
+        name="analytics-report-export",
+    ),
+    path("analytics/schedules/", analytics_schedule_list, name="analytics-schedules"),
+    path(
+        "analytics/schedules/<int:pk>/",
+        analytics_schedule_detail,
+        name="analytics-schedule-detail",
     ),
 ]

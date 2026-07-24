@@ -4,16 +4,14 @@ import {
   AppBar,
   Avatar,
   Box,
-  Button,
   Divider,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Drawer,
   IconButton,
   List,
-  Stack,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
   Toolbar,
   Typography,
   Tooltip,
@@ -22,20 +20,12 @@ import {
 } from "@mui/material";
 import CloudSyncOutlinedIcon from "@mui/icons-material/CloudSyncOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
-import SpaceDashboardOutlinedIcon from "@mui/icons-material/SpaceDashboardOutlined";
-import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalanceWalletOutlined";
-import PaymentsOutlinedIcon from "@mui/icons-material/PaymentsOutlined";
-import ShoppingBagOutlinedIcon from "@mui/icons-material/ShoppingBagOutlined";
-import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
-import GavelOutlinedIcon from "@mui/icons-material/GavelOutlined";
-import ManageAccountsOutlinedIcon from "@mui/icons-material/ManageAccountsOutlined";
-import MapOutlinedIcon from "@mui/icons-material/MapOutlined";
-import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
-import SavingsOutlinedIcon from "@mui/icons-material/SavingsOutlined";
 import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
 import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
+import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
+import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import api, {
   enforceValidSession,
@@ -44,9 +34,8 @@ import api, {
 } from "../../api";
 import { useTheme as useAppTheme } from "../../ThemeContext";
 import { enterprise } from "../../theme/muiTheme";
-import AuthTextField from "../AuthTextField";
 import ChangePassword from "../ChangePassword";
-import { useToast } from "../Toast";
+import { getMenuItems, resolvePageTitle } from "./navConfig";
 import "../enterprise.css";
 
 const DRAWER_WIDTH = 108;
@@ -174,45 +163,6 @@ function NavItemButton({ icon: Icon, label, selected, onClick, to, component, co
   );
 }
 
-const repMenu = [
-  { name: "Incentive Details", path: "/statement", icon: AccountBalanceWalletOutlinedIcon },
-];
-
-/** Enterprise ICM order: insight → transactions → payroll → payout → plan design → org data → compliance */
-const adminMenu = [
-  { name: "Dashboard", path: "/dashboard", icon: SpaceDashboardOutlinedIcon },
-  { name: "Sales insights", path: "/sales-insights", icon: MapOutlinedIcon },
-  { name: "Orders", path: "/orders", icon: ShoppingBagOutlinedIcon },
-  { name: "Commissions", path: "/commissions", icon: PaymentsOutlinedIcon },
-  { name: "Payouts", path: "/payouts", icon: SavingsOutlinedIcon },
-  { name: "Comp Plans", path: "/comp-plans", icon: DescriptionOutlinedIcon },
-  { name: "Commission Rules", path: "/commission-rules", icon: GavelOutlinedIcon },
-  { name: "People & Access", path: "/user-setup", icon: ManageAccountsOutlinedIcon },
-  { name: "Activity & Compliance", path: "/audit-logs", icon: FactCheckOutlinedIcon },
-];
-
-const financeMenu = [
-  { name: "Dashboard", path: "/dashboard", icon: SpaceDashboardOutlinedIcon },
-  { name: "Sales insights", path: "/sales-insights", icon: MapOutlinedIcon },
-  { name: "Commissions", path: "/commissions", icon: PaymentsOutlinedIcon },
-  { name: "Payouts", path: "/payouts", icon: SavingsOutlinedIcon },
-  { name: "Activity & Compliance", path: "/audit-logs", icon: FactCheckOutlinedIcon },
-];
-
-const managerMenu = [
-  { name: "Dashboard", path: "/dashboard", icon: SpaceDashboardOutlinedIcon },
-  { name: "Sales insights", path: "/sales-insights", icon: MapOutlinedIcon },
-  { name: "Commissions", path: "/commissions", icon: PaymentsOutlinedIcon },
-];
-
-function getMenuItems(profile) {
-  if (!profile) return [{ name: "Dashboard", path: "/dashboard", icon: SpaceDashboardOutlinedIcon }];
-  if (profile.is_admin) return adminMenu;
-  if (profile.is_finance) return financeMenu;
-  if (profile.is_manager) return managerMenu;
-  return repMenu;
-}
-
 function NavList({ items, location, onNavigate }) {
   return (
     <List sx={{ px: 0.75, py: 0.5, display: "flex", flexDirection: "column", gap: 0.5 }}>
@@ -236,7 +186,21 @@ function NavList({ items, location, onNavigate }) {
   );
 }
 
-function AppTopBar({ pageTitle, displayName, initials, profile, onEditProfile, showConnect, onOpenConnect }) {
+function AppTopBar({
+  pageTitle,
+  displayName,
+  initials,
+  profile,
+  menuAnchor,
+  onOpenMenu,
+  onCloseMenu,
+  onProfile,
+  onPreferences,
+  onPassword,
+  onSignOut,
+  showConnect,
+  onOpenConnect,
+}) {
   const roleLabel = profile?.role || "Workspace user";
   const organizationLabel = profile?.organization_name || profile?.organization_slug || "";
 
@@ -286,8 +250,9 @@ function AppTopBar({ pageTitle, displayName, initials, profile, onEditProfile, s
           component="button"
           type="button"
           className="app-profile-chip"
-          onClick={onEditProfile}
-          aria-label="Edit profile details"
+          onClick={onOpenMenu}
+          aria-label="Account menu"
+          aria-haspopup="menu"
           sx={{
             display: "flex",
             alignItems: "center",
@@ -307,39 +272,17 @@ function AppTopBar({ pageTitle, displayName, initials, profile, onEditProfile, s
             cursor: "pointer",
             font: "inherit",
             textAlign: "inherit",
-            "& .MuiTypography-root": {
-              color: "inherit",
-            },
-            "&:hover": {
-              borderColor: "primary.main",
-              transform: "none",
-            },
-            "&:focus-visible": {
-              outline: "2px solid",
-              outlineColor: "primary.main",
-              outlineOffset: 2,
-            },
+            "&:hover": { borderColor: "primary.main" },
           }}
         >
           <Box sx={{ minWidth: 0, textAlign: "right" }}>
-            <Typography
-              variant="body2"
-              fontWeight={800}
-              noWrap
-              sx={{ maxWidth: 180, lineHeight: 1.15, color: "inherit" }}
-            >
+            <Typography variant="body2" fontWeight={800} noWrap sx={{ maxWidth: 180, lineHeight: 1.15 }}>
               {displayName}
             </Typography>
             <Typography
               variant="caption"
               noWrap
-              sx={{
-                display: "block",
-                maxWidth: 180,
-                lineHeight: 1.15,
-                color: "text.secondary",
-                opacity: 0.92,
-              }}
+              sx={{ display: "block", maxWidth: 180, lineHeight: 1.15, color: "text.secondary" }}
             >
               {organizationLabel ? `${roleLabel} · ${organizationLabel}` : roleLabel}
             </Typography>
@@ -352,12 +295,64 @@ function AppTopBar({ pageTitle, displayName, initials, profile, onEditProfile, s
               fontWeight: 800,
               bgcolor: "primary.main",
               color: "primary.contrastText",
-              boxShadow: "0 6px 16px rgba(25, 118, 210, 0.28)",
             }}
           >
             {initials}
           </Avatar>
         </Box>
+        <Menu
+          anchorEl={menuAnchor}
+          open={Boolean(menuAnchor)}
+          onClose={onCloseMenu}
+          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+          transformOrigin={{ vertical: "top", horizontal: "right" }}
+        >
+          <MenuItem
+            onClick={() => {
+              onCloseMenu();
+              onProfile();
+            }}
+          >
+            <ListItemIcon>
+              <PersonOutlineOutlinedIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>My Profile</ListItemText>
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              onCloseMenu();
+              onPreferences();
+            }}
+          >
+            <ListItemIcon>
+              <TuneOutlinedIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>My Preferences</ListItemText>
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              onCloseMenu();
+              onPassword();
+            }}
+          >
+            <ListItemIcon>
+              <VpnKeyOutlinedIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Change Password</ListItemText>
+          </MenuItem>
+          <Divider />
+          <MenuItem
+            onClick={() => {
+              onCloseMenu();
+              onSignOut();
+            }}
+          >
+            <ListItemIcon>
+              <LogoutOutlinedIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Sign Out</ListItemText>
+          </MenuItem>
+        </Menu>
       </Box>
     </Box>
   );
@@ -370,17 +365,10 @@ function AppLayout({ children }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const { isDarkMode, toggleTheme } = useAppTheme();
-  const { success, error } = useToast();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [profile, setProfile] = useState(null);
-  const [profileDialogOpen, setProfileDialogOpen] = useState(false);
-  const [profileSaving, setProfileSaving] = useState(false);
-  const [profileForm, setProfileForm] = useState({
-    name: "",
-    first_name: "",
-    last_name: "",
-  });
+  const [menuAnchor, setMenuAnchor] = useState(null);
 
   useEffect(() => {
     if (!enforceValidSession()) return undefined;
@@ -409,15 +397,6 @@ function AppLayout({ children }) {
   }, []);
 
   useEffect(() => {
-    if (!profile) return;
-    setProfileForm({
-      name: profile.name || "",
-      first_name: profile.first_name || "",
-      last_name: profile.last_name || "",
-    });
-  }, [profile]);
-
-  useEffect(() => {
     if (searchParams.get("integrations") === "1" && profile?.is_admin) {
       const next = new URLSearchParams(searchParams);
       next.delete("integrations");
@@ -427,74 +406,28 @@ function AppLayout({ children }) {
   }, [searchParams, setSearchParams, profile?.is_admin, navigate]);
 
   const canManageIntegrations = Boolean(profile?.is_admin);
-
   const menuItems = getMenuItems(profile);
   const displayName = profile?.name || getAuthSessionValue("name") || "User";
-  const initials = displayName
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase() || "U";
+  const initials =
+    displayName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase() || "U";
 
-  const pageTitle = useMemo(() => {
-    const match = menuItems.find(
-      (item) =>
-        location.pathname === item.path ||
-        (item.path !== "/" && location.pathname.startsWith(item.path))
-    );
-    return match?.name || "Workspace";
-  }, [location.pathname, menuItems]);
+  const pageTitle = useMemo(
+    () => resolvePageTitle(location.pathname, menuItems),
+    [location.pathname, menuItems]
+  );
 
   const logout = () => {
     performLogout();
   };
 
-  const openProfileDialog = () => {
-    if (profile) {
-      setProfileForm({
-        name: profile.name || "",
-        first_name: profile.first_name || "",
-        last_name: profile.last_name || "",
-      });
-    }
-    setProfileDialogOpen(true);
-  };
-
-  const saveProfile = async () => {
-    const payload = {
-      name: profileForm.name.trim(),
-      first_name: profileForm.first_name.trim(),
-      last_name: profileForm.last_name.trim(),
-    };
-    if (!payload.name) {
-      error({
-        title: "Name required",
-        message: "Enter the display name you want shown in the profile icon.",
-      });
-      return;
-    }
-
-    setProfileSaving(true);
-    try {
-      const response = await api.patch("user-profile/", payload);
-      setProfile(response.data);
-      sessionStorage.setItem("name", response.data.name || "");
-      setProfileDialogOpen(false);
-      success({
-        title: "Profile updated",
-        message: "Your profile details were saved.",
-      });
-    } catch (err) {
-      error({
-        title: "Profile update failed",
-        message: err.response?.data?.error || "Could not save your profile details.",
-      });
-    } finally {
-      setProfileSaving(false);
-    }
-  };
+  const openAccountMenu = (event) => setMenuAnchor(event.currentTarget);
+  const closeAccountMenu = () => setMenuAnchor(null);
 
   const drawerContent = (
     <Box className="enterprise-sidebar" sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -542,22 +475,9 @@ function AppLayout({ children }) {
       <List sx={{ px: 0.5, py: 0.5, display: "flex", flexDirection: "column", gap: 0.25 }}>
         <NavItemButton
           compact
-          icon={VpnKeyOutlinedIcon}
-          label="Password"
-          onClick={() => setShowChangePassword(true)}
-        />
-        <NavItemButton
-          compact
           icon={isDarkMode ? DarkModeOutlinedIcon : LightModeOutlinedIcon}
           label={isDarkMode ? "Dark" : "Light"}
           onClick={toggleTheme}
-        />
-        <NavItemButton
-          compact
-          className="sidebar-nav-item--logout"
-          icon={LogoutOutlinedIcon}
-          label="Logout"
-          onClick={logout}
         />
       </List>
     </Box>
@@ -608,9 +528,6 @@ function AppLayout({ children }) {
                   color: "#fff",
                   border: "1px solid rgba(255,255,255,0.22)",
                   mr: 0.5,
-                  "&:hover": {
-                    bgcolor: "rgba(255,255,255,0.08)",
-                  },
                 }}
               >
                 <CloudSyncOutlinedIcon fontSize="small" />
@@ -618,41 +535,61 @@ function AppLayout({ children }) {
             </Tooltip>
           )}
           <IconButton
-            onClick={openProfileDialog}
-            aria-label="Edit profile details"
+            onClick={openAccountMenu}
+            aria-label="Account menu"
             sx={{
               color: "#fff",
               border: "1px solid rgba(255,255,255,0.22)",
               borderRadius: 999,
-              gap: 1,
               px: 1,
               py: 0.5,
-              maxWidth: "52vw",
-              "&:hover": {
-                bgcolor: "rgba(255,255,255,0.08)",
-              },
             }}
           >
-            <Box sx={{ minWidth: 0, textAlign: "right", display: { xs: "none", sm: "block" } }}>
-              <Typography
-                variant="caption"
-                noWrap
-                sx={{ display: "block", lineHeight: 1.1, fontWeight: 800, color: "inherit" }}
-              >
-                {displayName}
-              </Typography>
-              <Typography
-                variant="caption"
-                noWrap
-                sx={{ display: "block", lineHeight: 1.1, color: "inherit", opacity: 0.82 }}
-              >
-                {profile?.organization_name || profile?.organization_slug || profile?.role || "Profile"}
-              </Typography>
-            </Box>
             <Avatar sx={{ width: 28, height: 28, fontSize: 10, bgcolor: enterprise.accent }}>
               {initials}
             </Avatar>
           </IconButton>
+          <Menu
+            anchorEl={menuAnchor}
+            open={Boolean(menuAnchor)}
+            onClose={closeAccountMenu}
+            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+            transformOrigin={{ vertical: "top", horizontal: "right" }}
+          >
+            <MenuItem
+              onClick={() => {
+                closeAccountMenu();
+                navigate("/profile");
+              }}
+            >
+              <ListItemText>My Profile</ListItemText>
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                closeAccountMenu();
+                navigate("/profile/preferences");
+              }}
+            >
+              <ListItemText>My Preferences</ListItemText>
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                closeAccountMenu();
+                setShowChangePassword(true);
+              }}
+            >
+              <ListItemText>Change Password</ListItemText>
+            </MenuItem>
+            <Divider />
+            <MenuItem
+              onClick={() => {
+                closeAccountMenu();
+                logout();
+              }}
+            >
+              <ListItemText>Sign Out</ListItemText>
+            </MenuItem>
+          </Menu>
         </Toolbar>
       </AppBar>
 
@@ -703,7 +640,13 @@ function AppLayout({ children }) {
           displayName={displayName}
           initials={initials}
           profile={profile}
-          onEditProfile={openProfileDialog}
+          menuAnchor={menuAnchor}
+          onOpenMenu={openAccountMenu}
+          onCloseMenu={closeAccountMenu}
+          onProfile={() => navigate("/profile")}
+          onPreferences={() => navigate("/profile/preferences")}
+          onPassword={() => setShowChangePassword(true)}
+          onSignOut={logout}
           showConnect={canManageIntegrations}
           onOpenConnect={() => navigate("/integrations")}
         />
@@ -726,62 +669,6 @@ function AppLayout({ children }) {
       </Box>
 
       {showChangePassword && <ChangePassword onClose={() => setShowChangePassword(false)} />}
-      <Dialog
-        open={profileDialogOpen}
-        onClose={() => !profileSaving && setProfileDialogOpen(false)}
-        fullWidth
-        maxWidth="xs"
-        PaperProps={{
-          sx: {
-            bgcolor: "background.paper",
-            backgroundImage: "none",
-          },
-        }}
-      >
-        <DialogTitle>Edit profile details</DialogTitle>
-        <DialogContent sx={{ color: "text.primary" }}>
-          <Stack spacing={2} sx={{ pt: 1 }}>
-            <AuthTextField
-              label="Company"
-              value={profile?.organization_name || profile?.organization_slug || ""}
-              disabled
-              helperText="Company is managed by your workspace admin."
-            />
-            <AuthTextField
-              label="Display name"
-              value={profileForm.name}
-              onChange={(e) =>
-                setProfileForm((current) => ({ ...current, name: e.target.value }))
-              }
-              autoFocus
-            />
-            <AuthTextField
-              label="First name"
-              value={profileForm.first_name}
-              onChange={(e) =>
-                setProfileForm((current) => ({ ...current, first_name: e.target.value }))
-              }
-            />
-            <AuthTextField
-              label="Last name"
-              value={profileForm.last_name}
-              onChange={(e) =>
-                setProfileForm((current) => ({ ...current, last_name: e.target.value }))
-              }
-            />
-            <AuthTextField label="Email" value={profile?.email || ""} disabled />
-            <AuthTextField label="Role" value={profile?.role || ""} disabled />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setProfileDialogOpen(false)} disabled={profileSaving}>
-            Cancel
-          </Button>
-          <Button variant="contained" onClick={saveProfile} disabled={profileSaving}>
-            {profileSaving ? "Saving..." : "Save"}
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 }

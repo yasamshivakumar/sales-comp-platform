@@ -51,3 +51,32 @@
 .enterprise-sidebar a:visited {
   text-decoration: none !important;
 }
+
+/* Narrow scrollbar inside the sidebar only */
+.enterprise-sidebar,
+.enterprise-sidebar * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+.enterprise-sidebar::-webkit-scrollbar,
+.enterprise-sidebar *::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.enterprise-sidebar::-webkit-scrollbar-track,
+.enterprise-sidebar *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.enterprise-sidebar::-webkit-scrollbar-thumb,
+.enterprise-sidebar *::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+}
+
+.enterprise-sidebar::-webkit-scrollbar-thumb:hover,
+.enterprise-sidebar *::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.45);
+}

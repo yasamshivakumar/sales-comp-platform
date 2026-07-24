@@ -1109,6 +1109,12 @@ class UserProfile(models.Model):
         blank=True,
         help_text="Optional permission code overrides for custom roles.",
     )
+    # Self-service account preferences (timezone, language, notifications, etc.)
+    account_preferences = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Personal prefs: timezone, language, notifications, ui.",
+    )
     assigned_compensation_plan = models.ForeignKey(
         "CompensationPlan",
         on_delete=models.SET_NULL,
@@ -2341,3 +2347,197 @@ class UserAuthSession(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class Report(models.Model):
+    """Saved self-service report definition (metadata-driven)."""
+
+    DATASOURCE_COMMISSIONS = "commissions"
+    DATASOURCE_ORDERS = "orders"
+    DATASOURCE_EMPLOYEES = "employees"
+    DATASOURCE_PLANS = "plans"
+    DATASOURCE_PAYOUTS = "payouts"
+    DATASOURCE_QUOTAS = "quotas"
+    DATASOURCE_AUDIT = "audit_logs"
+    DATASOURCE_CHOICES = [
+        (DATASOURCE_COMMISSIONS, "Commission Records"),
+        (DATASOURCE_ORDERS, "Orders"),
+        (DATASOURCE_EMPLOYEES, "Employees"),
+        (DATASOURCE_PLANS, "Compensation Plans"),
+        (DATASOURCE_PAYOUTS, "Payouts"),
+        (DATASOURCE_QUOTAS, "Quotas"),
+        (DATASOURCE_AUDIT, "Audit Logs"),
+    ]
+
+    VIZ_TABLE = "table"
+    VIZ_BAR = "bar"
+    VIZ_LINE = "line"
+    VIZ_PIE = "pie"
+    VIZ_CHOICES = [
+        (VIZ_TABLE, "Table"),
+        (VIZ_BAR, "Bar chart"),
+        (VIZ_LINE, "Line chart"),
+        (VIZ_PIE, "Pie chart"),
+    ]
+
+    VISIBILITY_PRIVATE = "private"
+    VISIBILITY_ORG = "organization"
+    VISIBILITY_ROLE = "role"
+    VISIBILITY_CHOICES = [
+        (VISIBILITY_PRIVATE, "Private"),
+        (VISIBILITY_ORG, "Organization"),
+        (VISIBILITY_ROLE, "Role-restricted"),
+    ]
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="reports",
+        null=True,
+        blank=True,
+    )
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default="")
+    report_type = models.CharField(
+        max_length=32,
+        choices=DATASOURCE_CHOICES,
+        default=DATASOURCE_COMMISSIONS,
+        db_index=True,
+    )
+    visualization = models.CharField(
+        max_length=16, choices=VIZ_CHOICES, default=VIZ_TABLE
+    )
+    group_by = models.CharField(max_length=64, blank=True, default="")
+    sort_by = models.CharField(max_length=64, blank=True, default="")
+    sort_dir = models.CharField(max_length=4, default="desc")  # asc|desc
+    visibility = models.CharField(
+        max_length=16, choices=VISIBILITY_CHOICES, default=VISIBILITY_PRIVATE
+    )
+    allowed_roles = models.JSONField(default=list, blank=True)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="owned_reports",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_reports",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    is_archived = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        indexes = [
+            models.Index(fields=["organization", "-updated_at"]),
+            models.Index(fields=["organization", "report_type"]),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class ReportField(models.Model):
+    report = models.ForeignKey(
+        Report, on_delete=models.CASCADE, related_name="fields"
+    )
+    field_key = models.CharField(max_length=64)
+    label = models.CharField(max_length=128, blank=True, default="")
+    display_order = models.PositiveIntegerField(default=0)
+    aggregation = models.CharField(
+        max_length=16, blank=True, default=""
+    )  # sum|avg|count|min|max|""
+
+    class Meta:
+        ordering = ["display_order", "id"]
+        unique_together = ("report", "field_key")
+
+
+class ReportFilter(models.Model):
+    OP_EQ = "eq"
+    OP_NE = "ne"
+    OP_CONTAINS = "contains"
+    OP_GTE = "gte"
+    OP_LTE = "lte"
+    OP_IN = "in"
+    OP_BETWEEN = "between"
+    OP_CHOICES = [
+        (OP_EQ, "Equals"),
+        (OP_NE, "Not equals"),
+        (OP_CONTAINS, "Contains"),
+        (OP_GTE, "Greater or equal"),
+        (OP_LTE, "Less or equal"),
+        (OP_IN, "In list"),
+        (OP_BETWEEN, "Between"),
+    ]
+
+    report = models.ForeignKey(
+        Report, on_delete=models.CASCADE, related_name="filters"
+    )
+    field_key = models.CharField(max_length=64)
+    operator = models.CharField(max_length=16, choices=OP_CHOICES, default=OP_EQ)
+    value = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["id"]
+
+
+class ReportSchedule(models.Model):
+    FREQ_DAILY = "daily"
+    FREQ_WEEKLY = "weekly"
+    FREQ_MONTHLY = "monthly"
+    FREQ_CHOICES = [
+        (FREQ_DAILY, "Daily"),
+        (FREQ_WEEKLY, "Weekly"),
+        (FREQ_MONTHLY, "Monthly"),
+    ]
+
+    DELIVERY_EMAIL_PDF = "email_pdf"
+    DELIVERY_EMAIL_EXCEL = "email_excel"
+    DELIVERY_DOWNLOAD = "download"
+    DELIVERY_CHOICES = [
+        (DELIVERY_EMAIL_PDF, "Email PDF"),
+        (DELIVERY_EMAIL_EXCEL, "Email Excel"),
+        (DELIVERY_DOWNLOAD, "Download"),
+    ]
+
+    report = models.ForeignKey(
+        Report, on_delete=models.CASCADE, related_name="schedules"
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="report_schedules",
+        null=True,
+        blank=True,
+    )
+    frequency = models.CharField(
+        max_length=16, choices=FREQ_CHOICES, default=FREQ_WEEKLY
+    )
+    delivery = models.CharField(
+        max_length=16, choices=DELIVERY_CHOICES, default=DELIVERY_EMAIL_EXCEL
+    )
+    recipients = models.JSONField(default=list, blank=True)
+    timezone_name = models.CharField(max_length=64, blank=True, default="UTC")
+    is_active = models.BooleanField(default=True)
+    next_run_at = models.DateTimeField(null=True, blank=True)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_report_schedules",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]

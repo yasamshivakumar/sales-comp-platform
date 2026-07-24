@@ -1,0 +1,161 @@
+.mp-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.mp-toc a {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #0176d3;
+  text-decoration: none;
+}
+
+.mp-section {
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 10px;
+  padding: 1.15rem 1.25rem;
+}
+
+.mp-section__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.mp-section__head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.mp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.85rem;
+}
+
+.mp-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--text-muted, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.mp-grid input,
+.mp-grid select {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 6px;
+  background: var(--bg-light, #fff);
+  color: var(--text-primary, #0f172a);
+  font-size: 0.9rem;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+}
+
+.mp-grid input:disabled {
+  opacity: 0.7;
+  background: var(--bg-light, #f8fafc);
+}
+
+.mp-hint,
+.mp-muted {
+  color: var(--text-muted, #64748b);
+  font-size: 0.88rem;
+  margin: 0.75rem 0 0;
+}
+
+.mp-avatar-block {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.mp-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #032d60;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.mp-security {
+  display: grid;
+  gap: 1rem;
+}
+
+.mp-security strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.mp-subhead {
+  margin: 1.1rem 0 0.65rem;
+  font-size: 0.9rem;
+}
+
+.mp-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mp-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text-primary, #0f172a);
+}
+
+.mp-table-wrap {
+  overflow-x: auto;
+}
+
+.mp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.mp-table th,
+.mp-table td {
+  text-align: left;
+  padding: 0.5rem 0.55rem;
+  border-bottom: 1px solid var(--border-color, #e2e8f0);
+}
+
+.mp-table th {
+  color: var(--text-muted, #64748b);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.mp-ua {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .mp-section {
+  background: var(--bg-card);
+  border-color: var(--border-color);
+}

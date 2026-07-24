@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import api from "../api";
-import ReportsAnalytics from "./ReportsAnalytics";
+import CommandCenter from "./CommandCenter";
 import LoadingCenter from "../Components/LoadingCenter";
 import "./dashboard.css";
 
@@ -34,7 +34,7 @@ function Dashboard() {
 
   return (
     <div className="unified-dashboard">
-      <ReportsAnalytics compact />
+      <CommandCenter />
     </div>
   );
 }

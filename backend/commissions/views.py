@@ -2875,55 +2875,189 @@ def logout(request):
 
 
 # =====================================================
-# Get User Profile (for role-based access control)
+# Get / update current user profile (self-service)
 # =====================================================
-@api_view(['GET'])
+def _serialize_self_profile(request, user_profile):
+    from .tenants import get_profile_for_user
+
+    profile = get_profile_for_user(
+        request.user, organization=getattr(request, "organization", None)
+    ) or user_profile
+    prefs = profile.account_preferences if isinstance(profile.account_preferences, dict) else {}
+    org = profile.organization
+    role = (profile.role or "").strip()
+    is_admin = role.lower() in ("admin", "administrator")
+    return {
+        "user_id": request.user.id,
+        "email": profile.email or request.user.email,
+        "role": profile.role,
+        "name": profile.name or "",
+        "first_name": profile.first_name or "",
+        "last_name": profile.last_name or "",
+        "phone": profile.phone or "",
+        "employee_id": profile.employee_id or "",
+        "title": profile.title or "",
+        "department": profile.department or "",
+        "mfa_enabled": bool(profile.mfa_enabled),
+        "timezone": prefs.get("timezone") or "Asia/Kolkata",
+        "language": prefs.get("language") or "en",
+        "notification_preferences": prefs.get("notifications")
+        or {
+            "email_commissions": True,
+            "email_approvals": True,
+            "email_payouts": True,
+            "email_product": False,
+        },
+        "is_admin": is_admin,
+        "is_finance": user_is_finance(request),
+        "is_manager": user_is_manager(request),
+        "organization_slug": org.slug if org else None,
+        "organization_name": org.name if org else None,
+        "organization_id": org.id if org else None,
+    }
+
+
+@api_view(["GET", "PATCH"])
 @permission_classes([IsAuthenticated])
 def get_user_profile(request):
     """
-    Get current user's profile and role information.
-    
-    Response:
-    {
-        "user_id": 1,
-        "email": "user@example.com",
-        "role": "Sales Rep",
-        "name": "John Doe",
-        "is_admin": false,
-        "employee_id": "EMP001"
-    }
+    Self-service profile for the logged-in user.
+    GET returns account details; PATCH updates personal fields only.
     """
+    from .tenants import get_profile_for_user
+
     user = request.user
-    
-    try:
-        user_profile = UserProfile.objects.get(email=user.email)
-        is_admin = user_profile.role.lower() in ['admin', 'administrator']
-        
-        org = user_profile.organization
-        return Response({
-            'user_id': user.id,
-            'email': user.email,
-            'role': user_profile.role,
-            'name': user_profile.name,
-            'is_admin': is_admin,
-            'is_finance': user_is_finance(request),
-            'is_manager': user_is_manager(request),
-            'employee_id': user_profile.employee_id,
-            'organization_slug': org.slug if org else None,
-            'organization_name': org.name if org else None,
-        })
-        
-    except UserProfile.DoesNotExist:
+    user_profile = get_profile_for_user(
+        user, organization=getattr(request, "organization", None)
+    )
+    if user_profile is None:
+        try:
+            user_profile = UserProfile.objects.filter(email__iexact=user.email).first()
+        except Exception:
+            user_profile = None
+    if not user_profile:
         return Response(
-            {'error': 'User profile not found'},
-            status=status.HTTP_404_NOT_FOUND
+            {"error": "User profile not found"},
+            status=status.HTTP_404_NOT_FOUND,
         )
-    except Exception as e:
-        logger.error(f"Error fetching user profile: {str(e)}")
+
+    if request.method == "GET":
+        return Response(_serialize_self_profile(request, user_profile))
+
+    payload = request.data or {}
+    # Personal fields only — role / org / employee_id are admin-managed
+    if "name" in payload:
+        user_profile.name = str(payload.get("name") or "").strip()[:255]
+    if "first_name" in payload:
+        user_profile.first_name = str(payload.get("first_name") or "").strip()[:100]
+    if "last_name" in payload:
+        user_profile.last_name = str(payload.get("last_name") or "").strip()[:100]
+    if "phone" in payload:
+        user_profile.phone = str(payload.get("phone") or "").strip()[:40]
+    if not user_profile.name and (user_profile.first_name or user_profile.last_name):
+        user_profile.name = f"{user_profile.first_name} {user_profile.last_name}".strip()
+
+    prefs = (
+        dict(user_profile.account_preferences)
+        if isinstance(user_profile.account_preferences, dict)
+        else {}
+    )
+    if "timezone" in payload:
+        prefs["timezone"] = str(payload.get("timezone") or "Asia/Kolkata")[:64]
+    if "language" in payload:
+        prefs["language"] = str(payload.get("language") or "en")[:16]
+    if "notification_preferences" in payload and isinstance(
+        payload.get("notification_preferences"), dict
+    ):
+        prefs["notifications"] = payload.get("notification_preferences")
+    user_profile.account_preferences = prefs
+    user_profile.save()
+
+    from .audit import record_audit
+
+    record_audit(
+        request,
+        "profile_updated",
+        {"email": user_profile.email},
+        entity_type="user_profile",
+        entity_id=str(user_profile.id),
+    )
+    return Response(_serialize_self_profile(request, user_profile))
+
+
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAuthenticated])
+def organization_settings(request):
+    """Admin-only organization configuration."""
+    if not user_is_admin(request):
+        raise PermissionDenied("Only administrators can manage organization settings.")
+    org = getattr(request, "organization", None)
+    if org is None:
+        return Response({"error": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "GET":
         return Response(
-            {'error': 'An error occurred'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            {
+                "id": org.id,
+                "name": org.name,
+                "slug": org.slug,
+                "is_active": org.is_active,
+                "require_mfa": org.require_mfa,
+                "password_history_count": org.password_history_count,
+                "password_max_age_days": org.password_max_age_days,
+                "session_idle_minutes": org.session_idle_minutes,
+                "max_concurrent_sessions": org.max_concurrent_sessions,
+                "remember_device_days": org.remember_device_days,
+                "alert_on_new_login_ip": org.alert_on_new_login_ip,
+            }
         )
+
+    payload = request.data or {}
+    if "name" in payload and str(payload.get("name") or "").strip():
+        org.name = str(payload.get("name")).strip()[:200]
+    for field in (
+        "require_mfa",
+        "alert_on_new_login_ip",
+    ):
+        if field in payload:
+            setattr(org, field, bool(payload.get(field)))
+    for field in (
+        "password_history_count",
+        "password_max_age_days",
+        "session_idle_minutes",
+        "max_concurrent_sessions",
+        "remember_device_days",
+    ):
+        if field in payload and payload.get(field) is not None:
+            try:
+                setattr(org, field, max(0, int(payload.get(field))))
+            except (TypeError, ValueError):
+                pass
+    org.save()
+    from .audit import record_audit
+
+    record_audit(
+        request,
+        "organization_settings_updated",
+        {"organization_id": org.id, "name": org.name},
+        entity_type="organization",
+        entity_id=str(org.id),
+    )
+    return Response(
+        {
+            "id": org.id,
+            "name": org.name,
+            "slug": org.slug,
+            "is_active": org.is_active,
+            "require_mfa": org.require_mfa,
+            "password_history_count": org.password_history_count,
+            "password_max_age_days": org.password_max_age_days,
+            "session_idle_minutes": org.session_idle_minutes,
+            "max_concurrent_sessions": org.max_concurrent_sessions,
+            "remember_device_days": org.remember_device_days,
+            "alert_on_new_login_ip": org.alert_on_new_login_ip,
+        }
+    )
 
 
 # =====================================================
@@ -3571,7 +3705,7 @@ def period_analytics_report(request):
 @permission_classes([IsAuthenticated])
 def command_center_report(request):
     """
-    Sales Compensation Command Center aggregate.
+    Sales Compensation Intelligence Dashboard aggregate.
     Additive endpoint — does not replace existing report APIs.
     """
     if not (
@@ -3582,9 +3716,130 @@ def command_center_report(request):
         raise PermissionDenied(
             "Only administrators, finance, or managers can view the command center."
         )
+    from django.core.cache import cache
+
     from .dashboard_ops import build_command_center
 
-    return Response(build_command_center(request))
+    org = getattr(request, "organization", None)
+    org_id = getattr(org, "id", None) or "none"
+    # Cache summary KPIs briefly; charts share same payload for now.
+    cache_key = "cc:v2:%s:%s:%s" % (
+        org_id,
+        request.user.id,
+        request.META.get("QUERY_STRING", "")[:180],
+    )
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return Response(cached)
+    data = build_command_center(request)
+    cache.set(cache_key, data, 45)
+    return Response(data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def command_center_export(request):
+    """CSV export of intelligence dashboard (audited)."""
+    if not (
+        user_is_admin(request)
+        or user_can_view_finance_data(request)
+        or user_is_manager(request)
+    ):
+        raise PermissionDenied(
+            "Only administrators, finance, or managers can export the dashboard."
+        )
+    import csv
+    import io
+
+    from django.http import HttpResponse
+
+    from .audit import record_audit
+    from .dashboard_ops import build_command_center
+
+    data = build_command_center(request)
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["Incentra Sales Compensation Intelligence Dashboard"])
+    writer.writerow(["Period", f"{data.get('start_date')} to {data.get('end_date')}"])
+    writer.writerow(["View mode", data.get("view_mode")])
+    writer.writerow([])
+    writer.writerow(["KPI", "Value", "Delta %"])
+    kpis = data.get("kpis") or {}
+    writer.writerow(["Total Sales", kpis.get("total_sales"), kpis.get("sales_delta_pct")])
+    writer.writerow(
+        [
+            "Commission Liability",
+            kpis.get("commission_liability"),
+            kpis.get("liability_delta_pct"),
+        ]
+    )
+    writer.writerow(["Commission Paid", kpis.get("commission_paid"), kpis.get("paid_delta_pct")])
+    writer.writerow(
+        ["Commission Pending", kpis.get("commission_pending"), kpis.get("pending_delta_pct")]
+    )
+    writer.writerow(["Forecasted Commission", kpis.get("forecasted_commission"), ""])
+    writer.writerow(
+        ["Average Attainment %", kpis.get("quota_attainment"), kpis.get("attainment_delta_pct")]
+    )
+    writer.writerow(["Active Plans", kpis.get("active_plans"), ""])
+    writer.writerow(
+        [
+            "Employees Receiving Commission",
+            kpis.get("employees_receiving_commission"),
+            kpis.get("participants_delta_pct"),
+        ]
+    )
+    writer.writerow([])
+    writer.writerow(
+        [
+            "Rank",
+            "Employee",
+            "Territory",
+            "Sales",
+            "Quota",
+            "Attainment %",
+            "Commission",
+            "Rate %",
+        ]
+    )
+    for row in data.get("top_performers") or []:
+        writer.writerow(
+            [
+                row.get("rank"),
+                row.get("employee_name"),
+                row.get("territory"),
+                row.get("sales_revenue"),
+                row.get("quota"),
+                row.get("attainment_pct"),
+                row.get("commission_earned"),
+                row.get("commission_rate"),
+            ]
+        )
+    writer.writerow([])
+    writer.writerow(
+        ["Plan", "Employees", "Revenue", "Commission Cost", "Commission Ratio %"]
+    )
+    for row in data.get("plan_performance") or []:
+        writer.writerow(
+            [
+                row.get("plan_name"),
+                row.get("employees_covered"),
+                row.get("revenue_generated"),
+                row.get("commission_cost"),
+                row.get("commission_ratio_pct"),
+            ]
+        )
+
+    record_audit(
+        request,
+        "report_exported",
+        {"report": "command_center", "view_mode": data.get("view_mode")},
+    )
+    response = HttpResponse(buffer.getvalue(), content_type="text/csv")
+    response["Content-Disposition"] = (
+        'attachment; filename="sales-comp-intelligence-dashboard.csv"'
+    )
+    return response
 
 
 @api_view(["GET"])

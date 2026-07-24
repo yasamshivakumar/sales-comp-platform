@@ -139,7 +139,17 @@ ACTION_CATALOG = {
     "api_key_created": _entry("api_keys", SEVERITY_WARNING, "api_key", "API key created", ICON_SECURITY),
     "api_key_deleted": _entry("api_keys", SEVERITY_WARNING, "api_key", "API key deleted", ICON_DELETE),
     "settings_changed": _entry("organization_settings", SEVERITY_WARNING, "settings", "Settings changed", ICON_EDIT),
+    "organization_settings_updated": _entry(
+        "organization_settings", SEVERITY_WARNING, "settings", "Organization settings updated", ICON_EDIT
+    ),
+    "profile_updated": _entry("people_access", SEVERITY_INFO, "user", "Account profile updated", ICON_EDIT),
     "audit_export": _entry("audit_log", SEVERITY_INFO, "audit", "Audit log exported", ICON_EXPORT),
+    "report_created": _entry("reports", SEVERITY_SUCCESS, "report", "Report created", ICON_EDIT),
+    "report_viewed": _entry("reports", SEVERITY_INFO, "report", "Report viewed", ICON_EXPORT),
+    "report_modified": _entry("reports", SEVERITY_INFO, "report", "Report modified", ICON_EDIT),
+    "report_deleted": _entry("reports", SEVERITY_WARNING, "report", "Report deleted", ICON_DELETE),
+    "report_scheduled": _entry("reports", SEVERITY_INFO, "report", "Report scheduled", ICON_EDIT),
+    "report_exported": _entry("reports", SEVERITY_INFO, "report", "Report exported", ICON_EXPORT),
     "ai_dashboard_insights_generated": _entry("dashboard", SEVERITY_INFO, "dashboard", "Dashboard insights generated", ICON_CALC),
 }
 

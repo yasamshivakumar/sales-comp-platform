@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api, { getApiErrorMessage } from "../api";
 import { formatMoney, primaryCurrencyFromPayload } from "../utils/currency";
@@ -7,389 +7,430 @@ import {
   businessGroupLabel,
   currencyForBusinessGroup,
 } from "../utils/businessGroups";
-import "./reportsAnalytics.css";
 import "./commandCenter.css";
 
-function buildLinePath(points, width, height, pad = 12) {
-  if (!points.length) return "";
+const LazyCharts = lazy(() => import("./CommandCenterCharts"));
+
+function buildSparkPath(points, width = 64, height = 24) {
+  if (!points?.length) return "";
   const max = Math.max(...points, 1);
   const min = Math.min(...points, 0);
   const range = max - min || 1;
-  const innerW = width - pad * 2;
-  const innerH = height - pad * 2;
   return points
     .map((v, i) => {
-      const x = pad + (i / Math.max(points.length - 1, 1)) * innerW;
-      const y = pad + innerH - ((v - min) / range) * innerH;
+      const x = (i / Math.max(points.length - 1, 1)) * width;
+      const y = height - ((v - min) / range) * (height - 4) - 2;
       return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(" ");
 }
 
-function statusClass(code) {
-  if (code === "exceeded") return "cc-status--exceeded";
-  if (code === "on_track") return "cc-status--on-track";
-  if (code === "at_risk") return "cc-status--at-risk";
-  if (code === "below") return "cc-status--below";
-  return "cc-status--unknown";
+function formatKpiValue(card, currency) {
+  if (card.value == null) return "—";
+  if (card.format === "percent") return `${card.value}%`;
+  if (card.format === "number") return Number(card.value).toLocaleString();
+  return formatMoney(card.value, currency, { compact: true });
 }
 
-function ExecutiveKpis({ kpis, currency }) {
-  const delta = kpis?.liability_delta_pct;
-  const cards = [
-    { key: "total_sales", label: "Total Sales", value: formatMoney(kpis?.total_sales, currency, { compact: true }) },
-    {
-      key: "commission_liability",
-      label: "Commission Liability",
-      value: formatMoney(kpis?.commission_liability, currency, { compact: true }),
-      hint:
-        delta != null
-          ? `${delta >= 0 ? "↑" : "↓"} ${Math.abs(delta)}% vs previous period`
-          : null,
-      tone: "navy",
-    },
-    { key: "commission_paid", label: "Commission Paid", value: formatMoney(kpis?.commission_paid, currency, { compact: true }), tone: "teal" },
-    { key: "commission_pending", label: "Commission Pending", value: formatMoney(kpis?.commission_pending, currency, { compact: true }), tone: "amber" },
-    {
-      key: "quota_attainment",
-      label: "Quota Attainment",
-      value: kpis?.quota_attainment != null ? `${kpis.quota_attainment}%` : "—",
-      tone: "blue",
-    },
-    { key: "active_participants", label: "Active Participants", value: kpis?.active_participants ?? "—" },
-    {
-      key: "avg_commission_rate",
-      label: "Avg Commission Rate",
-      value: kpis?.avg_commission_rate != null ? `${kpis.avg_commission_rate}%` : "—",
-    },
-    {
-      key: "leakage_risk",
-      label: "Revenue Leakage Risk",
-      value: (kpis?.leakage_risk || "low").toUpperCase(),
-      hint: kpis?.leakage_count != null ? `${kpis.leakage_count} at-risk items` : null,
-      tone: kpis?.leakage_risk === "high" ? "danger" : "amber",
-    },
-  ];
-
+function DeltaLine({ delta, explanation }) {
+  if (delta == null) {
+    return <span className="ecc-delta is-none">No comparison available</span>;
+  }
+  const up = delta >= 0;
   return (
-    <section className="cc-kpis" aria-label="Executive KPIs">
-      {cards.map((c) => (
-        <article key={c.key} className={`cc-kpi${c.tone ? ` cc-kpi--${c.tone}` : ""}`}>
-          <span className="cc-kpi__label">{c.label}</span>
-          <span className="cc-kpi__value">{c.value}</span>
-          {c.hint ? <span className="cc-kpi__hint">{c.hint}</span> : null}
+    <span className={`ecc-delta ${up ? "is-up" : "is-down"}`}>
+      <strong>
+        {up ? "↑" : "↓"} {Math.abs(delta)}%
+      </strong>
+      <span>{explanation || "vs last period"}</span>
+    </span>
+  );
+}
+
+function ExecutiveKpiGrid({ cards, currency, onDrill }) {
+  return (
+    <section className="ecc-kpis" aria-label="Executive KPIs">
+      {(cards || []).map((c) => (
+        <article
+          key={c.key}
+          className={`ecc-kpi status-${c.status || "neutral"}`}
+          role="button"
+          tabIndex={0}
+          onClick={() => onDrill?.(c.href)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") onDrill?.(c.href);
+          }}
+        >
+          <div className="ecc-kpi__top">
+            <span className="ecc-kpi__label">{c.label}</span>
+            <span className={`ecc-kpi__pill status-${c.status || "neutral"}`}>
+              {c.status === "attention"
+                ? "Watch"
+                : c.status === "up"
+                  ? "Up"
+                  : c.status === "down"
+                    ? "Down"
+                    : c.status === "stable"
+                      ? "Stable"
+                      : "—"}
+            </span>
+          </div>
+          <div className="ecc-kpi__value">{formatKpiValue(c, currency)}</div>
+          <div className="ecc-kpi__foot">
+            <DeltaLine delta={c.delta_pct} explanation={c.explanation} />
+            {c.sparkline?.length > 1 ? (
+              <svg className="ecc-spark" viewBox="0 0 64 24" aria-hidden>
+                <path
+                  d={buildSparkPath(c.sparkline)}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                />
+              </svg>
+            ) : (
+              <span className="ecc-spark-placeholder" />
+            )}
+          </div>
         </article>
       ))}
     </section>
   );
 }
 
-function CompensationHealth({ health }) {
-  return (
-    <section className="cc-panel">
-      <div className="cc-panel__head">
-        <h2>Compensation Health</h2>
-        <Link className="cc-link" to="/comp-plans">
-          Open plans
-        </Link>
-      </div>
-      <div className="cc-health-grid">
-        <div>
-          <strong>{health?.active_plans ?? 0}</strong>
-          <span>Active Plans</span>
-        </div>
-        <div className={health?.blocked_plans ? "is-warn" : ""}>
-          <strong>{health?.blocked_plans ?? 0}</strong>
-          <span>Blocked / Need Review</span>
-        </div>
-        <div className={health?.missing_rules ? "is-warn" : ""}>
-          <strong>{health?.missing_rules ?? 0}</strong>
-          <span>Missing Rules</span>
-        </div>
-        <div>
-          <strong>{health?.pending_approvals ?? 0}</strong>
-          <span>Pending Approvals</span>
-        </div>
-      </div>
-    </section>
-  );
-}
+function ActionCenter({ alerts, currency }) {
+  const buckets = useMemo(() => {
+    const list = alerts || [];
+    return {
+      critical: list.filter((a) => a.severity === "high"),
+      warning: list.filter((a) => a.severity === "medium"),
+      info: list.filter((a) => a.severity === "low" || !a.severity),
+    };
+  }, [alerts]);
 
-function OpsAlerts({ alerts }) {
-  const navigate = useNavigate();
-  const rows = (alerts || []).filter((a) => a.count > 0);
-  return (
-    <section className="cc-panel">
-      <div className="cc-panel__head">
-        <h2>Commission Operations</h2>
-      </div>
-      {rows.length === 0 ? (
-        <p className="cc-muted">No operational alerts for this period.</p>
+  const renderBucket = (key, title, items) => (
+    <div className={`ecc-action-col sev-${key}`}>
+      <header>
+        <i aria-hidden />
+        <h3>{title}</h3>
+        <span>{items.length}</span>
+      </header>
+      {!items.length ? (
+        <p className="ecc-quiet">None</p>
       ) : (
-        <ul className="cc-alerts">
-          {rows.map((a) => (
-            <li key={a.code} className={`cc-alert cc-alert--${a.severity || "low"}`}>
-              <div>
+        <ul>
+          {items.map((a) => (
+            <li key={a.code}>
+              <Link to={a.href || "/commissions"} className="ecc-action-item">
                 <strong>{a.title}</strong>
-                <span>{a.count} item{a.count === 1 ? "" : "s"}</span>
-              </div>
-              <button
-                type="button"
-                className="ra-btn ra-btn--glass"
-                onClick={() => a.href && navigate(a.href)}
-              >
-                {a.action_label || "Review"}
-              </button>
+                <span>
+                  {a.count} {a.count === 1 ? "item" : "items"}
+                  {a.impact_amount != null && a.impact_amount > 0
+                    ? ` · ${formatMoney(a.impact_amount, currency, { compact: true })}`
+                    : ""}
+                </span>
+                <em>{a.action_label || "Review"}</em>
+              </Link>
             </li>
           ))}
         </ul>
       )}
+    </div>
+  );
+
+  return (
+    <section className="ecc-panel">
+      <div className="ecc-panel__head">
+        <h2>Action Center</h2>
+      </div>
+      <div className="ecc-actions">
+        {renderBucket("critical", "Critical", buckets.critical)}
+        {renderBucket("warning", "Warnings", buckets.warning)}
+        {renderBucket("info", "Information", buckets.info)}
+      </div>
     </section>
   );
 }
 
-function RevenueVsCommission({ series, currency }) {
-  const sales = (series || []).map((r) => r.sales || 0);
-  const commission = (series || []).map((r) => r.commission || 0);
-  const has = sales.some((v) => v > 0) || commission.some((v) => v > 0);
+function QuotaPerformance({ distribution, employees, currency, avg }) {
+  const bands = [
+    { key: "over_achievers", label: "Above Target", color: "#0f766e" },
+    { key: "on_track", label: "On Track", color: "#1d4ed8" },
+    { key: "at_risk", label: "At Risk", color: "#b45309" },
+    { key: "critical", label: "Critical", color: "#b91c1c" },
+  ];
+  const total = bands.reduce((s, b) => s + (distribution?.[b.key] || 0), 0) || 1;
+  let angle = -90;
+  const arcs = bands.map((b) => {
+    const count = distribution?.[b.key] || 0;
+    const sweep = (count / total) * 360;
+    const start = angle;
+    angle += sweep;
+    return { ...b, count, start, sweep };
+  });
+
+  const describeArc = (startDeg, sweepDeg, r = 42) => {
+    if (sweepDeg <= 0) return "";
+    const toRad = (d) => (d * Math.PI) / 180;
+    const x1 = 50 + r * Math.cos(toRad(startDeg));
+    const y1 = 50 + r * Math.sin(toRad(startDeg));
+    const x2 = 50 + r * Math.cos(toRad(startDeg + sweepDeg));
+    const y2 = 50 + r * Math.sin(toRad(startDeg + sweepDeg));
+    const large = sweepDeg > 180 ? 1 : 0;
+    return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
+  };
+
+  const rows = (employees || []).slice(0, 8);
+
   return (
-    <section className="cc-panel cc-panel--wide">
-      <div className="cc-panel__head">
-        <h2>Revenue vs Commission</h2>
-        <span className="cc-chip">{currency}</span>
+    <section className="ecc-panel">
+      <div className="ecc-panel__head">
+        <h2>Quota Performance</h2>
+        <span className="ecc-metric-chip">{avg != null ? `${avg}% avg` : "—"}</span>
       </div>
-      {!has ? (
-        <p className="cc-muted">No trend data for the selected period.</p>
-      ) : (
-        <>
-          <svg viewBox="0 0 520 140" className="cc-chart" preserveAspectRatio="none">
-            <path
-              d={buildLinePath(sales, 520, 140)}
-              fill="none"
-              stroke="#0176d3"
-              strokeWidth="2.5"
-            />
-            <path
-              d={buildLinePath(commission, 520, 140)}
-              fill="none"
-              stroke="#0d9488"
-              strokeWidth="2.5"
-            />
+      <div className="ecc-quota">
+        <div className="ecc-donut-wrap">
+          <svg viewBox="0 0 100 100" className="ecc-donut" aria-hidden>
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#e8edf3" strokeWidth="10" />
+            {arcs.map((a) =>
+              a.sweep > 0 ? (
+                <path
+                  key={a.key}
+                  d={describeArc(a.start, Math.max(a.sweep - 0.6, 0.1))}
+                  fill="none"
+                  stroke={a.color}
+                  strokeWidth="10"
+                  strokeLinecap="butt"
+                />
+              ) : null
+            )}
+            <text x="50" y="48" textAnchor="middle" className="ecc-donut__val">
+              {avg != null ? `${avg}%` : "—"}
+            </text>
+            <text x="50" y="58" textAnchor="middle" className="ecc-donut__sub">
+              Attainment
+            </text>
           </svg>
-          <div className="cc-legend">
-            <span className="cc-legend--sales">Sales</span>
-            <span className="cc-legend--comm">Commission</span>
-          </div>
-          <div className="cc-table-wrap">
-            <table className="cc-table">
-              <thead>
-                <tr>
-                  <th>Month</th>
-                  <th>Sales</th>
-                  <th>Commission</th>
-                  <th>Commission %</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(series || []).map((r) => (
-                  <tr key={r.period}>
-                    <td>{r.label}</td>
-                    <td>{formatMoney(r.sales, currency, { compact: true })}</td>
-                    <td>{formatMoney(r.commission, currency, { compact: true })}</td>
-                    <td>{r.commission_pct != null ? `${r.commission_pct}%` : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-    </section>
-  );
-}
-
-function QuotaCenter({ rows, currency, onOpen }) {
-  return (
-    <section className="cc-panel cc-panel--wide">
-      <div className="cc-panel__head">
-        <h2>Quota Attainment Center</h2>
-      </div>
-      {!rows?.length ? (
-        <p className="cc-muted">No quota data — set personal targets in People & Access.</p>
-      ) : (
-        <div className="cc-table-wrap">
-          <table className="cc-table">
+          <ul className="ecc-legend">
+            {bands.map((b) => (
+              <li key={b.key}>
+                <i style={{ background: b.color }} />
+                <span>{b.label}</span>
+                <strong>{distribution?.[b.key] || 0}</strong>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="ecc-table-wrap">
+          <table className="ecc-table">
             <thead>
               <tr>
                 <th>Employee</th>
                 <th>Quota</th>
                 <th>Achievement</th>
-                <th>Attainment %</th>
-                <th>Expected Commission</th>
+                <th>Attainment</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              {rows.slice(0, 25).map((r) => (
-                <tr
-                  key={r.employee_id}
-                  className="cc-row-click"
-                  onClick={() => onOpen?.(r)}
-                >
-                  <td>
-                    <strong>{r.employee_name}</strong>
-                    <div className="cc-sub">{r.employee_id}</div>
-                  </td>
-                  <td>{formatMoney(r.quota, r.currency || currency, { compact: true })}</td>
-                  <td>{formatMoney(r.achievement, r.currency || currency, { compact: true })}</td>
-                  <td>{r.attainment_pct != null ? `${r.attainment_pct}%` : "—"}</td>
-                  <td>
-                    {r.expected_commission != null
-                      ? formatMoney(r.expected_commission, r.currency || currency, { compact: true })
-                      : "—"}
-                  </td>
-                  <td>
-                    <span className={`cc-status ${statusClass(r.status)}`}>
-                      {r.status_label}
-                    </span>
+              {!rows.length ? (
+                <tr>
+                  <td colSpan={5} className="ecc-quiet">
+                    No employee quota data
                   </td>
                 </tr>
-              ))}
+              ) : (
+                rows.map((r) => {
+                  const pct = r.attainment_pct;
+                  const width = Math.min(Math.max(pct || 0, 0), 100);
+                  return (
+                    <tr key={r.employee_id || r.email}>
+                      <td>
+                        <strong>{r.employee_name || r.email}</strong>
+                      </td>
+                      <td>{formatMoney(r.quota, currency, { compact: true })}</td>
+                      <td>{formatMoney(r.achievement, currency, { compact: true })}</td>
+                      <td>
+                        <div className="ecc-bar">
+                          <span>{pct != null ? `${pct}%` : "—"}</span>
+                          <div className="ecc-bar__track">
+                            <i
+                              className={`status-${r.status || "unknown"}`}
+                              style={{ width: `${width}%` }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`ecc-status status-${r.status || "unknown"}`}>
+                          {r.status_label || "—"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
-      )}
-    </section>
-  );
-}
-
-function InsightsPanel({ insights, currency }) {
-  return (
-    <section className="cc-panel">
-      <div className="cc-panel__head">
-        <h2>Commission Insights</h2>
-      </div>
-      <div className="cc-insights">
-        <div>
-          <h3>Top Earners</h3>
-          <ol>
-            {(insights?.top_earners || []).slice(0, 5).map((e, i) => (
-              <li key={e.email || i}>
-                <span>{e.name}</span>
-                <strong>{formatMoney(e.total, currency, { compact: true })}</strong>
-              </li>
-            ))}
-          </ol>
-        </div>
-        <div>
-          <h3>Highest Revenue</h3>
-          <ol>
-            {(insights?.highest_revenue || []).slice(0, 5).map((e) => (
-              <li key={e.employee_id}>
-                <span>{e.employee_name}</span>
-                <strong>{formatMoney(e.sales, currency, { compact: true })}</strong>
-              </li>
-            ))}
-          </ol>
-        </div>
-        <div>
-          <h3>Largest Deals</h3>
-          <ol>
-            {(insights?.largest_deals || []).slice(0, 5).map((d) => (
-              <li key={d.order_id}>
-                <span>{d.order_id}</span>
-                <strong>{formatMoney(d.sales_amount, currency, { compact: true })}</strong>
-              </li>
-            ))}
-          </ol>
-        </div>
       </div>
     </section>
   );
 }
 
-function TerritoryAnalytics({ rows, currency }) {
+function TerritoryCards({ board, currency }) {
+  const [mode, setMode] = useState("top");
+  const rows = (mode === "top" ? board?.top : board?.worst) || [];
+
   return (
-    <section className="cc-panel">
-      <div className="cc-panel__head">
-        <h2>Territory Performance</h2>
+    <section className="ecc-panel">
+      <div className="ecc-panel__head">
+        <h2>Territory Analytics</h2>
+        <div className="ecc-seg">
+          <button type="button" className={mode === "top" ? "is-active" : ""} onClick={() => setMode("top")}>
+            Top
+          </button>
+          <button
+            type="button"
+            className={mode === "worst" ? "is-active" : ""}
+            onClick={() => setMode("worst")}
+          >
+            Lowest
+          </button>
+        </div>
       </div>
-      {!rows?.length ? (
-        <p className="cc-muted">No territory sales in this period.</p>
+      {!rows.length ? (
+        <p className="ecc-quiet">No territory data</p>
       ) : (
-        <div className="cc-table-wrap">
-          <table className="cc-table">
-            <thead>
-              <tr>
-                <th>Territory</th>
-                <th>Region</th>
-                <th>Sales</th>
-                <th>Quota</th>
-                <th>Attainment</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={`${r.territory}-${r.region}`}>
-                  <td>{r.territory}</td>
-                  <td>{r.region}</td>
-                  <td>{formatMoney(r.sales, currency, { compact: true })}</td>
-                  <td>{formatMoney(r.quota, currency, { compact: true })}</td>
-                  <td>{r.attainment_pct != null ? `${r.attainment_pct}%` : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="ecc-terr-cards">
+          {rows.slice(0, 6).map((r) => (
+            <article key={`${r.territory}-${r.region}`} className="ecc-terr-card">
+              <h3>{r.territory}</h3>
+              <p className="ecc-quiet">{r.region}</p>
+              <dl>
+                <div>
+                  <dt>Revenue</dt>
+                  <dd>{formatMoney(r.sales, currency, { compact: true })}</dd>
+                </div>
+                <div>
+                  <dt>Growth</dt>
+                  <dd>
+                    {r.growth_pct != null
+                      ? `${r.growth_pct >= 0 ? "+" : ""}${r.growth_pct}%`
+                      : "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Attainment</dt>
+                  <dd>{r.attainment_pct != null ? `${r.attainment_pct}%` : "—"}</dd>
+                </div>
+                <div>
+                  <dt>Commission</dt>
+                  <dd>{formatMoney(r.commission || 0, currency, { compact: true })}</dd>
+                </div>
+              </dl>
+            </article>
+          ))}
         </div>
       )}
     </section>
   );
 }
 
-function LeaderboardTable({ rows, currency, onOpen }) {
+function PlanPerformanceTable({ plans, currency }) {
+  const [sortKey, setSortKey] = useState("revenue_generated");
+  const [asc, setAsc] = useState(false);
+  const rows = useMemo(() => {
+    const list = [...(plans || [])];
+    list.sort((a, b) => {
+      const av = a[sortKey] ?? -Infinity;
+      const bv = b[sortKey] ?? -Infinity;
+      if (typeof av === "string") return asc ? av.localeCompare(bv) : bv.localeCompare(av);
+      return asc ? av - bv : bv - av;
+    });
+    return list.slice(0, 10);
+  }, [plans, sortKey, asc]);
+
+  const sort = (key) => {
+    if (sortKey === key) setAsc((v) => !v);
+    else {
+      setSortKey(key);
+      setAsc(false);
+    }
+  };
+
   return (
-    <section className="cc-panel cc-panel--wide">
-      <div className="cc-panel__head">
-        <h2>Leaderboard</h2>
+    <section className="ecc-panel">
+      <div className="ecc-panel__head">
+        <h2>Compensation Plan Performance</h2>
+        <Link className="ecc-ghost-link" to="/comp-plans">
+          Plans
+        </Link>
       </div>
-      <div className="cc-table-wrap">
-        <table className="cc-table">
+      <div className="ecc-table-wrap">
+        <table className="ecc-table ecc-table--plans">
           <thead>
             <tr>
-              <th>Rank</th>
-              <th>Employee</th>
-              <th>Role</th>
-              <th>Territory</th>
-              <th>Sales</th>
-              <th>Quota Attainment</th>
-              <th>Commission</th>
-              <th>Commission %</th>
+              <th>
+                <button type="button" onClick={() => sort("plan_name")}>
+                  Plan
+                </button>
+              </th>
+              <th>
+                <button type="button" onClick={() => sort("revenue_generated")}>
+                  Revenue
+                </button>
+              </th>
+              <th>
+                <button type="button" onClick={() => sort("commission_cost")}>
+                  Commission Cost
+                </button>
+              </th>
+              <th>
+                <button type="button" onClick={() => sort("employees_covered")}>
+                  Employees
+                </button>
+              </th>
+              <th>
+                <button type="button" onClick={() => sort("roi")}>
+                  ROI
+                </button>
+              </th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
-            {(rows || []).slice(0, 25).map((r, idx) => {
-              const sales = r.achievement ?? r.total_sales ?? 0;
-              const commission = r.expected_commission ?? r.total_commission ?? r.total ?? 0;
-              const rate = sales > 0 ? ((commission / sales) * 100).toFixed(1) : null;
-              return (
-                <tr
-                  key={r.employee_id || r.email || idx}
-                  className="cc-row-click"
-                  onClick={() => onOpen?.(r)}
-                >
-                  <td>{idx + 1}</td>
+            {!rows.length ? (
+              <tr>
+                <td colSpan={6} className="ecc-quiet">
+                  No plan performance data
+                </td>
+              </tr>
+            ) : (
+              rows.map((p) => (
+                <tr key={p.plan_id}>
                   <td>
-                    <strong>{r.employee_name || r.name}</strong>
+                    <strong>{p.plan_name}</strong>
                   </td>
-                  <td>{r.role || "—"}</td>
-                  <td>{r.territory || "—"}</td>
-                  <td>{formatMoney(sales, r.currency || currency, { compact: true })}</td>
-                  <td>{r.attainment_pct != null ? `${r.attainment_pct}%` : "—"}</td>
-                  <td>{formatMoney(commission, r.currency || currency, { compact: true })}</td>
-                  <td>{rate != null ? `${rate}%` : "—"}</td>
+                  <td>{formatMoney(p.revenue_generated, currency, { compact: true })}</td>
+                  <td>{formatMoney(p.commission_cost, currency, { compact: true })}</td>
+                  <td>{p.employees_covered ?? "—"}</td>
+                  <td>{p.roi_label || "—"}</td>
+                  <td>
+                    <span
+                      className={`ecc-status ${
+                        p.status === "Needs Review"
+                          ? "status-critical"
+                          : p.status === "Healthy"
+                            ? "status-over_achiever"
+                            : "status-on_track"
+                      }`}
+                    >
+                      {p.status || "—"}
+                    </span>
+                  </td>
                 </tr>
-              );
-            })}
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -397,218 +438,213 @@ function LeaderboardTable({ rows, currency, onOpen }) {
   );
 }
 
-function TransparencyModal({ detail, onClose, currency }) {
-  if (!detail) return null;
+function InsightCards({ items }) {
   return (
-    <div className="cc-modal" role="dialog" aria-modal="true">
-      <button type="button" className="cc-modal__backdrop" aria-label="Close" onClick={onClose} />
-      <div className="cc-modal__panel">
-        <div className="cc-panel__head">
-          <div>
-            <h2>{detail.employee_name}</h2>
-            <p className="cc-muted">
-              {detail.employee_id} · {detail.role || "—"}
-              {detail.assigned_plan?.plan_name
-                ? ` · ${detail.assigned_plan.plan_name}`
-                : ""}
-            </p>
-          </div>
-          <button type="button" className="ra-btn ra-btn--glass" onClick={onClose}>
-            Close
-          </button>
-        </div>
-        <p className="cc-muted">
-          Total sales: {formatMoney(detail.total_sales, currency, { compact: true })}
-        </p>
-        <div className="cc-table-wrap">
-          <table className="cc-table">
-            <thead>
-              <tr>
-                <th>Order</th>
-                <th>Date</th>
-                <th>Sales</th>
-                <th>Plan / Rule</th>
-                <th>Commission</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(detail.transactions || []).map((t) => (
-                <tr key={t.order_id}>
-                  <td>{t.order_id}</td>
-                  <td>{t.order_date || "—"}</td>
-                  <td>{formatMoney(t.sales_amount, currency, { compact: true })}</td>
-                  <td>
-                    {t.plan_name || "—"}
-                    {t.calculation_method ? ` · ${t.calculation_method}` : ""}
-                  </td>
-                  <td>
-                    {t.commission_amount != null
-                      ? formatMoney(t.commission_amount, currency, { compact: true })
-                      : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+    <section className="ecc-panel">
+      <div className="ecc-panel__head">
+        <h2>Executive Insights</h2>
       </div>
-    </div>
+      <div className="ecc-insight-grid">
+        {(items || []).map((i) => (
+          <article key={i.code} className={`ecc-insight tone-${i.tone || "neutral"}`}>
+            <span className="ecc-insight__dot" aria-hidden />
+            <div>
+              <h3>{i.title || "Insight"}</h3>
+              <p>{i.text}</p>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ActivityTimeline({ items }) {
+  return (
+    <section className="ecc-panel">
+      <div className="ecc-panel__head">
+        <h2>Recent Activity</h2>
+        <Link className="ecc-ghost-link" to="/audit-logs">
+          Activity
+        </Link>
+      </div>
+      {!items?.length ? (
+        <p className="ecc-quiet">No recent activity</p>
+      ) : (
+        <ol className="ecc-timeline">
+          {items.map((ev) => {
+            const t = ev.at ? new Date(ev.at) : null;
+            const time =
+              t && !Number.isNaN(t.getTime())
+                ? t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                : "—";
+            return (
+              <li key={ev.id || `${ev.action}-${ev.at}`}>
+                <time>{time}</time>
+                <span>{ev.label || ev.action}</span>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </section>
   );
 }
 
 function CommandCenter() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
   const [period, setPeriod] = useState("monthly");
   const [businessGroup, setBusinessGroup] = useState("all");
   const [region, setRegion] = useState("");
-  const [territory, setTerritory] = useState("");
-  const [plan, setPlan] = useState("");
-  const [employee, setEmployee] = useState("");
   const [cc, setCc] = useState(null);
-  const [leaderboard, setLeaderboard] = useState([]);
-  const [drill, setDrill] = useState(null);
+  const [chartsReady, setChartsReady] = useState(false);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
-    if (startDate) params.set("start_date", startDate);
-    if (endDate) params.set("end_date", endDate);
     if (businessGroup !== "all") params.set("business_group", businessGroup);
     if (region) params.set("region", region);
-    if (territory) params.set("territory", territory);
-    if (plan) params.set("plan", plan);
-    if (employee) params.set("employee", employee);
-    // Map period presets roughly when no explicit dates
-    if (!startDate && !endDate) {
-      const end = new Date();
-      const start = new Date();
-      if (period === "daily") start.setDate(end.getDate() - 1);
-      else if (period === "weekly") start.setDate(end.getDate() - 7);
-      else if (period === "quarterly") start.setMonth(end.getMonth() - 3);
-      else if (period === "annual") start.setFullYear(end.getFullYear() - 1);
-      else start.setMonth(end.getMonth() - 1);
-      params.set("start_date", start.toISOString().slice(0, 10));
-      params.set("end_date", end.toISOString().slice(0, 10));
-    }
+    const end = new Date();
+    const start = new Date();
+    if (period === "quarterly") start.setMonth(end.getMonth() - 3);
+    else if (period === "annual") start.setFullYear(end.getFullYear() - 1);
+    else if (period === "rolling12") start.setMonth(end.getMonth() - 12);
+    else start.setMonth(end.getMonth() - 1);
+    params.set("start_date", start.toISOString().slice(0, 10));
+    params.set("end_date", end.toISOString().slice(0, 10));
     return params.toString();
-  }, [startDate, endDate, businessGroup, region, territory, plan, employee, period]);
+  }, [businessGroup, region, period]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
       const qs = queryString ? `?${queryString}` : "";
-      const [ccRes, lbRes] = await Promise.all([
-        api.get(`reports/command-center/${qs}`),
-        api.get(`leaderboard/${qs}`),
-      ]);
+      const ccRes = await api.get(`reports/command-center/${qs}`);
       setCc(ccRes.data);
-      setLeaderboard(lbRes.data?.results || []);
     } catch (err) {
-      setError(getApiErrorMessage(err, "Failed to load command center"));
+      setError(getApiErrorMessage(err, "Failed to load dashboard"));
     } finally {
       setLoading(false);
     }
   }, [queryString]);
 
   useEffect(() => {
-    const t = setTimeout(load, employee ? 250 : 0);
-    return () => clearTimeout(t);
-  }, [load, employee]);
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setChartsReady(true), 40);
+    return () => window.clearTimeout(id);
+  }, []);
 
   const currency =
     currencyForBusinessGroup(businessGroup === "all" ? "" : businessGroup, "") ||
     primaryCurrencyFromPayload(cc) ||
     "INR";
 
-  const openEmployee = async (row) => {
-    const empId = row.employee_id;
-    if (!empId) return;
-    try {
-      const params = new URLSearchParams({ employee_id: empId });
-      if (startDate) params.set("start_date", startDate);
-      if (endDate) params.set("end_date", endDate);
-      // Use command center inferred dates when empty
-      if (!startDate && cc?.start_date) params.set("start_date", cc.start_date);
-      if (!endDate && cc?.end_date) params.set("end_date", cc.end_date);
-      const res = await api.get(`reports/employee-transparency/?${params}`);
-      setDrill(res.data);
-    } catch (err) {
-      setError(getApiErrorMessage(err, "Failed to load employee detail"));
-    }
-  };
+  const kpiCards = cc?.executive_kpis?.length
+    ? cc.executive_kpis
+    : [
+        {
+          key: "revenue",
+          label: "Revenue",
+          value: cc?.kpis?.total_sales,
+          format: "money",
+          delta_pct: cc?.kpis?.sales_delta_pct,
+          status: "neutral",
+          explanation: "vs last period",
+          sparkline: [],
+          href: "/orders",
+        },
+        {
+          key: "liability",
+          label: "Commission Liability",
+          value: cc?.kpis?.commission_liability,
+          format: "money",
+          delta_pct: cc?.kpis?.liability_delta_pct,
+          status: "neutral",
+          href: "/commissions",
+        },
+        {
+          key: "paid",
+          label: "Commission Paid",
+          value: cc?.kpis?.commission_paid,
+          format: "money",
+          delta_pct: cc?.kpis?.paid_delta_pct,
+          status: "neutral",
+          href: "/payouts",
+        },
+        {
+          key: "forecast",
+          label: "Forecasted Commission",
+          value: cc?.kpis?.forecasted_commission,
+          format: "money",
+          delta_pct: null,
+          status: "neutral",
+          href: "/commissions",
+        },
+        {
+          key: "attainment",
+          label: "Quota Attainment",
+          value: cc?.kpis?.quota_attainment,
+          format: "percent",
+          delta_pct: cc?.kpis?.attainment_delta_pct,
+          status: "neutral",
+          href: "/user-setup",
+        },
+        {
+          key: "active_plans",
+          label: "Active Plans",
+          value: cc?.kpis?.active_plans,
+          format: "number",
+          delta_pct: null,
+          status: "neutral",
+          href: "/comp-plans",
+        },
+        {
+          key: "employees",
+          label: "Employees Covered",
+          value: cc?.kpis?.active_participants,
+          format: "number",
+          delta_pct: cc?.kpis?.participants_delta_pct,
+          status: "neutral",
+          href: "/user-setup",
+        },
+        {
+          key: "pending_actions",
+          label: "Pending Actions",
+          value: cc?.action_center?.length || 0,
+          format: "number",
+          delta_pct: null,
+          status: "neutral",
+          href: "/commissions",
+        },
+      ];
 
-  const exportCsv = () => {
-    if (!cc) return;
-    const cell = (v) => {
-      const text = v == null ? "" : String(v);
-      return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-    };
-    const line = (...vals) => `${vals.map(cell).join(",")}\n`;
-    let csv = line("Sales Compensation Command Center");
-    csv += line("Period", `${cc.start_date} to ${cc.end_date}`);
-    csv += line("Business group", businessGroupLabel(businessGroup));
-    csv += "\n";
-    csv += line("KPI", "Value");
-    Object.entries(cc.kpis || {}).forEach(([k, v]) => {
-      csv += line(k, v);
-    });
-    csv += "\n";
-    csv += line("Quota center");
-    csv += line("Employee", "Quota", "Achievement", "Attainment %", "Status");
-    (cc.quota_center || []).forEach((r) => {
-      csv += line(r.employee_name, r.quota, r.achievement, r.attainment_pct, r.status_label);
-    });
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `command-center-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const lbRows =
-    (cc?.quota_center || []).length > 0
-      ? cc.quota_center
-      : leaderboard.map((r) => ({
-          ...r,
-          employee_name: r.employee_name || r.name,
-          expected_commission: r.total_commission ?? r.total,
-          achievement: r.total_sales,
-        }));
+  const costRatio = cc?.kpis?.avg_commission_rate;
 
   return (
-    <div className="cc-root">
-      <header className="cc-header">
-        <div className="cc-header__main">
+    <div className="ecc-root">
+      <header className="ecc-header">
+        <div className="ecc-header__main">
           <div>
-            <p className="cc-eyebrow">Incentra Analytics</p>
-            <h1>Sales Compensation Command Center</h1>
-            <p className="cc-sub">
-              Monitor sales performance, commission impact, quota attainment, and payout readiness.
-            </p>
+            <h1>Performance Command Center</h1>
+            <p className="ecc-sub">Business performance and exceptions requiring action</p>
           </div>
-          <div className="cc-header__actions">
-            <button type="button" className="ra-btn ra-btn--accent" onClick={load} disabled={loading}>
-              {loading ? "Loading…" : "Refresh"}
-            </button>
-            <button type="button" className="ra-btn ra-btn--glass" onClick={exportCsv} disabled={!cc}>
-              Export Dashboard
-            </button>
-          </div>
+          <button type="button" className="ecc-btn" onClick={load} disabled={loading}>
+            {loading ? "Refreshing…" : "Refresh"}
+          </button>
         </div>
-        <div className="cc-filters">
+        <div className="ecc-filters">
           <label>
             Period
             <select value={period} onChange={(e) => setPeriod(e.target.value)}>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="quarterly">Quarterly</option>
-              <option value="annual">Annual</option>
+              <option value="monthly">Month</option>
+              <option value="quarterly">Quarter</option>
+              <option value="annual">Year</option>
+              <option value="rolling12">Rolling 12</option>
             </select>
           </label>
           <label>
@@ -624,69 +660,68 @@ function CommandCenter() {
           </label>
           <label>
             Region
-            <input value={region} onChange={(e) => setRegion(e.target.value)} placeholder="e.g. Telangana" />
-          </label>
-          <label>
-            Territory
-            <input value={territory} onChange={(e) => setTerritory(e.target.value)} />
-          </label>
-          <label>
-            Compensation Plan
-            <input value={plan} onChange={(e) => setPlan(e.target.value)} placeholder="Plan name" />
-          </label>
-          <label>
-            Employee
-            <input value={employee} onChange={(e) => setEmployee(e.target.value)} placeholder="ID or search" />
-          </label>
-          <label>
-            From
-            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          </label>
-          <label>
-            To
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <input
+              value={region}
+              onChange={(e) => setRegion(e.target.value)}
+              placeholder="All regions"
+            />
           </label>
         </div>
       </header>
 
-      {error ? <div className="ra-error">{error}</div> : null}
+      {error ? <div className="ecc-error">{error}</div> : null}
 
       {loading && !cc ? (
-        <p className="cc-muted">Loading command center…</p>
+        <p className="ecc-quiet">Loading…</p>
       ) : (
         <>
-          <ExecutiveKpis kpis={cc?.kpis} currency={currency} />
-          <div className="cc-grid">
-            <CompensationHealth health={cc?.plan_health} />
-            <OpsAlerts alerts={cc?.ops_alerts} />
+          <ExecutiveKpiGrid
+            cards={kpiCards}
+            currency={currency}
+            onDrill={(href) => href && navigate(href)}
+          />
+
+          {chartsReady ? (
+            <Suspense fallback={<div className="ecc-panel ecc-chart-skeleton">Loading charts…</div>}>
+              <LazyCharts
+                series={cc?.trend_series || cc?.revenue_vs_commission}
+                currency={currency}
+                costRatio={costRatio}
+                period={period}
+                onPeriodChange={setPeriod}
+              />
+            </Suspense>
+          ) : (
+            <div className="ecc-panel ecc-chart-skeleton">Loading charts…</div>
+          )}
+
+          <ActionCenter alerts={cc?.action_center} currency={currency} />
+
+          <QuotaPerformance
+            distribution={cc?.attainment_distribution}
+            employees={cc?.quota_center || cc?.top_performers}
+            currency={currency}
+            avg={cc?.kpis?.quota_attainment}
+          />
+
+          <TerritoryCards board={cc?.territory_board} currency={currency} />
+
+          <PlanPerformanceTable
+            plans={cc?.plan_performance}
+            currency={currency}
+          />
+
+          <div className="ecc-bottom-grid">
+            <InsightCards items={cc?.executive_insights} />
+            <ActivityTimeline items={cc?.recent_activity} />
           </div>
-          <RevenueVsCommission series={cc?.revenue_vs_commission} currency={currency} />
-          <QuotaCenter rows={cc?.quota_center} currency={currency} onOpen={openEmployee} />
-          <div className="cc-grid">
-            <InsightsPanel insights={cc?.insights} currency={currency} />
-            <TerritoryAnalytics rows={cc?.territory_analytics} currency={currency} />
-          </div>
-          <LeaderboardTable rows={lbRows} currency={currency} onOpen={openEmployee} />
-          <section className="cc-panel">
-            <div className="cc-panel__head">
-              <h2>Reports</h2>
-            </div>
-            <div className="cc-reports">
-              <button type="button" className="ra-btn ra-btn--glass" onClick={exportCsv}>
-                Commission / Quota Report (CSV)
-              </button>
-              <Link className="ra-btn ra-btn--glass" to="/orders">
-                Transaction ops
-              </Link>
-              <Link className="ra-btn ra-btn--glass" to="/comp-plans">
-                Plan effectiveness
-              </Link>
-            </div>
-          </section>
+
+          <p className="ecc-footer-meta">
+            {cc?.start_date} → {cc?.end_date}
+            {businessGroup !== "all" ? ` · ${businessGroupLabel(businessGroup)}` : ""}
+          </p>
         </>
       )}
-
-      <TransparencyModal detail={drill} onClose={() => setDrill(null)} currency={currency} />
     </div>
   );
 }
