@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, IconButton, InputAdornment, FormControlLabel, Checkbox } from "@mui/material";
+import { Box, IconButton, InputAdornment } from "@mui/material";
 import SecurityIcon from "@mui/icons-material/Security";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import VisibilityIcon from "@mui/icons-material/Visibility";
@@ -107,7 +107,6 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const [mfaToken, setMfaToken] = useState("");
   const [mfaCode, setMfaCode] = useState("");
-  const [rememberDevice, setRememberDevice] = useState(true);
   const navigate = useNavigate();
   const { success, error } = useToast();
 
@@ -228,7 +227,7 @@ function Login() {
         email: email.trim().toLowerCase(),
         password,
         device_id: getOrCreateDeviceId(),
-        remember_device: rememberDevice,
+        remember_device: true,
       });
       if (res.data?.mfa_required) {
         setMfaToken(res.data.mfa_token || "");
@@ -260,7 +259,7 @@ function Login() {
       const res = await api.post("auth/mfa/verify/", {
         mfa_token: mfaToken,
         code: mfaCode.trim(),
-        remember_device: rememberDevice,
+        remember_device: true,
         device_id: getOrCreateDeviceId(),
       });
       setMfaToken("");
@@ -374,18 +373,6 @@ function Login() {
                   }}
                   sx={{ mb: 1, ...loginFieldSx }}
                 />
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={rememberDevice}
-                      onChange={(e) => setRememberDevice(e.target.checked)}
-                      size="small"
-                      sx={{ color: "rgba(255,255,255,0.7)" }}
-                    />
-                  }
-                  label="Remember this device"
-                  sx={{ color: "rgba(255,255,255,0.85)", mb: 1 }}
-                />
                 <button
                   type="button"
                   className="login-glass__submit"
@@ -408,18 +395,6 @@ function Login() {
                   disabled={loading}
                   inputProps={readableHtmlInputProps}
                   sx={{ mb: 1, ...loginFieldSx }}
-                />
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={rememberDevice}
-                      onChange={(e) => setRememberDevice(e.target.checked)}
-                      size="small"
-                      sx={{ color: "rgba(255,255,255,0.7)" }}
-                    />
-                  }
-                  label="Trust this device"
-                  sx={{ color: "rgba(255,255,255,0.85)", mb: 1 }}
                 />
                 <button
                   type="button"
