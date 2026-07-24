@@ -1,12 +1,31 @@
 import { Box, TextField, Typography } from "@mui/material";
 
+/**
+ * Force readable autofill text on white login fields (Chrome/Edge production builds
+ * often let dark-theme autofill win and paint light text on white).
+ */
+export function forceReadableAutofill(el) {
+  if (!el || el.nodeType !== 1) return;
+  el.style.setProperty("color", "#0f172a", "important");
+  el.style.setProperty("-webkit-text-fill-color", "#0f172a", "important");
+  el.style.setProperty("caret-color", "#0f172a", "important");
+  el.style.setProperty("background-color", "#ffffff", "important");
+  el.style.setProperty("-webkit-box-shadow", "0 0 0 1000px #ffffff inset", "important");
+  el.style.setProperty("box-shadow", "0 0 0 1000px #ffffff inset", "important");
+  el.style.setProperty("filter", "none", "important");
+  el.style.setProperty("opacity", "1", "important");
+}
+
 /** Static label above field — avoids overlap with global input CSS */
-function AuthTextField({ label, id, sx, InputProps, slotProps, className, ...props }) {
+function AuthTextField({ label, id, sx, InputProps, slotProps, className, inputProps, ...props }) {
   const fieldId = id || label?.toLowerCase().replace(/\s+/g, "-");
-  // Prefer MUI slotProps.input for OutlinedInput props (endAdornment, etc.)
   const inputSlot = {
     ...(slotProps?.input || {}),
     ...(InputProps || {}),
+  };
+  const htmlInput = {
+    ...(slotProps?.htmlInput || {}),
+    ...(inputProps || {}),
   };
 
   return (
@@ -31,6 +50,7 @@ function AuthTextField({ label, id, sx, InputProps, slotProps, className, ...pro
         slotProps={{
           ...slotProps,
           input: inputSlot,
+          htmlInput,
         }}
         {...props}
       />

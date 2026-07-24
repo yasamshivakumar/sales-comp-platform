@@ -13,29 +13,86 @@ import api, {
   saveAuthSession,
 } from "./api";
 import { useToast } from "./Components/Toast";
-import AuthTextField from "./Components/AuthTextField";
+import AuthTextField, { forceReadableAutofill } from "./Components/AuthTextField";
 import "./Login.css";
 
 const apiHost = process.env.REACT_APP_API_HOST || "http://localhost:8000";
 const oidcEnabled = process.env.REACT_APP_OIDC_ENABLED === "true";
 
+const LOGIN_AUTOFILL_STYLE_ID = "incentra-login-autofill-fix";
+
+const LOGIN_AUTOFILL_CSS = `
+@keyframes incentra-autofill-start { from { opacity: 0.99; } to { opacity: 1; } }
+@keyframes incentra-autofill-cancel { from { opacity: 0.99; } to { opacity: 1; } }
+.login-glass input:-webkit-autofill,
+.login-glass input:-webkit-autofill:hover,
+.login-glass input:-webkit-autofill:focus,
+.login-glass input:-webkit-autofill:active {
+  -webkit-text-fill-color: #0f172a !important;
+  color: #0f172a !important;
+  caret-color: #0f172a !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+  filter: none !important;
+  opacity: 1 !important;
+  transition: background-color 99999s ease-in-out 0s !important;
+  animation-name: incentra-autofill-start !important;
+  animation-duration: 0.001s !important;
+}
+.login-glass input:not(:-webkit-autofill) {
+  animation-name: incentra-autofill-cancel !important;
+  animation-duration: 0.001s !important;
+}
+.login-glass .MuiOutlinedInput-root,
+.login-glass .MuiInputBase-root {
+  background-color: #ffffff !important;
+}
+.login-glass .MuiOutlinedInput-input,
+.login-glass .MuiInputBase-input {
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  caret-color: #0f172a !important;
+  background-color: #ffffff !important;
+  opacity: 1 !important;
+}
+`;
+
 /** Keep autofilled credentials readable on white login fields */
 const loginFieldSx = {
   "& .MuiOutlinedInput-root": {
-    backgroundColor: "#ffffff",
+    backgroundColor: "#ffffff !important",
   },
   "& .MuiOutlinedInput-input": {
+    color: "#0f172a !important",
+    WebkitTextFillColor: "#0f172a !important",
+    caretColor: "#0f172a !important",
+    backgroundColor: "#ffffff !important",
+  },
+  "& .MuiOutlinedInput-input:-webkit-autofill": {
+    WebkitTextFillColor: "#0f172a !important",
+    WebkitBoxShadow: "0 0 0 1000px #ffffff inset !important",
+    boxShadow: "0 0 0 1000px #ffffff inset !important",
+    caretColor: "#0f172a !important",
+    transition: "background-color 99999s ease-out 0s",
+  },
+};
+
+const readableHtmlInputProps = {
+  style: {
     color: "#0f172a",
     WebkitTextFillColor: "#0f172a",
     caretColor: "#0f172a",
     backgroundColor: "#ffffff",
   },
-  "& .MuiOutlinedInput-input:-webkit-autofill": {
-    WebkitTextFillColor: "#0f172a",
-    WebkitBoxShadow: "0 0 0 1000px #ffffff inset",
-    boxShadow: "0 0 0 1000px #ffffff inset",
-    caretColor: "#0f172a",
-    transition: "background-color 99999s ease-out 0s",
+  onAnimationStart: (e) => {
+    if (
+      e.animationName === "incentra-autofill-start" ||
+      String(e.animationName || "").toLowerCase().includes("autofill")
+    ) {
+      forceReadableAutofill(e.target);
+    }
   },
 };
 
@@ -53,6 +110,38 @@ function Login() {
   const [rememberDevice, setRememberDevice] = useState(true);
   const navigate = useNavigate();
   const { success, error } = useToast();
+
+  // Production (Vercel) CSS chunk order lets dark-theme autofill win; inject last.
+  useEffect(() => {
+    let style = document.getElementById(LOGIN_AUTOFILL_STYLE_ID);
+    if (!style) {
+      style = document.createElement("style");
+      style.id = LOGIN_AUTOFILL_STYLE_ID;
+      style.setAttribute("data-purpose", "login-autofill-contrast");
+      style.textContent = LOGIN_AUTOFILL_CSS;
+    }
+    // Always move to end of <head> so it beats Emotion/MUI production chunks.
+    document.head.appendChild(style);
+
+    const fixAll = () => {
+      document.querySelectorAll(".login-glass input").forEach(forceReadableAutofill);
+    };
+    fixAll();
+    const t1 = window.setTimeout(fixAll, 50);
+    const t2 = window.setTimeout(fixAll, 300);
+    const t3 = window.setTimeout(fixAll, 1000);
+    const onFocusIn = (e) => {
+      if (e.target?.closest?.(".login-glass")) forceReadableAutofill(e.target);
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
+      document.removeEventListener("focusin", onFocusIn);
+      style?.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (hasValidSession()) {
@@ -242,6 +331,7 @@ function Login() {
                   onKeyDown={(e) => e.key === "Enter" && !loading && handleLogin()}
                   autoComplete="email"
                   disabled={loading}
+                  inputProps={readableHtmlInputProps}
                   sx={{ mb: 2, ...loginFieldSx }}
                 />
                 <AuthTextField
@@ -253,6 +343,7 @@ function Login() {
                   onKeyDown={(e) => e.key === "Enter" && !loading && handleLogin()}
                   autoComplete="current-password"
                   disabled={loading}
+                  inputProps={readableHtmlInputProps}
                   InputProps={{
                     endAdornment: (
                       <InputAdornment position="end">
@@ -315,6 +406,7 @@ function Login() {
                   onKeyDown={(e) => e.key === "Enter" && !loading && handleMfaVerify()}
                   autoComplete="one-time-code"
                   disabled={loading}
+                  inputProps={readableHtmlInputProps}
                   sx={{ mb: 1, ...loginFieldSx }}
                 />
                 <FormControlLabel
