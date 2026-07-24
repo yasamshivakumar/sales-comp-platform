@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState, Fragment } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api, { getApiErrorMessage } from "../api";
 import { formatMoney, primaryCurrencyFromPayload } from "../utils/currency";
@@ -9,6 +9,14 @@ import {
 } from "../utils/businessGroups";
 import "./commandCenter.css";
 
+function isRequestAborted(err) {
+  return (
+    err?.code === "ERR_CANCELED" ||
+    err?.name === "CanceledError" ||
+    err?.name === "AbortError" ||
+    Boolean(err?.config?.signal?.aborted)
+  );
+}
 const LazyCharts = lazy(() => import("./CommandCenterCharts"));
 
 function buildSparkPath(points, width = 80, height = 30) {
@@ -591,10 +599,22 @@ function CommandCenter() {
   const [error, setError] = useState("");
   const [period, setPeriod] = useState("monthly");
   const [businessGroup, setBusinessGroup] = useState("all");
+  const [regionInput, setRegionInput] = useState("");
   const [region, setRegion] = useState("");
   const [cc, setCc] = useState(null);
+  const [appliedQuery, setAppliedQuery] = useState(null);
   const [chartsReady, setChartsReady] = useState(false);
   const [refreshedAt, setRefreshedAt] = useState(null);
+  const abortRef = useRef(null);
+  const requestIdRef = useRef(0);
+
+  // Debounce region so typing does not keep refetching for every keystroke.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setRegion(regionInput.trim());
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [regionInput]);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
@@ -611,23 +631,53 @@ function CommandCenter() {
     return params.toString();
   }, [businessGroup, region, period]);
 
+  // Only show figures that match the current unit / period / region selection.
+  // Prevents any previous unit (India, USA, Europe, Australia, All) from lingering.
+  const displayCc = appliedQuery === queryString ? cc : null;
+  const showLoading = loading || !displayCc;
+
+  const invalidateFilters = useCallback(() => {
+    setAppliedQuery(null);
+    setCc(null);
+    setLoading(true);
+    setError("");
+  }, []);
+
   const load = useCallback(async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const requestId = ++requestIdRef.current;
+    const requestQuery = queryString;
+
+    setAppliedQuery(null);
+    setCc(null);
     setLoading(true);
     setError("");
     try {
-      const qs = queryString ? `?${queryString}` : "";
-      const ccRes = await api.get(`reports/command-center/${qs}`);
+      const qs = requestQuery ? `?${requestQuery}` : "";
+      const ccRes = await api.get(`reports/command-center/${qs}`, {
+        signal: controller.signal,
+      });
+      if (requestId !== requestIdRef.current) return;
       setCc(ccRes.data);
+      setAppliedQuery(requestQuery);
       setRefreshedAt(new Date());
     } catch (err) {
+      if (isRequestAborted(err) || requestId !== requestIdRef.current) return;
       setError(getApiErrorMessage(err, "Failed to load dashboard"));
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [queryString]);
 
   useEffect(() => {
     load();
+    return () => {
+      abortRef.current?.abort();
+    };
   }, [load]);
 
   useEffect(() => {
@@ -637,21 +687,25 @@ function CommandCenter() {
 
   const currency =
     currencyForBusinessGroup(businessGroup === "all" ? "" : businessGroup, "") ||
-    primaryCurrencyFromPayload(cc) ||
+    primaryCurrencyFromPayload(displayCc) ||
     "INR";
 
+  const unitLabel =
+    businessGroup === "all" ? "all units" : businessGroupLabel(businessGroup);
+
   const refreshedLabel = useMemo(() => {
-    const t = refreshedAt || (cc?.generated_at ? new Date(cc.generated_at) : null);
+    const t =
+      refreshedAt || (displayCc?.generated_at ? new Date(displayCc.generated_at) : null);
     if (!t || Number.isNaN(t.getTime())) return "—";
     return t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  }, [refreshedAt, cc?.generated_at]);
+  }, [refreshedAt, displayCc?.generated_at]);
 
-  const dataStatus = cc?.business_health?.data_status || "Healthy";
+  const dataStatus = displayCc?.business_health?.data_status || (showLoading ? "…" : "Healthy");
 
   const kpiCards = useMemo(() => {
-    if (cc?.executive_kpis?.length) return cc.executive_kpis;
+    if (displayCc?.executive_kpis?.length) return displayCc.executive_kpis;
     return [];
-  }, [cc]);
+  }, [displayCc]);
 
   return (
     <div className="ecc-root">
@@ -665,16 +719,25 @@ function CommandCenter() {
             </p>
             <div className="ecc-header__meta">
               <span>
-                Last refreshed: <strong>{refreshedLabel}</strong>
+                Last refreshed: <strong>{showLoading ? "…" : refreshedLabel}</strong>
               </span>
-              <span className={`ecc-data-status is-${String(dataStatus).toLowerCase()}`}>
+              <span
+                className={`ecc-data-status is-${String(dataStatus).toLowerCase().replace(/[^a-z]/g, "") || "healthy"}`}
+              >
                 Data status: <strong>{dataStatus}</strong>
               </span>
             </div>
           </div>
           <div className="ecc-header__actions">
             <div className="ecc-filters ecc-filters--inline">
-              <select value={period} onChange={(e) => setPeriod(e.target.value)} aria-label="Period">
+              <select
+                value={period}
+                onChange={(e) => {
+                  invalidateFilters();
+                  setPeriod(e.target.value);
+                }}
+                aria-label="Period"
+              >
                 <option value="monthly">Month</option>
                 <option value="quarterly">Quarter</option>
                 <option value="annual">Year</option>
@@ -682,7 +745,10 @@ function CommandCenter() {
               </select>
               <select
                 value={businessGroup}
-                onChange={(e) => setBusinessGroup(e.target.value)}
+                onChange={(e) => {
+                  invalidateFilters();
+                  setBusinessGroup(e.target.value);
+                }}
                 aria-label="Business unit"
               >
                 <option value="all">All units</option>
@@ -693,8 +759,8 @@ function CommandCenter() {
                 ))}
               </select>
               <input
-                value={region}
-                onChange={(e) => setRegion(e.target.value)}
+                value={regionInput}
+                onChange={(e) => setRegionInput(e.target.value)}
                 placeholder="Region"
                 aria-label="Region"
               />
@@ -708,8 +774,11 @@ function CommandCenter() {
 
       {error ? <div className="ecc-error">{error}</div> : null}
 
-      {loading && !cc ? (
-        <p className="ecc-quiet">Loading command center…</p>
+      {showLoading ? (
+        <div className="ecc-loading" role="status" aria-live="polite">
+          <div className="ecc-loading__pulse" aria-hidden="true" />
+          <p className="ecc-quiet">Loading {unitLabel} figures…</p>
+        </div>
       ) : (
         <>
           <ExecutiveKpiHeader
@@ -719,44 +788,47 @@ function CommandCenter() {
           />
 
           <div className="ecc-cockpit">
-            <HealthScore health={cc?.business_health} />
+            <HealthScore health={displayCc?.business_health} />
             {chartsReady ? (
               <Suspense fallback={<div className="ecc-panel ecc-chart-skeleton">Loading trend…</div>}>
                 <LazyCharts
-                  series={cc?.trend_series || cc?.revenue_vs_commission}
-                  previousSeries={cc?.previous_trend_series}
+                  series={displayCc?.trend_series || displayCc?.revenue_vs_commission}
+                  previousSeries={displayCc?.previous_trend_series}
                   currency={currency}
                   period={period}
-                  onPeriodChange={setPeriod}
-                  rangeLabel={`${cc?.start_date || ""} → ${cc?.end_date || ""}`}
+                  onPeriodChange={(next) => {
+                    invalidateFilters();
+                    setPeriod(next);
+                  }}
+                  rangeLabel={`${displayCc?.start_date || ""} → ${displayCc?.end_date || ""}`}
                 />
               </Suspense>
             ) : (
               <div className="ecc-panel ecc-chart-skeleton">Loading trend…</div>
             )}
-            <ActionPanel alerts={cc?.action_center} currency={currency} />
+            <ActionPanel alerts={displayCc?.action_center} currency={currency} />
           </div>
 
           <div className="ecc-mid">
             <QuotaBoard
-              distribution={cc?.attainment_distribution}
-              employees={cc?.quota_center}
-              avg={cc?.kpis?.quota_attainment}
+              distribution={displayCc?.attainment_distribution}
+              employees={displayCc?.quota_center}
+              avg={displayCc?.kpis?.quota_attainment}
               currency={currency}
             />
-            <TerritoryRanking board={cc?.territory_board} currency={currency} />
+            <TerritoryRanking board={displayCc?.territory_board} currency={currency} />
           </div>
 
-          <PlanTable plans={cc?.plan_performance} currency={currency} />
+          <PlanTable plans={displayCc?.plan_performance} currency={currency} />
 
           <div className="ecc-bottom-grid">
-            <InsightCards items={cc?.executive_insights} />
-            <ActivityTimeline items={cc?.recent_activity} />
+            <InsightCards items={displayCc?.executive_insights} />
+            <ActivityTimeline items={displayCc?.recent_activity} />
           </div>
 
           <p className="ecc-footer-meta">
-            {cc?.start_date} → {cc?.end_date}
-            {businessGroup !== "all" ? ` · ${businessGroupLabel(businessGroup)}` : ""}
+            {displayCc?.start_date} → {displayCc?.end_date}
+            {businessGroup !== "all" ? ` · ${businessGroupLabel(businessGroup)}` : " · All units"}
           </p>
         </>
       )}

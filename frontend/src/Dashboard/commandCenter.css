@@ -140,6 +140,40 @@
   font-size: 12px;
 }
 
+.ecc-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 220px;
+  padding: 32px 16px;
+  border-radius: var(--ecc-radius);
+  background: var(--ecc-surface);
+  border: 1px solid var(--ecc-border);
+}
+
+.ecc-loading__pulse {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 3px solid var(--ecc-border);
+  border-top-color: var(--ecc-accent);
+  animation: ecc-spin 0.7s linear infinite;
+}
+
+.ecc-loading .ecc-quiet {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ecc-text);
+}
+
+@keyframes ecc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .ecc-panel {
   background: var(--ecc-surface);
   border: 1px solid var(--ecc-border);

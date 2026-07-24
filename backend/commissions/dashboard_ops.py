@@ -318,11 +318,15 @@ def build_command_center(request):
         if key:
             comm_by_emp[key] = _money(row["total"])
 
-    # Plans
+    # Plans — must follow the selected business unit (India/USA/Australia/Europe).
+    # Otherwise Action Center / Plan Performance / Insights keep showing other units.
     plans = CompensationPlan.objects.all()
     if org:
         plans = plans.filter(organization=org)
     active_plan_qs = plans.filter(status="Active")
+    if effective_group:
+        group_name = normalize_business_group(effective_group)
+        active_plan_qs = active_plan_qs.filter(business_group__iexact=group_name)
     active_plans = active_plan_qs.count()
     blocked = 0
     missing_rules = 0
@@ -474,7 +478,7 @@ def build_command_center(request):
         "high" if leakage_count >= 10 else "medium" if leakage_count >= 3 else "low"
     )
 
-    # Expired plan versions
+    # Expired plan versions (scoped to selected unit's plans)
     expired_versions = 0
     try:
         from .models import CommissionPlanVersion
@@ -485,6 +489,12 @@ def build_command_center(request):
         )
         if org:
             ver_qs = ver_qs.filter(organization=org)
+        if effective_group:
+            group_name = normalize_business_group(effective_group)
+            ver_qs = ver_qs.filter(
+                Q(business_group__iexact=group_name)
+                | Q(compensation_plan__business_group__iexact=group_name)
+            )
         expired_versions = ver_qs.count()
         leakage_count += expired_versions
     except Exception:
@@ -738,28 +748,32 @@ def build_command_center(request):
     leakage_issues = [i for i in leakage_issues if i["count"] > 0]
 
     # Extra ops signals for Action Center / Operational Health
+    # Import/payout jobs are org-wide — hide them when a specific unit is selected
+    # so Australia (etc.) does not inherit India/USA operational noise.
     failed_imports = 0
-    try:
-        from .models import ImportJob
+    blocked_payouts = 0
+    if not effective_group:
+        try:
+            from .models import ImportJob
 
-        ij = ImportJob.objects.filter(status=ImportJob.STATUS_FAILED)
-        if org:
-            ij = ij.filter(organization=org)
-        failed_imports = ij.count()
-    except Exception:
-        failed_imports = 0
+            ij = ImportJob.objects.filter(status=ImportJob.STATUS_FAILED)
+            if org:
+                ij = ij.filter(organization=org)
+            failed_imports = ij.count()
+        except Exception:
+            failed_imports = 0
+
+        try:
+            from .models import PayoutRun
+
+            pr = PayoutRun.objects.filter(status=PayoutRun.STATUS_DRAFT)
+            if org:
+                pr = pr.filter(organization=org)
+            blocked_payouts = pr.count()
+        except Exception:
+            blocked_payouts = 0
 
     failed_calcs = commissions.filter(status=Commission.STATUS_FAILED).count()
-    blocked_payouts = 0
-    try:
-        from .models import PayoutRun
-
-        pr = PayoutRun.objects.filter(status=PayoutRun.STATUS_DRAFT)
-        if org:
-            pr = pr.filter(organization=org)
-        blocked_payouts = pr.count()
-    except Exception:
-        blocked_payouts = 0
 
     plans_expiring = 0
     try:
@@ -1158,10 +1172,27 @@ def build_command_center(request):
             + approvals_score * 0.15
         )
     )
+
+    # Selected unit with no plans and no money: don't paint a fake "Strong" scorecard.
+    unit_has_no_signal = bool(effective_group) and sales_f == 0 and curr == 0 and active_plans == 0
+    if unit_has_no_signal:
+        business_health_score = 0
+        revenue_score = 0
+        quota_score = 0
+        commission_score = 0
+        plans_score = 0
+        approvals_score = 0
+        action_center = []
+        leakage_risk = "low"
+        risk_label = "Low"
+        risk_rank = 1
+
     business_health = {
         "score": max(0, min(100, business_health_score)),
         "label": (
-            "Strong"
+            "No data"
+            if unit_has_no_signal
+            else "Strong"
             if business_health_score >= 80
             else "Stable"
             if business_health_score >= 65
@@ -1169,7 +1200,13 @@ def build_command_center(request):
             if business_health_score >= 45
             else "Critical"
         ),
-        "data_status": "Healthy" if leakage_risk == "low" and business_health_score >= 65 else "Attention",
+        "data_status": (
+            "No data"
+            if unit_has_no_signal
+            else "Healthy"
+            if leakage_risk == "low" and business_health_score >= 65
+            else "Attention"
+        ),
         "components": [
             {"code": "revenue", "label": "Revenue Health", "score": revenue_score},
             {"code": "quota", "label": "Quota Health", "score": int(quota_score)},
@@ -1324,7 +1361,19 @@ def build_command_center(request):
     }
 
     executive_insights = []
-    if sales_delta is not None:
+    if unit_has_no_signal:
+        executive_insights.append(
+            {
+                "code": "no_unit_data",
+                "title": "No %s activity" % normalize_business_group(effective_group),
+                "text": "No revenue, commissions, or compensation plans for this business unit in the selected period.",
+                "reason": "Switch unit or add plans / transactions for this region",
+                "tone": "neutral",
+                "cta": "Open Plans",
+                "href": "/comp-plans",
+            }
+        )
+    elif sales_delta is not None:
         executive_insights.append(
             {
                 "code": "revenue_change",
@@ -1337,7 +1386,7 @@ def build_command_center(request):
                 "href": "/orders",
             }
         )
-    attention_plans = blocked + plans_expiring + missing_rules
+    attention_plans = 0 if unit_has_no_signal else (blocked + plans_expiring + missing_rules)
     if attention_plans:
         reason_bits = []
         if missing_rules:
@@ -1357,49 +1406,50 @@ def build_command_center(request):
                 "href": "/comp-plans",
             }
         )
-    weak_terr = [
-        t
-        for t in territory_rows
-        if t.get("attainment_pct") is not None and t["attainment_pct"] < 50
-    ]
-    if weak_terr:
-        executive_insights.append(
-            {
-                "code": "territory_under",
-                "title": "Quota Risk",
-                "text": "%s territor%s below target"
-                % (len(weak_terr), "y" if len(weak_terr) == 1 else "ies"),
-                "reason": "Below 50% attainment",
-                "tone": "caution",
-                "cta": "View Territories",
-                "href": "/analytics/reports",
-            }
-        )
-    over = attainment_distribution.get("over_achievers") or 0
-    if over:
-        executive_insights.append(
-            {
-                "code": "over_achievers",
-                "title": "Quota Strength",
-                "text": "%s employees above target" % over,
-                "reason": "Above 100% attainment",
-                "tone": "positive",
-                "cta": "Open People",
-                "href": "/user-setup",
-            }
-        )
-    if avg_rate is not None:
-        executive_insights.append(
-            {
-                "code": "commission_cost",
-                "title": "Commission Cost",
-                "text": "Cost ratio at %s%%" % avg_rate,
-                "reason": "Commission as percent of revenue",
-                "tone": "positive" if avg_rate < 5 else "caution" if avg_rate < 12 else "critical",
-                "cta": "Open Commissions",
-                "href": "/commissions",
-            }
-        )
+    if not unit_has_no_signal:
+        weak_terr = [
+            t
+            for t in territory_rows
+            if t.get("attainment_pct") is not None and t["attainment_pct"] < 50
+        ]
+        if weak_terr:
+            executive_insights.append(
+                {
+                    "code": "territory_under",
+                    "title": "Quota Risk",
+                    "text": "%s territor%s below target"
+                    % (len(weak_terr), "y" if len(weak_terr) == 1 else "ies"),
+                    "reason": "Below 50% attainment",
+                    "tone": "caution",
+                    "cta": "View Territories",
+                    "href": "/analytics/reports",
+                }
+            )
+        over = attainment_distribution.get("over_achievers") or 0
+        if over:
+            executive_insights.append(
+                {
+                    "code": "over_achievers",
+                    "title": "Quota Strength",
+                    "text": "%s employees above target" % over,
+                    "reason": "Above 100% attainment",
+                    "tone": "positive",
+                    "cta": "Open People",
+                    "href": "/user-setup",
+                }
+            )
+        if avg_rate is not None:
+            executive_insights.append(
+                {
+                    "code": "commission_cost",
+                    "title": "Commission Cost",
+                    "text": "Cost ratio at %s%%" % avg_rate,
+                    "reason": "Commission as percent of revenue",
+                    "tone": "positive" if avg_rate < 5 else "caution" if avg_rate < 12 else "critical",
+                    "cta": "Open Commissions",
+                    "href": "/commissions",
+                }
+            )
     if not executive_insights:
         executive_insights.append(
             {
@@ -1446,33 +1496,35 @@ def build_command_center(request):
     )
 
     recent_activity = []
-    try:
-        from .models import AuditLog
-        from .audit_catalog import action_label
+    # Unit-scoped views should not show unrelated org audit (payouts / CRM from other units).
+    if not effective_group:
+        try:
+            from .models import AuditLog
+            from .audit_catalog import action_label
 
-        audit_qs = AuditLog.objects.all().order_by("-created_at")
-        if org is not None:
-            audit_qs = audit_qs.filter(organization=org)
-        for row in audit_qs[:60]:
-            action = str(row.action or "")
-            low = action.lower()
-            if any(low.startswith(b) or b in low for b in BUSINESS_ACTIVITY_BLOCK):
-                continue
-            if not any(low.startswith(p) for p in BUSINESS_ACTIVITY_PREFIXES):
-                continue
-            recent_activity.append(
-                {
-                    "id": row.id,
-                    "at": row.created_at.isoformat() if row.created_at else None,
-                    "label": action_label(row.action) or row.action,
-                    "action": row.action,
-                    "severity": row.severity or "info",
-                }
-            )
-            if len(recent_activity) >= 8:
-                break
-    except Exception:
-        recent_activity = []
+            audit_qs = AuditLog.objects.all().order_by("-created_at")
+            if org is not None:
+                audit_qs = audit_qs.filter(organization=org)
+            for row in audit_qs[:60]:
+                action = str(row.action or "")
+                low = action.lower()
+                if any(low.startswith(b) or b in low for b in BUSINESS_ACTIVITY_BLOCK):
+                    continue
+                if not any(low.startswith(p) for p in BUSINESS_ACTIVITY_PREFIXES):
+                    continue
+                recent_activity.append(
+                    {
+                        "id": row.id,
+                        "at": row.created_at.isoformat() if row.created_at else None,
+                        "label": action_label(row.action) or row.action,
+                        "action": row.action,
+                        "severity": row.severity or "info",
+                    }
+                )
+                if len(recent_activity) >= 8:
+                    break
+        except Exception:
+            recent_activity = []
 
     from django.utils import timezone as dj_tz
 

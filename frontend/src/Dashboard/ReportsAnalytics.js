@@ -602,7 +602,20 @@ function ReportsAnalytics({ compact = false }) {
           </label>
           <label className="ra-filter-field ra-filter-field--business">
             <span className="ra-filter-field__label">Business group</span>
-            <select value={businessGroup} onChange={(e) => setBusinessGroup(e.target.value)}>
+            <select
+              value={businessGroup}
+              onChange={(e) => {
+                // Clear every unit's stale figures immediately (India/USA/Europe/Australia/All).
+                setSummary(null);
+                setSales(null);
+                setPeriodData(null);
+                setAdvanced(null);
+                setEarnings(null);
+                setLeaderboard([]);
+                setLoadingInitial(true);
+                setBusinessGroup(e.target.value);
+              }}
+            >
               <option value="all">All groups</option>
               {BUSINESS_GROUP_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
