@@ -9,6 +9,7 @@ import { displayVersionLabel, formatEffectiveRange } from "./compPlanUtils";
 const TABS = [
   { to: "overview", label: "Overview" },
   { to: "participants", label: "Participants" },
+  { to: "overrides", label: "Overrides" },
   { to: "rules", label: "Rules" },
   { to: "quotas", label: "Quotas" },
   { to: "versions", label: "Versions" },

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { getApiErrorMessage } from "../api";
+import DatePickerField from "../Components/DatePickerField";
 import { useToast } from "../Components/Toast";
 import { BUSINESS_GROUP_OPTIONS } from "../utils/businessGroups";
 import { AI_PLAN_EXAMPLES } from "./compPlanUtils";
@@ -119,27 +120,25 @@ function AiPlanBuilder() {
           <label>Role *</label>
           <input name="role" value={form.role} onChange={handleChange} />
         </div>
-        <div className="form-field">
-          <label>Effective from *</label>
-          <input
-            type="date"
-            name="effective_from"
-            value={form.effective_from}
-            onChange={handleChange}
-            disabled={loading}
-            required
-          />
-        </div>
-        <div className="form-field">
-          <label>Effective to</label>
-          <input
-            type="date"
-            name="effective_to"
-            value={form.effective_to}
-            onChange={handleChange}
-            disabled={loading}
-          />
-        </div>
+<div className="form-field">
+  <DatePickerField
+    label="Effective from *"
+    value={form.effective_from}
+    onChange={(value) => setForm((prev) => ({ ...prev, effective_from: value }))}
+    disabled={loading}
+    required
+    maxDate={form.effective_to || undefined}
+  />
+</div>
+<div className="form-field">
+  <DatePickerField
+    label="Effective to"
+    value={form.effective_to}
+    onChange={(value) => setForm((prev) => ({ ...prev, effective_to: value }))}
+    disabled={loading}
+    minDate={form.effective_from || undefined}
+  />
+</div>
         <div className="form-field">
           <label>Business group</label>
           <select name="business_group" value={form.business_group} onChange={handleChange}>

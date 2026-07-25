@@ -802,10 +802,13 @@
 }
 
 .cp-catalog-toolbar select,
-.cp-catalog-toolbar input[type="date"] {
+.cp-catalog-toolbar input[type="date"],
+.cp-catalog-toolbar .compact-date-field.MuiFormControl-root,
+.cp-filters .compact-date-field.MuiFormControl-root {
   flex: 0 1 160px;
   width: auto;
   min-width: 140px;
+  max-width: 180px;
 }
 
 .cp-card-grid {
@@ -3205,7 +3208,7 @@
 }
 
 .cp-filter-drawer__body select,
-.cp-filter-drawer__body input {
+.cp-filter-drawer__body input:not(.MuiInputBase-input) {
   font: inherit;
   font-weight: 500;
   text-transform: none;
@@ -3214,6 +3217,11 @@
   border-radius: 8px;
   border: 1px solid #dbe2ea;
   color: #0f172a;
+}
+
+.cp-filter-drawer__body .compact-date-field.MuiFormControl-root {
+  width: 100%;
+  max-width: none;
 }
 
 .cp-bulk-bar {
@@ -3737,4 +3745,31 @@
   background: rgba(59, 130, 246, 0.15);
   border-color: rgba(59, 130, 246, 0.4);
   color: #bfdbfe;
+}
+
+.cp-override-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  background: rgba(112, 110, 107, 0.12);
+  color: #514f4d;
+}
+
+.cp-override-status--success {
+  background: rgba(46, 132, 110, 0.14);
+  color: #0b6b4f;
+}
+
+.cp-override-status--warning {
+  background: rgba(255, 183, 93, 0.25);
+  color: #8a5a00;
+}
+
+.cp-override-status--danger {
+  background: rgba(186, 54, 54, 0.12);
+  color: #a61b1b;
 }

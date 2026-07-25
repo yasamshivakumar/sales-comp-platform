@@ -1,6 +1,7 @@
 import { NavLink, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { useCallback, useEffect, useState } from "react";
 import api, { getApiErrorMessage } from "../api";
+import DatePickerField from "../Components/DatePickerField";
 import { useToast } from "../Components/Toast";
 import LoadingCenter from "../Components/LoadingCenter";
 import { StatusBadge } from "./PeopleDataGrid";
@@ -202,13 +203,280 @@ function OrganizationTab({ person }) {
   );
 }
 
+function formatMoneyOrRate(value, unit) {
+  if (value == null || value === "") return "—";
+  const num = Number(value);
+  if (Number.isNaN(num)) return String(value);
+  if (unit === "percent") return `${num}%`;
+  if (unit === "multiplier") return `${num}×`;
+  if (unit === "boolean") return num > 0 ? "Eligible" : "Not eligible";
+  return num.toLocaleString(undefined, { maximumFractionDigits: 4 });
+}
+
+function OverrideStatusBadge({ status }) {
+  const tone =
+    status === "approved"
+      ? "success"
+      : status === "pending_approval" || status === "draft"
+        ? "warning"
+        : status === "rejected" || status === "revoked"
+          ? "danger"
+          : "neutral";
+  return <span className={`pe-badge pe-badge--${tone}`}>{(status || "—").replace(/_/g, " ")}</span>;
+}
+
+function OverrideFormModal({ person, plans, choices, initial, onClose, onSaved }) {
+  const { error, success } = useToast();
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState(() => ({
+    name: initial?.name || `${person.name || "Employee"} Override`,
+    compensation_plan: String(initial?.compensation_plan || person.assigned_plan_id || ""),
+    override_type: initial?.override_type || "commission_rate",
+    value: initial?.value ?? "",
+    value_unit: initial?.value_unit || "percent",
+    previous_value: initial?.previous_value ?? "",
+    effective_from: initial?.effective_from || new Date().toISOString().slice(0, 10),
+    effective_to: initial?.effective_to || "",
+    reason: initial?.reason || "",
+    approval_required: initial?.approval_required ?? true,
+    approver: initial?.approver || "",
+    stop_on_match: initial?.stop_on_match ?? true,
+  }));
+
+  const set = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+
+  const onTypeChange = (type) => {
+    const meta = (choices.override_types || []).find((row) => row.value === type);
+    setForm((prev) => ({
+      ...prev,
+      override_type: type,
+      value_unit: meta?.default_unit || prev.value_unit,
+    }));
+  };
+
+  const submit = async (approveNow = false) => {
+    setBusy(true);
+    try {
+      const payload = {
+        ...form,
+        employee: person.id,
+        compensation_plan: form.compensation_plan || null,
+        approver: form.approver || null,
+        previous_value: form.previous_value === "" ? null : form.previous_value,
+        value: form.value === "" ? null : form.value,
+        effective_to: form.effective_to || null,
+      };
+      let res;
+      if (initial?.id) {
+        res = await api.patch(`compensation-overrides/${initial.id}/`, payload);
+      } else {
+        res = await api.post("compensation-overrides/", payload);
+      }
+      let row = res.data;
+      if (approveNow && row.status !== "approved") {
+        if (row.status === "draft") {
+          await api.post(`compensation-overrides/${row.id}/action/`, { action: "submit" });
+        }
+        row = (
+          await api.post(`compensation-overrides/${row.id}/action/`, {
+            action: "approve",
+            reason: form.reason || "Approved on create",
+          })
+        ).data;
+      }
+      success(approveNow ? "Override approved" : initial?.id ? "Override updated" : "Override created");
+      onSaved(row);
+    } catch (err) {
+      error(getApiErrorMessage(err, "Could not save override"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="pe-modal" role="dialog" aria-modal="true">
+      <div className="pe-modal__backdrop" onClick={onClose} />
+      <div className="pe-modal__panel pe-override-modal">
+        <header className="pe-modal__header">
+          <div>
+            <p className="pe-eyebrow">Employee exception</p>
+            <h3>{initial?.id ? "Edit override" : "Create override"}</h3>
+          </div>
+          <button type="button" className="cp-btn-ghost" onClick={onClose}>
+            Close
+          </button>
+        </header>
+        <div className="pe-modal__body pe-override-form">
+          <label className="form-field">
+            Override name
+            <input value={form.name} onChange={(e) => set("name", e.target.value)} />
+          </label>
+          <label className="form-field">
+            Compensation plan
+            <select
+              value={form.compensation_plan}
+              onChange={(e) => set("compensation_plan", e.target.value)}
+            >
+              <option value="">Employee's assigned plan</option>
+              {plans.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.plan_name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="form-field">
+            Override type
+            <select value={form.override_type} onChange={(e) => onTypeChange(e.target.value)}>
+              {(choices.override_types || []).map((row) => (
+                <option key={row.value} value={row.value}>
+                  {row.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="pe-form-row">
+            <label className="form-field">
+              Value
+              <input
+                type="number"
+                step="any"
+                value={form.value}
+                onChange={(e) => set("value", e.target.value)}
+                placeholder="e.g. 3"
+              />
+            </label>
+            <label className="form-field">
+              Unit
+              <select value={form.value_unit} onChange={(e) => set("value_unit", e.target.value)}>
+                {(choices.value_units || []).map((row) => (
+                  <option key={row.value} value={row.value}>
+                    {row.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="form-field">
+              Previous / plan value
+              <input
+                type="number"
+                step="any"
+                value={form.previous_value}
+                onChange={(e) => set("previous_value", e.target.value)}
+                placeholder="optional"
+              />
+            </label>
+          </div>
+          <div className="pe-form-row">
+            <label className="form-field">
+              Effective from
+              <DatePickerField
+                label="Effective from"
+                hideLabel
+                value={form.effective_from}
+                onChange={(value) => set("effective_from", value)}
+                maxDate={form.effective_to || undefined}
+              />
+            </label>
+            <label className="form-field">
+              Effective to
+              <DatePickerField
+                label="Effective to"
+                hideLabel
+                value={form.effective_to}
+                onChange={(value) => set("effective_to", value)}
+                minDate={form.effective_from || undefined}
+              />
+            </label>
+          </div>
+          <label className="form-field">
+            Reason
+            <textarea
+              rows={3}
+              value={form.reason}
+              onChange={(e) => set("reason", e.target.value)}
+              placeholder="e.g. Promotion Incentive"
+            />
+          </label>
+          <div className="pe-form-row">
+            <label className="checkbox-field">
+              <input
+                type="checkbox"
+                checked={form.approval_required}
+                onChange={(e) => set("approval_required", e.target.checked)}
+              />
+              Approval required
+            </label>
+            <label className="checkbox-field">
+              <input
+                type="checkbox"
+                checked={form.stop_on_match}
+                onChange={(e) => set("stop_on_match", e.target.checked)}
+              />
+              Skip plan rules when applied
+            </label>
+          </div>
+          {form.approval_required ? (
+            <label className="form-field">
+              Approver
+              <select value={form.approver} onChange={(e) => set("approver", e.target.value)}>
+                <option value="">— Select —</option>
+                {(choices.approvers || []).map((row) => (
+                  <option key={row.value} value={row.value}>
+                    {row.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
+        <footer className="pe-modal__footer">
+          <button type="button" className="btn-secondary" disabled={busy} onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="btn-secondary" disabled={busy} onClick={() => submit(false)}>
+            Save as draft
+          </button>
+          <button type="button" className="btn-primary" disabled={busy} onClick={() => submit(true)}>
+            Save &amp; approve
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 function CompensationTab({ person, onSave, busy }) {
+  const { error, success } = useToast();
   const pc = person.participant_compensation || {};
   const [eligible, setEligible] = useState(Boolean(pc.commission_eligible ?? person.commission_eligible));
   const [plans, setPlans] = useState([]);
   const [planId, setPlanId] = useState(
     String(person.assigned_plan_id || pc.assigned_plan?.id || "")
   );
+  const [comp, setComp] = useState(null);
+  const [choices, setChoices] = useState({ override_types: [], value_units: [], approvers: [] });
+  const [loading, setLoading] = useState(true);
+  const [modal, setModal] = useState(null); // null | 'create' | override object
+
+  const loadCompensation = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [compRes, choiceRes, planRes] = await Promise.all([
+        api.get(`user-setup/${person.id}/compensation/`),
+        api.get("compensation-overrides/choices/"),
+        api.get("compensation-plans/", { params: { page_size: 100, status: "Active" } }),
+      ]);
+      setComp(compRes.data);
+      setChoices(choiceRes.data || {});
+      const data = planRes.data;
+      setPlans(Array.isArray(data) ? data : data?.results || []);
+    } catch (err) {
+      error(getApiErrorMessage(err, "Failed to load compensation"));
+    } finally {
+      setLoading(false);
+    }
+  }, [person.id, error]);
 
   useEffect(() => {
     setEligible(Boolean(pc.commission_eligible ?? person.commission_eligible));
@@ -216,76 +484,307 @@ function CompensationTab({ person, onSave, busy }) {
   }, [person, pc]);
 
   useEffect(() => {
-    api
-      .get("compensation-plans/", { params: { page_size: 100, status: "Active" } })
-      .then((res) => {
-        const data = res.data;
-        setPlans(Array.isArray(data) ? data : data?.results || []);
-      })
-      .catch(() => setPlans([]));
-  }, []);
+    loadCompensation();
+  }, [loadCompensation]);
+
+  const runAction = async (overrideId, action, reason = "") => {
+    try {
+      await api.post(`compensation-overrides/${overrideId}/action/`, { action, reason });
+      success(`Override ${action}d`);
+      loadCompensation();
+    } catch (err) {
+      error(getApiErrorMessage(err, `Could not ${action} override`));
+    }
+  };
+
+  const removeOverride = async (overrideId) => {
+    try {
+      await api.delete(`compensation-overrides/${overrideId}/`, {
+        params: { reason: "Removed from employee compensation tab" },
+      });
+      success("Override removed");
+      loadCompensation();
+    } catch (err) {
+      error(getApiErrorMessage(err, "Could not remove override"));
+    }
+  };
+
+  if (loading && !comp) {
+    return (
+      <div className="pe-tab">
+        <LoadingCenter label="Loading compensation…" />
+      </div>
+    );
+  }
+
+  const assigned = comp?.assigned_plan;
+  const rules = comp?.effective_rules || [];
+  const overrides = comp?.overrides || [];
+  const history = comp?.history || [];
+  const activeOverrides = overrides.filter((row) => row.is_active_now);
 
   return (
-    <div className="pe-tab">
-      <h2>Compensation</h2>
-      <div className="pe-participant-card">
-        <div>
-          <span className="pe-expand__label">Current Plan</span>
-          <strong>{pc.assigned_plan_name || person.assigned_plan_name || "—"}</strong>
-        </div>
-        <div>
-          <span className="pe-expand__label">Calculation Method</span>
-          <strong>{pc.calculation_method || "—"}</strong>
-        </div>
-        <div>
-          <span className="pe-expand__label">Quota</span>
-          <strong>{pc.quota_display || "—"}</strong>
-        </div>
-        <div>
-          <span className="pe-expand__label">Effective Period</span>
-          <strong>{pc.effective_period || "—"}</strong>
-        </div>
-        <div>
-          <span className="pe-expand__label">Eligibility</span>
-          <strong className={eligible ? "pe-yes" : "pe-no"}>{eligible ? "YES" : "NO"}</strong>
-        </div>
-        <div>
-          <span className="pe-expand__label">Commission Role</span>
-          <strong>{pc.commission_role || person.role || "—"}</strong>
-        </div>
-        <div>
-          <span className="pe-expand__label">Territory</span>
-          <strong>{pc.territory_name || person.territory_name || "—"}</strong>
-        </div>
+    <div className="pe-tab pe-comp-tab">
+      <div className="pe-tab__actions">
+        <h2>Compensation</h2>
+        <button type="button" className="btn-primary" onClick={() => setModal("create")}>
+          + Create override
+        </button>
       </div>
-      <label className="form-field">
-        Assign compensation plan
-        <select value={planId} onChange={(e) => setPlanId(e.target.value)}>
-          <option value="">— Unassigned —</option>
-          {plans.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.plan_name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="checkbox-field">
-        <input type="checkbox" checked={eligible} onChange={(e) => setEligible(e.target.checked)} />
-        Commission eligible
-      </label>
-      <button
-        type="button"
-        className="btn-primary"
-        disabled={busy}
-        onClick={() =>
-          onSave({
-            commission_eligible: eligible,
-            assigned_plan_id: planId || null,
-          })
-        }
-      >
-        Save compensation
-      </button>
+
+      <section className="pe-comp-section">
+        <h3>Assigned Compensation Plan</h3>
+        <div className="pe-participant-card">
+          <div>
+            <span className="pe-expand__label">Plan</span>
+            <strong>{assigned?.name || pc.assigned_plan_name || "— Unassigned —"}</strong>
+          </div>
+          <div>
+            <span className="pe-expand__label">Status</span>
+            <strong>{assigned?.status || "—"}</strong>
+          </div>
+          <div>
+            <span className="pe-expand__label">Table type</span>
+            <strong>{assigned?.commission_table_type || pc.calculation_method || "—"}</strong>
+          </div>
+          <div>
+            <span className="pe-expand__label">Effective</span>
+            <strong>
+              {assigned?.effective_start_date
+                ? `${formatDate(assigned.effective_start_date)} – ${
+                    assigned.effective_end_date
+                      ? formatDate(assigned.effective_end_date)
+                      : "Open"
+                  }`
+                : pc.effective_period || "—"}
+            </strong>
+          </div>
+          <div>
+            <span className="pe-expand__label">Eligibility</span>
+            <strong className={eligible ? "pe-yes" : "pe-no"}>{eligible ? "YES" : "NO"}</strong>
+          </div>
+          <div>
+            <span className="pe-expand__label">Assignment</span>
+            <strong>
+              {assigned?.is_explicit_assignment ? "Explicit" : assigned ? "Inherited" : "—"}
+            </strong>
+          </div>
+        </div>
+        <div className="pe-comp-assign">
+          <label className="form-field">
+            Assign compensation plan
+            <select value={planId} onChange={(e) => setPlanId(e.target.value)}>
+              <option value="">— Unassigned —</option>
+              {plans.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.plan_name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="checkbox-field">
+            <input type="checkbox" checked={eligible} onChange={(e) => setEligible(e.target.checked)} />
+            Commission eligible
+          </label>
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={busy}
+            onClick={async () => {
+              await onSave({
+                commission_eligible: eligible,
+                assigned_plan_id: planId || null,
+              });
+              loadCompensation();
+            }}
+          >
+            Save assignment
+          </button>
+        </div>
+      </section>
+
+      <section className="pe-comp-section">
+        <h3>Current Commission Rules</h3>
+        <p className="pe-muted">
+          Plan defaults evaluated after any active employee override (priority 1). Rules run by
+          hierarchy: Territory → Business Unit → Role → Plan Default.
+        </p>
+        {rules.length === 0 ? (
+          <p className="pe-muted">No active rules on the assigned plan.</p>
+        ) : (
+          <div className="enterprise-table-wrap">
+            <table className="enterprise-table pe-comp-table">
+              <thead>
+                <tr>
+                  <th>Rule</th>
+                  <th>Scope</th>
+                  <th>Priority</th>
+                  <th>Type</th>
+                  <th>Result</th>
+                  <th>Logic</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rules.map((rule) => (
+                  <tr key={rule.id}>
+                    <td>
+                      <strong>{rule.name}</strong>
+                      {rule.conditions?.length ? (
+                        <div className="pe-table__sub">
+                          {rule.conditions
+                            .map(
+                              (c) =>
+                                `${c.field_label || c.field} ${c.operator} ${c.value || ""}`.trim()
+                            )
+                            .join(rule.condition_logic === "or" ? " OR " : " AND ")}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td>{rule.scope_label || rule.scope}</td>
+                    <td>{rule.priority}</td>
+                    <td>{rule.rule_type_label || rule.rule_type}</td>
+                    <td>
+                      {(rule.results || [])
+                        .map((r) =>
+                          r.rate_value != null
+                            ? `${r.rate_type_label || r.rate_type}: ${r.rate_value}`
+                            : r.name
+                        )
+                        .join(", ") || "—"}
+                    </td>
+                    <td>{(rule.condition_logic || "and").toUpperCase()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="pe-comp-section">
+        <div className="pe-tab__actions">
+          <h3>Employee Overrides</h3>
+          <span className="pe-muted">
+            {activeOverrides.length} active · {overrides.length} total
+          </span>
+        </div>
+        {overrides.length === 0 ? (
+          <div className="pe-comp-empty">
+            <p>No employee overrides. Plan rules apply as written.</p>
+            <button type="button" className="btn-secondary" onClick={() => setModal("create")}>
+              Create the first override
+            </button>
+          </div>
+        ) : (
+          <div className="enterprise-table-wrap">
+            <table className="enterprise-table pe-comp-table">
+              <thead>
+                <tr>
+                  <th>Override</th>
+                  <th>Type</th>
+                  <th>Value</th>
+                  <th>Effective</th>
+                  <th>Status</th>
+                  <th>Reason</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {overrides.map((row) => (
+                  <tr key={row.id} className={row.is_active_now ? "is-active-override" : ""}>
+                    <td>
+                      <strong>{row.name}</strong>
+                      {row.is_active_now ? (
+                        <div className="pe-table__sub pe-yes">Active now · Priority {row.priority}</div>
+                      ) : null}
+                    </td>
+                    <td>{row.override_type_label}</td>
+                    <td>{formatMoneyOrRate(row.value, row.value_unit)}</td>
+                    <td>
+                      {formatDate(row.effective_from)}
+                      {" – "}
+                      {row.effective_to ? formatDate(row.effective_to) : "Open"}
+                    </td>
+                    <td>
+                      <OverrideStatusBadge status={row.status} />
+                    </td>
+                    <td>{row.reason || "—"}</td>
+                    <td className="pe-comp-actions">
+                      {row.status === "draft" || row.status === "pending_approval" ? (
+                        <button
+                          type="button"
+                          className="cp-btn-ghost"
+                          onClick={() => runAction(row.id, "approve", row.reason)}
+                        >
+                          Approve
+                        </button>
+                      ) : null}
+                      <button type="button" className="cp-btn-ghost" onClick={() => setModal(row)}>
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="cp-btn-ghost pe-danger-link"
+                        onClick={() => removeOverride(row.id)}
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="pe-comp-section">
+        <h3>Override History</h3>
+        {history.length === 0 ? (
+          <p className="pe-muted">No override events yet.</p>
+        ) : (
+          <ul className="pe-comp-history">
+            {history.map((event) => (
+              <li key={event.id}>
+                <div className="pe-comp-history__meta">
+                  <strong>{event.event_label}</strong>
+                  <span>{formatDate(event.created_at)}</span>
+                </div>
+                <div className="pe-comp-history__body">
+                  <span>{event.override_name}</span>
+                  <span>· {event.actor_name}</span>
+                  {event.reason ? <span>· {event.reason}</span> : null}
+                </div>
+                {(event.old_value?.value != null || event.new_value?.value != null) && (
+                  <div className="pe-table__sub">
+                    {event.old_value?.value != null ? `Was ${event.old_value.value}` : "Created"}
+                    {event.new_value?.value != null ? ` → ${event.new_value.value}` : ""}
+                    {event.effective_from
+                      ? ` · ${formatDate(event.effective_from)} – ${
+                          event.effective_to ? formatDate(event.effective_to) : "Open"
+                        }`
+                      : ""}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {modal ? (
+        <OverrideFormModal
+          person={person}
+          plans={plans}
+          choices={choices}
+          initial={modal === "create" ? null : modal}
+          onClose={() => setModal(null)}
+          onSaved={() => {
+            setModal(null);
+            loadCompensation();
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -337,7 +836,12 @@ function QuotaTab({ person, onSave, busy }) {
       </label>
       <label className="form-field">
         Effective date
-        <input type="date" value={effective || ""} onChange={(e) => setEffective(e.target.value)} />
+        <DatePickerField
+          label="Effective date"
+          hideLabel
+          value={effective || ""}
+          onChange={(value) => setEffective(value)}
+        />
       </label>
       <button
         type="button"

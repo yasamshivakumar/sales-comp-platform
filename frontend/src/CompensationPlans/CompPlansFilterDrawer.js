@@ -1,6 +1,8 @@
 /**
  * Enterprise filter drawer for Compensation Operations Center
  */
+import DatePickerField from "../Components/DatePickerField";
+
 function CompPlansFilterDrawer({
   open,
   onClose,
@@ -127,10 +129,11 @@ function CompPlansFilterDrawer({
 
           <label>
             Effective Date
-            <input
-              type="date"
+            <DatePickerField
+              label="Effective Date"
+              hideLabel
               value={filters.effective_on}
-              onChange={(e) => set("effective_on", e.target.value)}
+              onChange={(value) => set("effective_on", value)}
             />
           </label>
 

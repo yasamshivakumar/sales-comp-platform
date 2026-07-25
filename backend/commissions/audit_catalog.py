@@ -14,6 +14,7 @@ MODULES = (
     "compensation_plans",
     "rate_tables",
     "commission_rules",
+    "compensation_overrides",
     "quotas",
     "bonuses",
     "accelerators",
@@ -125,6 +126,14 @@ ACTION_CATALOG = {
     "plan_version_archived": _entry("compensation_plans", SEVERITY_WARNING, "plan_version", "Plan archived", ICON_DELETE),
     "ai_compensation_plan_created": _entry("compensation_plans", SEVERITY_SUCCESS, "plan", "AI plan created", ICON_EDIT),
     "rule_updated": _entry("commission_rules", SEVERITY_INFO, "rule", "Rule updated", ICON_EDIT),
+    # Employee compensation overrides
+    "compensation_override_created": _entry("compensation_overrides", SEVERITY_WARNING, "compensation_override", "Commission override created", ICON_EDIT),
+    "compensation_override_updated": _entry("compensation_overrides", SEVERITY_WARNING, "compensation_override", "Commission override updated", ICON_EDIT),
+    "compensation_override_submitted": _entry("compensation_overrides", SEVERITY_INFO, "compensation_override", "Override submitted for approval", ICON_APPROVAL),
+    "compensation_override_approved": _entry("compensation_overrides", SEVERITY_SUCCESS, "compensation_override", "Override approved", ICON_APPROVAL),
+    "compensation_override_rejected": _entry("compensation_overrides", SEVERITY_WARNING, "compensation_override", "Override rejected", ICON_APPROVAL),
+    "compensation_override_expired": _entry("compensation_overrides", SEVERITY_INFO, "compensation_override", "Override expired", ICON_EDIT),
+    "compensation_override_removed": _entry("compensation_overrides", SEVERITY_CRITICAL, "compensation_override", "Override removed", ICON_DELETE),
     # CRM
     "integration_created": _entry("crm_integrations", SEVERITY_SUCCESS, "integration", "CRM connected", ICON_CRM),
     "integration_updated": _entry("crm_integrations", SEVERITY_INFO, "integration", "Integration updated", ICON_CRM),

@@ -16,6 +16,7 @@ import ApprovalWorkflowTab from "./tabs/ApprovalWorkflowTab";
 import HistoryTab from "./tabs/HistoryTab";
 import SimulationTab from "./tabs/SimulationTab";
 import DocumentsTab from "./tabs/DocumentsTab";
+import OverridesTab from "./tabs/OverridesTab";
 import "./compPlans.css";
 
 function CompensationPlans() {
@@ -36,6 +37,7 @@ function CompensationPlans() {
         <Route path="accelerators" element={<AcceleratorsTab />} />
         <Route path="eligibility" element={<EligibilityTab />} />
         <Route path="participants" element={<ParticipantsTab />} />
+        <Route path="overrides" element={<OverridesTab />} />
         <Route path="simulation" element={<SimulationTab />} />
         <Route path="approval" element={<ApprovalWorkflowTab />} />
         <Route path="history" element={<HistoryTab />} />

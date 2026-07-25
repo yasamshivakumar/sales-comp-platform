@@ -1,3 +1,5 @@
+import DatePickerField from "../Components/DatePickerField";
+
 function TransactionFilterDrawer({ open, onClose, filters, onChange, onClear }) {
   if (!open) return null;
   const set = (key, value) => onChange({ ...filters, [key]: value });
@@ -77,15 +79,23 @@ function TransactionFilterDrawer({ open, onClose, filters, onChange, onClear }) 
           </label>
           <label>
             Date from
-            <input
-              type="date"
+            <DatePickerField
+              label="Date from"
+              hideLabel
               value={filters.date_from}
-              onChange={(e) => set("date_from", e.target.value)}
+              onChange={(value) => set("date_from", value)}
+              maxDate={filters.date_to || undefined}
             />
           </label>
           <label>
             Date to
-            <input type="date" value={filters.date_to} onChange={(e) => set("date_to", e.target.value)} />
+            <DatePickerField
+              label="Date to"
+              hideLabel
+              value={filters.date_to}
+              onChange={(value) => set("date_to", value)}
+              minDate={filters.date_from || undefined}
+            />
           </label>
           <label>
             Amount min

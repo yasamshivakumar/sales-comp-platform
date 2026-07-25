@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api, { getApiErrorMessage, getAuthToken } from "../api";
+import DatePickerField from "../Components/DatePickerField";
 import { ChromeButton } from "../Components/layout/PageChrome";
 import { useToast } from "../Components/Toast";
 
@@ -304,18 +305,22 @@ export function UploadWizard({ open, onClose, onSaved, plans, people, rules, ini
               <div className="cdr-modal__row">
                 <label>
                   Effective From
-                  <input
-                    type="date"
+                  <DatePickerField
+                    label="Effective From"
+                    hideLabel
                     value={form.effective_start_date}
-                    onChange={(e) => set("effective_start_date", e.target.value)}
+                    onChange={(value) => set("effective_start_date", value)}
+                    maxDate={form.effective_end_date || undefined}
                   />
                 </label>
                 <label>
                   Effective To
-                  <input
-                    type="date"
+                  <DatePickerField
+                    label="Effective To"
+                    hideLabel
                     value={form.effective_end_date}
-                    onChange={(e) => set("effective_end_date", e.target.value)}
+                    onChange={(value) => set("effective_end_date", value)}
+                    minDate={form.effective_start_date || undefined}
                   />
                 </label>
               </div>

@@ -1,4 +1,4 @@
-/* Enterprise bridge ? legacy markup + MUI theme */
+﻿/* Enterprise bridge ? legacy markup + MUI theme */
 
 .panel {
   border-radius: 16px !important;
@@ -397,6 +397,7 @@ table tbody tr:hover {
 
 .compact-date-field .MuiOutlinedInput-root {
   min-height: 30px !important;
+  border-radius: 8px !important;
 }
 
 .compact-date-field .MuiInputBase-input,
@@ -418,6 +419,29 @@ table tbody tr:hover {
   margin-left: 0 !important;
 }
 
+
+/* Calendar popup visuals live in styles/date-picker.css */
+
+/* Date field inside labeled form rows / drawer filters */
+.form-field > .compact-date-field.MuiFormControl-root,
+.tx-filter-drawer__body .compact-date-field.MuiFormControl-root,
+.cp-filter-drawer .compact-date-field.MuiFormControl-root,
+.cdr-modal__row .compact-date-field.MuiFormControl-root,
+.activity-filters .compact-date-field.MuiFormControl-root,
+.pe-form-row .compact-date-field.MuiFormControl-root,
+.pe-comp-assign .compact-date-field.MuiFormControl-root {
+  width: 100%;
+  max-width: none;
+  margin-top: 4px;
+}
+
+.form-field:has(> .compact-date-field) > .MuiFormLabel-root,
+label.form-field:has(> .compact-date-field) {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
 /* MUI date pickers in legacy toolbars/forms */
 .enterprise-form-row .compact-date-field.MuiFormControl-root,
 .ra-toolbar__filters .compact-date-field.MuiFormControl-root {
@@ -427,9 +451,21 @@ table tbody tr:hover {
   flex: 0 0 auto;
 }
 
+.ra-filter-field--date .compact-date-field.MuiFormControl-root,
+.cp-catalog-toolbar .compact-date-field.MuiFormControl-root,
+.cp-toolbar-date.compact-date-field.MuiFormControl-root {
+  width: 140px;
+  min-width: 140px;
+  max-width: 160px;
+  margin-top: 0;
+}
+
 @media (max-width: 560px) {
   .enterprise-form-row .compact-date-field.MuiFormControl-root,
-  .ra-toolbar__filters .compact-date-field.MuiFormControl-root {
+  .ra-toolbar__filters .compact-date-field.MuiFormControl-root,
+  .ra-filter-field--date .compact-date-field.MuiFormControl-root,
+  .cp-catalog-toolbar .compact-date-field.MuiFormControl-root,
+  .cp-toolbar-date.compact-date-field.MuiFormControl-root {
     width: 100%;
     min-width: 0;
     max-width: none;

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import api, { getApiErrorMessage } from "../api";
+import DatePickerField from "../Components/DatePickerField";
 import PageHeader from "../Components/PageHeader";
 import "../Components/enterprise.css";
 import "./ActivityCenter.css";
@@ -240,22 +241,26 @@ function AuditLogs() {
       </div>
 
       <form className="activity-filters" onSubmit={applyFilters}>
-        <label>
-          From
-          <input
-            type="date"
-            value={filters.date_from}
-            onChange={(e) => setFilters((f) => ({ ...f, date_from: e.target.value }))}
-          />
-        </label>
-        <label>
-          To
-          <input
-            type="date"
-            value={filters.date_to}
-            onChange={(e) => setFilters((f) => ({ ...f, date_to: e.target.value }))}
-          />
-        </label>
+  <label>
+    From
+    <DatePickerField
+      label="From"
+      hideLabel
+      value={filters.date_from}
+      onChange={(value) => setFilters((f) => ({ ...f, date_from: value }))}
+      maxDate={filters.date_to || undefined}
+    />
+  </label>
+  <label>
+    To
+    <DatePickerField
+      label="To"
+      hideLabel
+      value={filters.date_to}
+      onChange={(value) => setFilters((f) => ({ ...f, date_to: value }))}
+      minDate={filters.date_from || undefined}
+    />
+  </label>
         <label>
           Module
           <select

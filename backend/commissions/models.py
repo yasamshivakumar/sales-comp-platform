@@ -295,6 +295,20 @@ class Commission(models.Model):
         blank=True,
         related_name="commission_references",
     )
+    override_used = models.BooleanField(default=False, db_index=True)
+    applied_override = models.ForeignKey(
+        "EmployeeCompensationOverride",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="commissions",
+        help_text="Employee override that superseded the plan rules, if any.",
+    )
+    calculation_trace = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Resolved plan / version / rule / override chain for this payout.",
+    )
 
     class Meta:
         indexes = [
@@ -2025,6 +2039,33 @@ class CommissionRule(models.Model):
         (RULE_TYPE_MULTIPLIER, "Multiplier"),
     ]
 
+    # Evaluation hierarchy. Employee overrides live in their own model and
+    # always outrank rules; these scopes order the plan-owned rules below them.
+    SCOPE_TERRITORY = "territory"
+    SCOPE_BUSINESS_UNIT = "business_unit"
+    SCOPE_ROLE = "role"
+    SCOPE_PLAN_DEFAULT = "plan_default"
+    SCOPE_CHOICES = [
+        (SCOPE_TERRITORY, "Territory Rule"),
+        (SCOPE_BUSINESS_UNIT, "Business Unit Rule"),
+        (SCOPE_ROLE, "Role Rule"),
+        (SCOPE_PLAN_DEFAULT, "Compensation Plan Default"),
+    ]
+    # Priority 1 is reserved for employee overrides.
+    DEFAULT_SCOPE_PRIORITY = {
+        SCOPE_TERRITORY: 2,
+        SCOPE_BUSINESS_UNIT: 3,
+        SCOPE_ROLE: 4,
+        SCOPE_PLAN_DEFAULT: 5,
+    }
+
+    LOGIC_AND = "and"
+    LOGIC_OR = "or"
+    LOGIC_CHOICES = [
+        (LOGIC_AND, "Match all conditions (AND)"),
+        (LOGIC_OR, "Match any condition (OR)"),
+    ]
+
     organization = models.ForeignKey(
         Organization,
         on_delete=models.CASCADE,
@@ -2067,6 +2108,23 @@ class CommissionRule(models.Model):
     active_start_date = models.DateField(null=True, blank=True)
     active_end_date = models.DateField(null=True, blank=True)
 
+    scope = models.CharField(
+        max_length=32,
+        choices=SCOPE_CHOICES,
+        default=SCOPE_PLAN_DEFAULT,
+        db_index=True,
+        help_text="Hierarchy level this rule represents.",
+    )
+    priority = models.PositiveIntegerField(
+        default=5,
+        db_index=True,
+        help_text="Lower runs first. 1 is reserved for employee overrides.",
+    )
+    condition_logic = models.CharField(
+        max_length=8,
+        choices=LOGIC_CHOICES,
+        default=LOGIC_AND,
+    )
     sequence = models.PositiveIntegerField(default=1)
     is_active = models.BooleanField(default=True)
     stop_on_match = models.BooleanField(default=False)
@@ -2075,29 +2133,39 @@ class CommissionRule(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["sequence", "id"]
+        ordering = ["priority", "sequence", "id"]
 
     def __str__(self):
         return self.name
 
 
 class CommissionRuleCondition(models.Model):
-    """When all active conditions match, the rule results apply."""
+    """Conditions combine with the rule's AND / OR logic to gate its results."""
 
     FIELD_CHOICES = [
         ("region", "Region"),
         ("product_name", "Product"),
+        ("product_category", "Product Category"),
         ("service_name", "Service"),
         ("distribution", "Distribution"),
         ("customer_segment", "Customer Segment"),
-        ("business_group", "Business Group"),
+        ("customer_type", "Customer Type"),
+        ("business_group", "Business Unit"),
+        ("department", "Department"),
         ("order_status", "Order Status"),
         ("currency", "Currency"),
         ("position_name", "Position Name"),
         ("employee_id", "Employee ID"),
         ("sales_amount", "Sales Amount"),
+        ("revenue", "Revenue"),
+        ("margin", "Margin"),
+        ("achievement_pct", "Achievement %"),
+        ("quota_pct", "Quota %"),
         ("territory_code", "Territory Code"),
+        ("territory", "Territory"),
         ("role", "Role"),
+        ("sales_channel", "Sales Channel"),
+        ("order_date", "Order Date"),
         ("plan_basis", "Plan Basis"),
     ]
     OPERATOR_CHOICES = [
@@ -2109,6 +2177,7 @@ class CommissionRuleCondition(models.Model):
         ("gte", "Greater or equal"),
         ("lt", "Less than"),
         ("lte", "Less or equal"),
+        ("between", "Between (comma separated)"),
         ("empty", "Is empty"),
         ("not_empty", "Is not empty"),
     ]
@@ -2820,3 +2889,243 @@ class CompensationDocumentVersion(models.Model):
     @property
     def display_version(self):
         return self.version_label or f"v{self.version_number}"
+
+
+# ---------------------------------------------------------------------------
+# Employee compensation overrides
+#
+# Compensation Plan -> Commission Rules -> Employee Assignment ->
+# Employee Override (optional) -> Commission Calculation.
+#
+# Overrides are exceptions layered on top of an assigned plan. They never
+# replace the plan, so one plan can still serve thousands of employees.
+# ---------------------------------------------------------------------------
+
+
+class EmployeeCompensationOverride(models.Model):
+    """An employee-specific exception to their assigned compensation plan."""
+
+    TYPE_COMMISSION_RATE = "commission_rate"
+    TYPE_BONUS = "bonus"
+    TYPE_ACCELERATOR = "accelerator"
+    TYPE_MULTIPLIER = "multiplier"
+    TYPE_QUOTA = "quota"
+    TYPE_ELIGIBILITY = "eligibility"
+    TYPE_DRAW = "draw"
+    TYPE_RECOVERY = "recovery"
+    TYPE_CHOICES = [
+        (TYPE_COMMISSION_RATE, "Commission Rate"),
+        (TYPE_BONUS, "Bonus"),
+        (TYPE_ACCELERATOR, "Accelerator"),
+        (TYPE_MULTIPLIER, "Multiplier"),
+        (TYPE_QUOTA, "Quota"),
+        (TYPE_ELIGIBILITY, "Eligibility"),
+        (TYPE_DRAW, "Draw"),
+        (TYPE_RECOVERY, "Recovery"),
+    ]
+
+    STATUS_DRAFT = "draft"
+    STATUS_PENDING = "pending_approval"
+    STATUS_APPROVED = "approved"
+    STATUS_REJECTED = "rejected"
+    STATUS_EXPIRED = "expired"
+    STATUS_REVOKED = "revoked"
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, "Draft"),
+        (STATUS_PENDING, "Pending Approval"),
+        (STATUS_APPROVED, "Approved"),
+        (STATUS_REJECTED, "Rejected"),
+        (STATUS_EXPIRED, "Expired"),
+        (STATUS_REVOKED, "Revoked"),
+    ]
+
+    UNIT_PERCENT = "percent"
+    UNIT_CURRENCY = "currency"
+    UNIT_MULTIPLIER = "multiplier"
+    UNIT_UNITS = "units"
+    UNIT_BOOLEAN = "boolean"
+    UNIT_CHOICES = [
+        (UNIT_PERCENT, "Percent"),
+        (UNIT_CURRENCY, "Currency"),
+        (UNIT_MULTIPLIER, "Multiplier"),
+        (UNIT_UNITS, "Units"),
+        (UNIT_BOOLEAN, "Yes / No"),
+    ]
+
+    DEFAULT_UNIT_FOR_TYPE = {
+        TYPE_COMMISSION_RATE: UNIT_PERCENT,
+        TYPE_ACCELERATOR: UNIT_PERCENT,
+        TYPE_BONUS: UNIT_CURRENCY,
+        TYPE_DRAW: UNIT_CURRENCY,
+        TYPE_RECOVERY: UNIT_CURRENCY,
+        TYPE_QUOTA: UNIT_CURRENCY,
+        TYPE_MULTIPLIER: UNIT_MULTIPLIER,
+        TYPE_ELIGIBILITY: UNIT_BOOLEAN,
+    }
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="compensation_overrides",
+        null=True,
+        blank=True,
+    )
+    employee = models.ForeignKey(
+        "UserProfile",
+        on_delete=models.CASCADE,
+        related_name="compensation_overrides",
+    )
+    compensation_plan = models.ForeignKey(
+        CompensationPlan,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="employee_overrides",
+        help_text="Plan this override modifies. Blank means the employee's assigned plan.",
+    )
+
+    name = models.CharField(max_length=255)
+    override_type = models.CharField(
+        max_length=32,
+        choices=TYPE_CHOICES,
+        default=TYPE_COMMISSION_RATE,
+        db_index=True,
+    )
+    value = models.DecimalField(max_digits=15, decimal_places=4, null=True, blank=True)
+    value_unit = models.CharField(
+        max_length=20, choices=UNIT_CHOICES, default=UNIT_PERCENT
+    )
+    previous_value = models.DecimalField(
+        max_digits=15,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text="Plan value replaced by this override, captured at creation.",
+    )
+
+    effective_from = models.DateField(db_index=True)
+    effective_to = models.DateField(null=True, blank=True, db_index=True)
+    reason = models.TextField(blank=True, default="")
+
+    # Priority 1 by definition: overrides outrank every plan-owned rule.
+    priority = models.PositiveIntegerField(default=1)
+    stop_on_match = models.BooleanField(
+        default=True,
+        help_text="Skip plan rules of the same type once this override applies.",
+    )
+
+    approval_required = models.BooleanField(default=True)
+    approver = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="compensation_overrides_to_approve",
+    )
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT, db_index=True
+    )
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="compensation_overrides_approved",
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="compensation_overrides_created",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["priority", "-effective_from", "-id"]
+        indexes = [
+            models.Index(
+                fields=["employee", "status", "effective_from"],
+                name="empoverride_emp_status_idx",
+            ),
+            models.Index(
+                fields=["organization", "override_type", "status"],
+                name="empoverride_org_type_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_override_type_display()})"
+
+    def is_effective_on(self, on_date):
+        if self.status != self.STATUS_APPROVED:
+            return False
+        if not on_date:
+            return False
+        if self.effective_from and on_date < self.effective_from:
+            return False
+        if self.effective_to and on_date > self.effective_to:
+            return False
+        return True
+
+    @property
+    def is_expired(self):
+        from django.utils import timezone as _tz
+
+        return bool(self.effective_to and self.effective_to < _tz.localdate())
+
+
+class EmployeeCompensationOverrideEvent(models.Model):
+    """Immutable history / audit trail for a single override."""
+
+    EVENT_CREATED = "created"
+    EVENT_UPDATED = "updated"
+    EVENT_SUBMITTED = "submitted"
+    EVENT_APPROVED = "approved"
+    EVENT_REJECTED = "rejected"
+    EVENT_EXPIRED = "expired"
+    EVENT_REMOVED = "removed"
+    EVENT_APPLIED = "applied"
+    EVENT_CHOICES = [
+        (EVENT_CREATED, "Override Created"),
+        (EVENT_UPDATED, "Override Updated"),
+        (EVENT_SUBMITTED, "Submitted For Approval"),
+        (EVENT_APPROVED, "Override Approved"),
+        (EVENT_REJECTED, "Override Rejected"),
+        (EVENT_EXPIRED, "Override Expired"),
+        (EVENT_REMOVED, "Override Removed"),
+        (EVENT_APPLIED, "Override Applied To Commission"),
+    ]
+
+    override = models.ForeignKey(
+        EmployeeCompensationOverride,
+        on_delete=models.CASCADE,
+        related_name="history",
+    )
+    # Kept denormalised so history survives if the override row is deleted
+    # from a downstream copy of the data.
+    override_name = models.CharField(max_length=255, blank=True, default="")
+    event = models.CharField(max_length=32, choices=EVENT_CHOICES, db_index=True)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="compensation_override_events",
+    )
+    reason = models.TextField(blank=True, default="")
+    old_value = models.JSONField(default=dict, blank=True)
+    new_value = models.JSONField(default=dict, blank=True)
+    changed_fields = models.JSONField(default=list, blank=True)
+    status_after = models.CharField(max_length=20, blank=True, default="")
+    effective_from = models.DateField(null=True, blank=True)
+    effective_to = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.override_name or self.override_id}: {self.event}"

@@ -52,7 +52,7 @@
   color: var(--text-secondary, var(--text-muted));
 }
 
-.activity-filters input,
+.activity-filters input:not(.MuiInputBase-input),
 .activity-filters select {
   min-width: 120px;
   padding: 0.4rem 0.5rem;
@@ -60,6 +60,11 @@
   border-radius: 6px;
   background: var(--bg-light);
   color: var(--text-primary);
+}
+
+.activity-filters .compact-date-field.MuiFormControl-root {
+  min-width: 140px;
+  width: 150px;
 }
 
 .activity-filters input::placeholder {

@@ -1,0 +1,307 @@
+/*
+ * Incentra date-picker glass theme
+ * --------------------------------
+ * All calendars render via DatePickerField → MUI X DatePicker (dialog/popper).
+ * Tokens inherit from :root / [data-theme] so portaled popups stay themed.
+ * Keep JS mirror in theme/datePickerTokens.js in sync.
+ */
+
+:root {
+  --dp-bg: rgba(232, 242, 252, 0.9);
+  --dp-text: #0f172a;
+  --dp-muted: #475569;
+  --dp-border: rgba(3, 45, 96, 0.18);
+  --dp-accent: #0176d3;
+  --dp-accent-hover: #014486;
+  --dp-accent-text: #ffffff;
+  --dp-today-bg: rgba(1, 118, 211, 0.14);
+  --dp-hover: rgba(1, 118, 211, 0.12);
+  --dp-focus-ring: rgba(1, 118, 211, 0.35);
+  --dp-disabled: #94a3b8;
+  --dp-outside: #94a3b8;
+  --dp-action-bar: rgba(214, 232, 248, 0.92);
+  --dp-shadow:
+    0 24px 56px rgba(3, 45, 96, 0.22), 0 2px 10px rgba(3, 45, 96, 0.1);
+  --dp-scrim: rgba(3, 45, 96, 0.4);
+  --dp-blur: 20px;
+  --dp-radius: 16px;
+}
+
+[data-theme="dark"],
+.app-date-picker-dialog--dark,
+.app-date-picker-paper--dark,
+.app-date-picker-popper--dark {
+  --dp-bg: rgba(10, 27, 51, 0.92);
+  --dp-text: #f1f5f9;
+  --dp-muted: #94a3b8;
+  --dp-border: rgba(148, 163, 184, 0.28);
+  --dp-accent: #1b96ff;
+  --dp-accent-hover: #5bb8ff;
+  --dp-accent-text: #ffffff;
+  --dp-today-bg: rgba(27, 150, 255, 0.2);
+  --dp-hover: rgba(27, 150, 255, 0.16);
+  --dp-focus-ring: rgba(27, 150, 255, 0.45);
+  --dp-disabled: #64748b;
+  --dp-outside: #475569;
+  --dp-action-bar: rgba(6, 20, 39, 0.94);
+  --dp-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(148, 163, 184, 0.2);
+  --dp-scrim: rgba(2, 8, 20, 0.72);
+  --dp-blur: 22px;
+}
+
+.app-date-picker-dialog--light,
+.app-date-picker-paper--light,
+.app-date-picker-popper--light {
+  --dp-bg: rgba(232, 242, 252, 0.9);
+  --dp-text: #0f172a;
+  --dp-muted: #475569;
+  --dp-border: rgba(3, 45, 96, 0.18);
+  --dp-accent: #0176d3;
+  --dp-accent-hover: #014486;
+  --dp-accent-text: #ffffff;
+  --dp-today-bg: rgba(1, 118, 211, 0.14);
+  --dp-hover: rgba(1, 118, 211, 0.12);
+  --dp-focus-ring: rgba(1, 118, 211, 0.35);
+  --dp-disabled: #94a3b8;
+  --dp-outside: #94a3b8;
+  --dp-action-bar: rgba(214, 232, 248, 0.92);
+  --dp-shadow:
+    0 24px 56px rgba(3, 45, 96, 0.22), 0 2px 10px rgba(3, 45, 96, 0.1);
+  --dp-scrim: rgba(3, 45, 96, 0.4);
+  --dp-blur: 20px;
+}
+
+/* Stacking — above theme.zIndex.modal (2200) and custom drawers */
+.app-date-picker-popper.MuiPopper-root,
+.app-date-picker-popper.MuiPickerPopper-root,
+.MuiPickersPopper-root {
+  z-index: 2300 !important;
+}
+
+.app-date-picker-dialog.MuiModal-root,
+.app-date-picker-dialog.MuiDialog-root,
+.MuiDialog-root.app-date-picker-dialog,
+.MuiModal-root.app-date-picker-dialog {
+  z-index: 2300 !important;
+}
+
+.app-date-picker-dialog .MuiDialog-container {
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+/* Frosted glass paper */
+.app-date-picker-dialog .MuiDialog-paper,
+.app-date-picker-paper.MuiPaper-root,
+.app-date-picker-paper,
+.MuiPickersPopper-root .MuiPaper-root,
+.MuiPickersPopper-paper {
+  background: var(--dp-bg) !important;
+  background-color: var(--dp-bg) !important;
+  background-image: none !important;
+  backdrop-filter: blur(var(--dp-blur)) saturate(1.25) !important;
+  -webkit-backdrop-filter: blur(var(--dp-blur)) saturate(1.25) !important;
+  opacity: 1 !important;
+  color: var(--dp-text) !important;
+  border-radius: var(--dp-radius) !important;
+  box-shadow: var(--dp-shadow) !important;
+  border: 1px solid var(--dp-border) !important;
+  overflow: visible !important;
+  font-family: inherit;
+  max-width: min(360px, calc(100vw - 24px)) !important;
+  margin: 0 !important;
+  filter: none !important;
+}
+
+.app-date-picker-dialog .MuiPickersLayout-root,
+.app-date-picker-paper .MuiPickersLayout-root,
+.MuiPickersPopper-root .MuiPickersLayout-root,
+.app-date-picker-dialog .MuiDialogContent-root {
+  background: transparent !important;
+  color: var(--dp-text) !important;
+  opacity: 1 !important;
+}
+
+.app-date-picker-dialog .MuiDateCalendar-root,
+.app-date-picker-paper .MuiDateCalendar-root,
+.MuiPickersLayout-root .MuiDateCalendar-root {
+  width: 300px;
+  max-width: min(300px, calc(100vw - 32px));
+  background: transparent !important;
+  color: var(--dp-text) !important;
+}
+
+/* Header + nav */
+.app-date-picker-dialog .MuiPickersCalendarHeader-label,
+.app-date-picker-paper .MuiPickersCalendarHeader-label {
+  color: var(--dp-text) !important;
+  font-weight: 700 !important;
+  font-size: 0.95rem !important;
+}
+
+.app-date-picker-dialog .MuiPickersArrowSwitcher-button,
+.app-date-picker-paper .MuiPickersArrowSwitcher-button,
+.app-date-picker-dialog .MuiPickersCalendarHeader-switchViewButton,
+.app-date-picker-paper .MuiPickersCalendarHeader-switchViewButton,
+.app-date-picker-dialog .MuiIconButton-root,
+.app-date-picker-paper .MuiIconButton-root {
+  color: var(--dp-text) !important;
+  opacity: 1 !important;
+}
+
+.app-date-picker-dialog .MuiIconButton-root:hover,
+.app-date-picker-paper .MuiIconButton-root:hover {
+  background-color: var(--dp-hover) !important;
+}
+
+.app-date-picker-dialog .MuiIconButton-root:focus-visible,
+.app-date-picker-paper .MuiIconButton-root:focus-visible {
+  outline: 2px solid var(--dp-focus-ring) !important;
+  outline-offset: 2px;
+}
+
+/* Weekday labels */
+.app-date-picker-dialog .MuiDayCalendar-weekDayLabel,
+.app-date-picker-paper .MuiDayCalendar-weekDayLabel {
+  color: var(--dp-muted) !important;
+  font-weight: 700 !important;
+  opacity: 1 !important;
+}
+
+/* Day cells */
+.app-date-picker-dialog .MuiPickersDay-root,
+.app-date-picker-paper .MuiPickersDay-root {
+  color: var(--dp-text) !important;
+  font-weight: 600 !important;
+  opacity: 1 !important;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.app-date-picker-dialog .MuiPickersDay-root:hover:not(.Mui-selected):not(.Mui-disabled),
+.app-date-picker-paper .MuiPickersDay-root:hover:not(.Mui-selected):not(.Mui-disabled) {
+  background-color: var(--dp-hover) !important;
+}
+
+.app-date-picker-dialog .MuiPickersDay-root:focus-visible,
+.app-date-picker-paper .MuiPickersDay-root:focus-visible {
+  outline: 2px solid var(--dp-focus-ring) !important;
+  outline-offset: 1px;
+  background-color: var(--dp-hover) !important;
+}
+
+.app-date-picker-dialog .MuiPickersDay-root.Mui-selected,
+.app-date-picker-paper .MuiPickersDay-root.Mui-selected,
+.app-date-picker-dialog .MuiPickersYear-yearButton.Mui-selected,
+.app-date-picker-paper .MuiPickersYear-yearButton.Mui-selected,
+.app-date-picker-dialog .MuiPickersMonth-monthButton.Mui-selected,
+.app-date-picker-paper .MuiPickersMonth-monthButton.Mui-selected {
+  background-color: var(--dp-accent) !important;
+  color: var(--dp-accent-text) !important;
+  font-weight: 700 !important;
+  box-shadow: 0 0 0 1px var(--dp-accent);
+}
+
+.app-date-picker-dialog .MuiPickersDay-root.Mui-selected:hover,
+.app-date-picker-paper .MuiPickersDay-root.Mui-selected:hover {
+  background-color: var(--dp-accent-hover) !important;
+}
+
+.app-date-picker-dialog .MuiPickersDay-root.MuiPickersDay-today:not(.Mui-selected),
+.app-date-picker-paper .MuiPickersDay-root.MuiPickersDay-today:not(.Mui-selected) {
+  background-color: var(--dp-today-bg) !important;
+  border: 1.5px solid var(--dp-accent) !important;
+  color: var(--dp-text) !important;
+  font-weight: 700 !important;
+}
+
+.app-date-picker-dialog .MuiPickersDay-dayOutsideMonth,
+.app-date-picker-paper .MuiPickersDay-dayOutsideMonth {
+  color: var(--dp-outside) !important;
+  opacity: 1 !important;
+}
+
+.app-date-picker-dialog .MuiPickersDay-root.Mui-disabled,
+.app-date-picker-paper .MuiPickersDay-root.Mui-disabled {
+  color: var(--dp-disabled) !important;
+  opacity: 1 !important;
+}
+
+.app-date-picker-dialog .MuiPickersYear-yearButton,
+.app-date-picker-paper .MuiPickersYear-yearButton,
+.app-date-picker-dialog .MuiPickersMonth-monthButton,
+.app-date-picker-paper .MuiPickersMonth-monthButton {
+  color: var(--dp-text) !important;
+  font-weight: 600 !important;
+}
+
+.app-date-picker-dialog .MuiPickersYear-yearButton:hover,
+.app-date-picker-paper .MuiPickersYear-yearButton:hover,
+.app-date-picker-dialog .MuiPickersMonth-monthButton:hover,
+.app-date-picker-paper .MuiPickersMonth-monthButton:hover {
+  background-color: var(--dp-hover) !important;
+}
+
+/* Action bar */
+.app-date-picker-dialog .MuiDialogActions-root,
+.app-date-picker-dialog .MuiPickersLayout-actionBar,
+.app-date-picker-paper .MuiPickersLayout-actionBar {
+  border-top: 1px solid var(--dp-border) !important;
+  background: var(--dp-action-bar) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  opacity: 1 !important;
+  padding: 8px 12px !important;
+}
+
+.app-date-picker-dialog .MuiDialogActions-root .MuiButton-root,
+.app-date-picker-dialog .MuiPickersLayout-actionBar .MuiButton-root,
+.app-date-picker-paper .MuiPickersLayout-actionBar .MuiButton-root {
+  color: var(--dp-accent) !important;
+  font-weight: 700 !important;
+  opacity: 1 !important;
+  text-transform: none;
+}
+
+.app-date-picker-dialog .MuiDialogActions-root .MuiButton-root:hover,
+.app-date-picker-dialog .MuiPickersLayout-actionBar .MuiButton-root:hover,
+.app-date-picker-paper .MuiPickersLayout-actionBar .MuiButton-root:hover {
+  background-color: var(--dp-hover) !important;
+  color: var(--dp-accent-hover) !important;
+}
+
+.app-date-picker-dialog .MuiDialogActions-root .MuiButton-root:focus-visible,
+.app-date-picker-dialog .MuiPickersLayout-actionBar .MuiButton-root:focus-visible {
+  outline: 2px solid var(--dp-focus-ring) !important;
+  outline-offset: 2px;
+}
+
+.app-date-picker-dialog .MuiBackdrop-root {
+  background-color: var(--dp-scrim) !important;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.app-date-picker-paper--mobile {
+  width: min(340px, calc(100vw - 24px)) !important;
+}
+
+@media (max-width: 560px) {
+  .app-date-picker-paper .MuiDateCalendar-root,
+  .app-date-picker-dialog .MuiDateCalendar-root,
+  .MuiPickersLayout-root .MuiDateCalendar-root {
+    width: min(300px, calc(100vw - 32px));
+  }
+
+  .app-date-picker-dialog .MuiDialog-paper {
+    width: min(340px, calc(100vw - 24px)) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-date-picker-dialog .MuiPickersDay-root,
+  .app-date-picker-paper .MuiPickersDay-root {
+    transition: none;
+  }
+}

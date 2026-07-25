@@ -8,6 +8,7 @@ from . import integration_views
 from . import ai_views
 from .oidc_views import oidc_token_exchange
 from . import auth_views
+from . import override_views
 from .rule_views import (
     CommissionRuleListCreateView,
     CommissionRuleDetailView,
@@ -618,5 +619,36 @@ urlpatterns = [
         "compensation-plans/<int:plan_id>/documents/",
         plan_documents,
         name="plan-documents",
+    ),
+    # Employee compensation overrides
+    path(
+        "compensation-overrides/",
+        override_views.compensation_overrides,
+        name="compensation-overrides",
+    ),
+    path(
+        "compensation-overrides/choices/",
+        override_views.compensation_override_choices,
+        name="compensation-override-choices",
+    ),
+    path(
+        "compensation-overrides/<int:pk>/",
+        override_views.compensation_override_detail,
+        name="compensation-override-detail",
+    ),
+    path(
+        "compensation-overrides/<int:pk>/action/",
+        override_views.compensation_override_action,
+        name="compensation-override-action",
+    ),
+    path(
+        "user-setup/<int:pk>/compensation/",
+        override_views.employee_compensation,
+        name="employee-compensation",
+    ),
+    path(
+        "compensation-plans/<int:plan_id>/overrides/",
+        override_views.plan_override_summary,
+        name="plan-override-summary",
     ),
 ]

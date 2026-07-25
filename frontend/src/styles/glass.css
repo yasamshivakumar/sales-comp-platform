@@ -150,8 +150,8 @@
   background: rgba(15, 23, 42, 0.55);
 }
 
-/* Dialogs — soft glass, not full-page blur on click */
-.app-glass-shell .MuiDialog-paper {
+/* Dialogs — soft glass; date pickers use styles/date-picker.css */
+.app-glass-shell .MuiDialog-paper:not(.app-date-picker-paper) {
   background: var(--glass-bg-strong) !important;
   border: 1px solid var(--glass-border) !important;
   backdrop-filter: blur(20px) saturate(1.2);

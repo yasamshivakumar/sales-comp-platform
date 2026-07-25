@@ -957,3 +957,174 @@
   overflow: auto;
 }
 
+/* Compensation hierarchy tab */
+.pe-comp-tab .pe-tab__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.pe-comp-tab .pe-tab__actions h2,
+.pe-comp-tab .pe-tab__actions h3 {
+  margin: 0;
+}
+
+.pe-comp-section {
+  margin-bottom: 28px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--pe-border-light);
+}
+
+.pe-comp-section:last-of-type {
+  border-bottom: 0;
+}
+
+.pe-comp-assign {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.pe-comp-assign .form-field {
+  min-width: 240px;
+  flex: 1;
+}
+
+.pe-comp-table td,
+.pe-comp-table th {
+  vertical-align: top;
+}
+
+.pe-comp-table tr.is-active-override td {
+  background: rgba(46, 132, 110, 0.06);
+}
+
+.pe-comp-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.pe-comp-actions .cp-btn-ghost {
+  margin-left: 4px;
+}
+
+.pe-danger-link {
+  color: var(--pe-danger) !important;
+}
+
+.pe-comp-empty {
+  padding: 18px;
+  border: 1px dashed var(--pe-border-light);
+  border-radius: 8px;
+  background: var(--pe-header-bg);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pe-comp-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pe-comp-history li {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--pe-border-light);
+}
+
+.pe-comp-history__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.pe-comp-history__body {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--pe-text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pe-eyebrow {
+  margin: 0 0 2px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pe-text-muted);
+}
+
+.pe-form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.pe-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.pe-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 25, 48, 0.45);
+}
+
+.pe-modal__panel {
+  position: relative;
+  z-index: 1;
+  width: min(640px, 100%);
+  max-height: min(90vh, 880px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 24px 64px rgba(8, 25, 48, 0.28);
+  /* Date calendars open as a portaled dialog (z-index 2300), not inside this panel */
+}
+
+.pe-modal__header,
+.pe-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--pe-border-light);
+}
+
+.pe-modal__footer {
+  border-bottom: 0;
+  border-top: 1px solid var(--pe-border-light);
+  justify-content: flex-end;
+}
+
+.pe-modal__header h3 {
+  margin: 0;
+}
+
+.pe-modal__body {
+  padding: 16px 20px 8px;
+  display: grid;
+  gap: 12px;
+}
+
+.pe-override-form textarea {
+  width: 100%;
+  resize: vertical;
+}
+

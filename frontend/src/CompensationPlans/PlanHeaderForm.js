@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api, { getApiErrorMessage } from "../api";
+import DatePickerField from "../Components/DatePickerField";
 import { useToast } from "../Components/Toast";
 import { BUSINESS_GROUP_OPTIONS } from "../utils/businessGroups";
 
@@ -244,27 +245,25 @@ function PlanHeaderForm({ initialPlan = null, onPlanCreated, onPlanUpdated, onCa
         <h3 className="cp-form-section__title">Effective period</h3>
       <div className="form-grid">
         <div className="form-field">
-          <label>Effective from <span style={req}>*</span></label>
-          <input
-            type="date"
-            name="effective_from"
+          <DatePickerField
+            label="Effective from"
             value={form.effective_from}
-            onChange={handleChange}
+            onChange={(value) => setForm((prev) => ({ ...prev, effective_from: value }))}
             disabled={loading}
             required
+            maxDate={form.effective_to || undefined}
           />
           <small style={{ color: "var(--text-muted)", fontSize: 12 }}>
             First day Version 1 applies to orders.
           </small>
         </div>
         <div className="form-field">
-          <label>Effective to</label>
-          <input
-            type="date"
-            name="effective_to"
+          <DatePickerField
+            label="Effective to"
             value={form.effective_to}
-            onChange={handleChange}
+            onChange={(value) => setForm((prev) => ({ ...prev, effective_to: value }))}
             disabled={loading}
+            minDate={form.effective_from || undefined}
           />
           <small style={{ color: "var(--text-muted)", fontSize: 12 }}>
             Leave blank for open-ended (until you publish a newer version).

@@ -57,7 +57,7 @@ function MarketingLayout() {
   );
 
   useEffect(() => {
-    document.title = "Incentra — Sales compensation platform";
+    document.title = "Incentra";
   }, []);
 
   const isHome = view.type === "home";

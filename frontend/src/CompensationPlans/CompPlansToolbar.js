@@ -1,3 +1,5 @@
+import DatePickerField from "../Components/DatePickerField";
+
 function CompPlansToolbar({
   filters,
   onChange,
@@ -155,11 +157,12 @@ function CompPlansToolbar({
           <option value="FLAT">Flat rate</option>
           <option value="LOOKUP">Lookup</option>
         </select>
-        <input
-          type="date"
-          aria-label="Effective on"
+        <DatePickerField
+          label="Effective on"
           value={filters.effective_on}
-          onChange={(e) => onChange({ ...filters, effective_on: e.target.value })}
+          onChange={(value) => onChange({ ...filters, effective_on: value })}
+          fullWidth={false}
+          className="cp-toolbar-date"
         />
       </div>
     </section>

@@ -357,9 +357,10 @@ def resolve_compensation_plan_version(order):
     Resolve the Published plan version whose effective range contains the
     order date (effective_from <= order_date <= effective_to).
 
-    Priority mirrors legacy plan resolution:
-      1. Position-specific version (order.position_name, then profile)
-      2. Role-based version (profile.role) — only versions without position_name
+    Priority:
+      1. Employee's explicitly assigned compensation plan (when set)
+      2. Position-specific version (order.position_name, then profile)
+      3. Role-based version (profile.role) — only versions without position_name
 
     Returns (version, lookup_source) or (None, None). Draft versions never match.
     """
@@ -367,6 +368,16 @@ def resolve_compensation_plan_version(order):
     empty_position = models.Q(position_name__isnull=True) | models.Q(position_name="")
     version_base = _version_queryset_for_order(order)
     ordering = ("-effective_from", "-version_number", "-id")
+
+    assigned_plan_id = getattr(user_profile, "assigned_compensation_plan_id", None)
+    if assigned_plan_id:
+        version = (
+            version_base.filter(compensation_plan_id=assigned_plan_id)
+            .order_by(*ordering)
+            .first()
+        )
+        if version:
+            return version, f"assigned_plan:{assigned_plan_id}"
 
     for pos_name in _position_names_to_try(order, user_profile):
         version = (
@@ -399,8 +410,9 @@ def resolve_compensation_plan(order):
     Resolve which Active compensation plan applies to an order.
 
     Priority:
-      1. Position-specific plan (order.position_name, then profile.position_name)
-      2. Role-based plan (profile.role) — only plans without a position_name set
+      1. Employee's explicitly assigned compensation plan (when set)
+      2. Position-specific plan (order.position_name, then profile.position_name)
+      3. Role-based plan (profile.role) — only plans without a position_name set
 
     Returns (plan, lookup_source) or (None, None).
 
@@ -412,6 +424,16 @@ def resolve_compensation_plan(order):
     effective = _effective_date_filter(order)
 
     plan_base = _plan_queryset_for_order(order)
+
+    assigned_plan_id = getattr(user_profile, "assigned_compensation_plan_id", None)
+    if assigned_plan_id:
+        plan = plan_base.filter(id=assigned_plan_id).filter(effective).first()
+        if plan is None:
+            # Assigned plan may have no monthly clone for this period; still
+            # prefer the live assigned plan so overrides stay attached to it.
+            plan = plan_base.filter(id=assigned_plan_id).first()
+        if plan:
+            return plan, f"assigned_plan:{assigned_plan_id}"
 
     for pos_name in _position_names_to_try(order, user_profile):
         plan = (
@@ -1021,15 +1043,69 @@ def calculate_commission_for_order(order, replace_existing=True, force=False):
         return None
 
     from .commission_rules import apply_commission_rules
+    from .compensation_overrides import apply_employee_overrides
 
     user_profile = _get_user_profile_for_order(representative_order)
-    commission_amount, credit_amount, matched_rule, rule_meta = apply_commission_rules(
-        plan, representative_order, user_profile, commission_amount,
-        version=plan_version,
+
+    # Step 4 of the hierarchy: employee overrides are priority 1 and are
+    # resolved before any plan-owned rule gets a chance to run.
+    plan_amount = commission_amount
+    (
+        commission_amount,
+        applied_override,
+        suppress_plan_rules,
+        override_trace,
+    ) = apply_employee_overrides(
+        user_profile,
+        representative_order,
+        commission_amount,
+        total_sales,
+        on_date=representative_order.order_date,
+        plan=plan,
     )
+
+    credit_amount = total_sales
+    matched_rule = None
+    rule_meta = {}
+    rule_trace = []
+    if suppress_plan_rules:
+        logger.info(
+            "Employee override %s superseded plan rules for %s/%s",
+            getattr(applied_override, "id", None),
+            representative_order.employee_id,
+            period_start,
+        )
+    else:
+        commission_amount, credit_amount, matched_rule, rule_meta = (
+            apply_commission_rules(
+                plan,
+                representative_order,
+                user_profile,
+                commission_amount,
+                version=plan_version,
+                trace=rule_trace,
+            )
+        )
     representative_order.sales_amount = original_sales_amount
     if commission_amount <= 0:
         return None
+
+    calculation_trace = {
+        "plan_id": plan.id,
+        "plan_name": plan.plan_name,
+        "plan_version": getattr(plan_version, "version_number", None),
+        "plan_lookup_source": lookup_source,
+        "plan_base_amount": str(plan_amount),
+        "final_amount": str(commission_amount),
+        "rule_used": getattr(matched_rule, "name", None),
+        "rule_id": getattr(matched_rule, "id", None),
+        "rules_applied": rule_trace,
+        "override_used": bool(applied_override),
+        "override_id": getattr(applied_override, "id", None),
+        "override_name": getattr(applied_override, "name", None),
+        "overrides": override_trace,
+        "calculated_at": timezone.now().isoformat(),
+    }
 
     employee = _get_or_create_employee_for_order(representative_order, user_profile)
 
@@ -1079,7 +1155,25 @@ def calculate_commission_for_order(order, replace_existing=True, force=False):
         currency=_aggregate_currency_for_order(representative_order),
         supporting_document=supporting_doc,
         supporting_document_version=supporting_ver,
+        override_used=bool(applied_override),
+        applied_override=applied_override,
+        calculation_trace=calculation_trace,
     )
+
+    if applied_override is not None:
+        from .compensation_overrides import record_override_event
+        from .models import EmployeeCompensationOverrideEvent
+
+        record_override_event(
+            applied_override,
+            EmployeeCompensationOverrideEvent.EVENT_APPLIED,
+            reason=(
+                f"Applied to {period_start:%b %Y} commission for "
+                f"{representative_order.employee_id}"
+            ),
+            old_value={"plan_amount": str(plan_amount)},
+            new_value={"commission_amount": str(employee_amount)},
+        )
 
     if parent_employee and parent_amount > 0:
         Commission.objects.create(

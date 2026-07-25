@@ -1,4 +1,5 @@
 import { createTheme, alpha } from "@mui/material/styles";
+import { pickerSurfaceTokens } from "./datePickerTokens";
 
 const enterprise = {
   navy: "#032d60",
@@ -7,8 +8,11 @@ const enterprise = {
   accentLight: "#1b96ff",
 };
 
+export { pickerSurfaceTokens } from "./datePickerTokens";
+
 export function buildMuiTheme(mode = "light") {
   const isDark = mode === "dark";
+  const pickerSurface = pickerSurfaceTokens(isDark);
 
   return createTheme({
     palette: {
@@ -51,6 +55,18 @@ export function buildMuiTheme(mode = "light") {
         secondary: isDark ? "#9ca3af" : "#444444",
       },
       divider: isDark ? "rgba(148, 163, 184, 0.14)" : "#dddbda",
+    },
+    // Date pickers use theme.zIndex.modal on their Popper. Keep them above
+    // every custom overlay in the app (drawers ~1300, integration modal ~1500).
+    zIndex: {
+      mobileStepper: 1000,
+      fab: 1050,
+      speedDial: 1050,
+      appBar: 1100,
+      drawer: 1200,
+      modal: 2200,
+      snackbar: 2300,
+      tooltip: 2400,
     },
     typography: {
       fontFamily: '"Inter", "Segoe UI", "Roboto", "Helvetica", "Arial", sans-serif',
@@ -211,6 +227,111 @@ export function buildMuiTheme(mode = "light") {
           root: {
             "&:hover": {
               backgroundColor: "transparent",
+            },
+          },
+        },
+      },
+
+      // ---- Date pickers (glass) — visual details live in date-picker.css
+      MuiPickersLayout: {
+        styleOverrides: {
+          root: {
+            backgroundColor: "transparent",
+            color: pickerSurface.text,
+          },
+          actionBar: {
+            backgroundColor: pickerSurface.actionBar,
+            borderTop: `1px solid ${pickerSurface.border}`,
+            "& .MuiButton-root": {
+              color: pickerSurface.accent,
+              fontWeight: 700,
+              textTransform: "none",
+            },
+          },
+        },
+      },
+      MuiPickersPopper: {
+        styleOverrides: {
+          paper: {
+            backgroundColor: pickerSurface.bg,
+            backgroundImage: "none",
+            color: pickerSurface.text,
+            border: `1px solid ${pickerSurface.border}`,
+            borderRadius: 16,
+            backdropFilter: `blur(${pickerSurface.blur}) saturate(1.25)`,
+            WebkitBackdropFilter: `blur(${pickerSurface.blur}) saturate(1.25)`,
+            boxShadow: pickerSurface.shadow,
+          },
+        },
+      },
+      MuiDateCalendar: {
+        styleOverrides: {
+          root: {
+            backgroundColor: "transparent",
+            color: pickerSurface.text,
+          },
+        },
+      },
+      MuiDayCalendar: {
+        styleOverrides: {
+          weekDayLabel: {
+            color: pickerSurface.muted,
+            fontWeight: 700,
+          },
+        },
+      },
+      MuiPickersCalendarHeader: {
+        styleOverrides: {
+          root: { color: pickerSurface.text },
+          label: { color: pickerSurface.text, fontWeight: 700 },
+          switchViewButton: { color: pickerSurface.text },
+        },
+      },
+      MuiPickersArrowSwitcher: {
+        styleOverrides: {
+          button: { color: pickerSurface.text },
+        },
+      },
+      MuiPickersDay: {
+        styleOverrides: {
+          root: {
+            color: pickerSurface.text,
+            fontWeight: 600,
+            "&:hover": { backgroundColor: pickerSurface.hover },
+            "&.Mui-selected": {
+              backgroundColor: pickerSurface.accent,
+              color: pickerSurface.accentText,
+              fontWeight: 700,
+              "&:hover": { backgroundColor: pickerSurface.accentHover },
+            },
+            "&.Mui-disabled": { color: pickerSurface.disabled },
+          },
+          today: {
+            borderColor: pickerSurface.accent,
+            backgroundColor: pickerSurface.todayBg,
+            color: pickerSurface.text,
+          },
+          dayOutsideMonth: { color: pickerSurface.outside },
+        },
+      },
+      MuiPickersYear: {
+        styleOverrides: {
+          yearButton: {
+            color: pickerSurface.text,
+            "&.Mui-selected": {
+              backgroundColor: pickerSurface.accent,
+              color: pickerSurface.accentText,
+            },
+          },
+        },
+      },
+      MuiPickersMonth: {
+        styleOverrides: {
+          monthButton: {
+            color: pickerSurface.text,
+            "&.Mui-selected": {
+              backgroundColor: pickerSurface.accent,
+              color: pickerSurface.accentText,
             },
           },
         },

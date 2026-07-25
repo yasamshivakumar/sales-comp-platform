@@ -975,7 +975,7 @@
   color: var(--cdr-muted);
 }
 
-.cdr-modal__body input,
+.cdr-modal__body input:not(.MuiInputBase-input),
 .cdr-modal__body select,
 .cdr-modal__body textarea {
   padding: 9px 11px;
@@ -984,6 +984,15 @@
   font-size: 13px;
   color: var(--cdr-text);
   font-weight: 500;
+}
+
+.cdr-modal__body .compact-date-field.MuiFormControl-root {
+  width: 100%;
+  max-width: none;
+}
+
+.cdr-modal__body .compact-date-field .MuiOutlinedInput-root {
+  background: #fff;
 }
 
 .cdr-modal__row {

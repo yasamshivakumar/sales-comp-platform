@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import api, { getApiErrorMessage } from "../api";
+import DatePickerField from "../Components/DatePickerField";
 import {
   activeCurrencyTotals,
   formatMoney,
@@ -624,24 +625,28 @@ function ReportsAnalytics({ compact = false }) {
               ))}
             </select>
           </label>
-          <label className="ra-filter-field ra-filter-field--date">
-            <span className="ra-filter-field__label">From</span>
-            <input
-              type="date"
-              value={startDate}
-              max={endDate || undefined}
-              onChange={(e) => setStartDate(e.target.value)}
-            />
-          </label>
-          <label className="ra-filter-field ra-filter-field--date">
-            <span className="ra-filter-field__label">To</span>
-            <input
-              type="date"
-              value={endDate}
-              min={startDate || undefined}
-              onChange={(e) => setEndDate(e.target.value)}
-            />
-          </label>
+<label className="ra-filter-field ra-filter-field--date">
+  <span className="ra-filter-field__label">From</span>
+  <DatePickerField
+    label="From"
+    hideLabel
+    value={startDate}
+    maxDate={endDate || undefined}
+    onChange={(value) => setStartDate(value)}
+    className="ra-command-date"
+  />
+</label>
+<label className="ra-filter-field ra-filter-field--date">
+  <span className="ra-filter-field__label">To</span>
+  <DatePickerField
+    label="To"
+    hideLabel
+    value={endDate}
+    minDate={startDate || undefined}
+    onChange={(value) => setEndDate(value)}
+    className="ra-command-date"
+  />
+</label>
         </div>
       </header>
 

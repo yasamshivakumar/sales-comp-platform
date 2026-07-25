@@ -10,6 +10,7 @@ import "./styles/mui-bridge.css";
 import "./styles/sidebar-nav.css";
 import "./styles.css";
 import "./styles/glass.css";
+import "./styles/date-picker.css";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(

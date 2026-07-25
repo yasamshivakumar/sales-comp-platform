@@ -125,6 +125,15 @@ def commission_rule_choices(request):
     return Response(
         {
             "rule_types": _choice_list(CommissionRule.RULE_TYPE_CHOICES),
+            "scopes": [
+                {
+                    "value": value,
+                    "label": label,
+                    "default_priority": CommissionRule.DEFAULT_SCOPE_PRIORITY[value],
+                }
+                for value, label in CommissionRule.SCOPE_CHOICES
+            ],
+            "condition_logics": _choice_list(CommissionRule.LOGIC_CHOICES),
             "condition_fields": _choice_list(CommissionRuleCondition.FIELD_CHOICES),
             "operators": _choice_list(CommissionRuleCondition.OPERATOR_CHOICES),
             "classifications": _choice_list(CommissionRuleResult.CLASSIFICATION_CHOICES),
