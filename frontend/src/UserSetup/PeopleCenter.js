@@ -12,7 +12,6 @@ import TrendingUpOutlinedIcon from "@mui/icons-material/TrendingUpOutlined";
 import PersonOffOutlinedIcon from "@mui/icons-material/PersonOffOutlined";
 import api, { getApiErrorMessage } from "../api";
 import { useToast } from "../Components/Toast";
-import { PageShell } from "../Components/enterprise";
 import { ImportDrawer, OverflowActionsMenu } from "../Components/Import";
 import { PEOPLE_IMPORT_CONFIG } from "../Components/Import/importConfigs";
 import PeopleDataGrid, { PeopleColumnPicker, usePeopleColumns } from "./PeopleDataGrid";
@@ -231,20 +230,17 @@ function PeopleCenter() {
   };
 
   return (
-    <PageShell
-      breadcrumbs={[
-        { label: "Incentra", to: "/dashboard" },
-        { label: "People & Access" },
-      ]}
-      title="Participant Management"
-      subtitle="Enterprise directory for employees, plans, quota, hierarchy, and access."
-      primaryAction={
-        <button type="button" className="btn-primary" onClick={() => navigate("/user-setup/new")}>
-          + Create person
-        </button>
-      }
-    >
     <div className="pe-console pe-console--enterprise">
+      <header className="pe-header">
+        <div>
+          <p className="pe-header__eyebrow">People &amp; Access</p>
+          <h1 className="pe-header__title">Participant Management</h1>
+          <p className="pe-header__sub">
+            Enterprise directory for employees, plans, quota, hierarchy, and access.
+          </p>
+        </div>
+      </header>
+
       <section className="pe-kpis pe-kpis--executive" aria-label="Summary">
         <div className="pe-kpis__grid pe-kpis__grid--exec">
           {KPI_DEFS.map((kpi) => {
@@ -295,7 +291,11 @@ function PeopleCenter() {
             .querySelector(".pe-bulk--float")
             ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
         }}
-        createSlot={null}
+        createSlot={
+          <button type="button" className="btn-primary" onClick={() => navigate("/user-setup/new")}>
+            + Create person
+          </button>
+        }
         overflowSlot={
           <OverflowActionsMenu
             ariaLabel="More people actions"
@@ -506,7 +506,6 @@ function PeopleCenter() {
         }}
       />
     </div>
-    </PageShell>
   );
 }
 

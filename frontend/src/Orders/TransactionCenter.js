@@ -6,9 +6,8 @@ import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import api, { getApiErrorMessage } from "../api";
 import { useToast } from "../Components/Toast";
 import LoadingCenter from "../Components/LoadingCenter";
-import { ImportDrawer } from "../Components/Import";
+import { ImportDrawer, OverflowActionsMenu } from "../Components/Import";
 import { ORDERS_IMPORT_CONFIG } from "../Components/Import/importConfigs";
-import { PageShell } from "../Components/enterprise";
 import TransactionKpis from "./TransactionKpis";
 import TransactionActionCenter from "./TransactionActionCenter";
 import TransactionDataGrid from "./TransactionDataGrid";
@@ -199,37 +198,47 @@ function TransactionCenter({ refreshKey = 0 }) {
   };
 
   return (
-    <PageShell
-      className="tx-console"
-      breadcrumbs={[{ label: "Incentra", to: "/dashboard" }, { label: "Orders" }]}
-      title="Transaction Center"
-      subtitle="Manage orders, deals, and revenue transactions."
-      primaryAction={
-        <button type="button" className="btn-primary" onClick={() => navigate("/orders/new")}>
-          + Create order
-        </button>
-      }
-      overflowItems={[
-        {
-          id: "import",
-          label: "Import Orders",
-          icon: <UploadFileOutlinedIcon fontSize="small" />,
-          onClick: openImport,
-        },
-        {
-          id: "template",
-          label: "Download Template",
-          icon: <DownloadOutlinedIcon fontSize="small" />,
-          onClick: downloadTemplate,
-        },
-        {
-          id: "export",
-          label: "Export Orders",
-          icon: <FileDownloadOutlinedIcon fontSize="small" />,
-          onClick: exportSelected,
-        },
-      ]}
-    >
+    <div className="tx-console">
+      <header className="tx-header">
+        <div>
+          <p className="tx-header__eyebrow">Orders</p>
+          <h1 className="tx-header__title">Orders Center</h1>
+          <p className="tx-header__sub">
+            Manage sales orders, validate credits, and trigger commission calculations.
+          </p>
+        </div>
+        <div className="tx-header__actions">
+          <div className="tx-header__cta-group">
+            <button type="button" className="btn-primary" onClick={() => navigate("/orders/new")}>
+              + Create order
+            </button>
+            <OverflowActionsMenu
+              ariaLabel="Order actions"
+              items={[
+                {
+                  id: "import",
+                  label: "Import Orders",
+                  icon: <UploadFileOutlinedIcon fontSize="small" />,
+                  onClick: openImport,
+                },
+                {
+                  id: "template",
+                  label: "Download Template",
+                  icon: <DownloadOutlinedIcon fontSize="small" />,
+                  onClick: downloadTemplate,
+                },
+                {
+                  id: "export",
+                  label: "Export Orders",
+                  icon: <FileDownloadOutlinedIcon fontSize="small" />,
+                  onClick: exportSelected,
+                },
+              ]}
+            />
+          </div>
+        </div>
+      </header>
+
       <TransactionKpis
         summary={summary}
         loading={loading && !summary}
@@ -322,7 +331,7 @@ function TransactionCenter({ refreshKey = 0 }) {
           load();
         }}
       />
-    </PageShell>
+    </div>
   );
 }
 

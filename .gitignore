@@ -56,3 +56,6 @@ backend/logs/*.log
 .vscode/
 *.swp
 .DS_Store
+
+# Cursor local artifacts
+.cursor/

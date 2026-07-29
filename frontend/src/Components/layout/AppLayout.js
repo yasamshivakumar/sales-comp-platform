@@ -36,9 +36,7 @@ import { useTheme as useAppTheme } from "../../ThemeContext";
 import { enterprise } from "../../theme/muiTheme";
 import ChangePassword from "../ChangePassword";
 import { getMenuItems, resolvePageTitle } from "./navConfig";
-import { GlobalSearch } from "../enterprise";
 import "../enterprise.css";
-import "../../styles/layout-containment.css";
 
 const DRAWER_WIDTH = 108;
 
@@ -224,7 +222,9 @@ function AppTopBar({
         zIndex: 10,
       }}
     >
-      <GlobalSearch profile={profile} />
+      <Typography variant="subtitle2" color="text.secondary" sx={{ letterSpacing: "0.04em" }}>
+        INCENTRA / {pageTitle?.toUpperCase()}
+      </Typography>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         {showConnect && (
           <Tooltip title="Connect CRM">
@@ -593,65 +593,46 @@ function AppLayout({ children }) {
         </Toolbar>
       </AppBar>
 
-      {/* Mobile drawer */}
-      <Drawer
-        variant="temporary"
-        open={mobileOpen}
-        onClose={() => setMobileOpen(false)}
-        ModalProps={{ keepMounted: true }}
-        PaperProps={{ className: "enterprise-sidebar" }}
-        sx={{
-          display: { xs: "block", md: "none" },
-          "& .MuiDrawer-paper": { ...drawerPaperSx, width: 120 },
-        }}
-      >
-        {drawerContent}
-      </Drawer>
-
-      {/* Desktop sidebar — plain Box so it stays in document flow (no content under rail) */}
-      <Box
-        component="nav"
-        className="app-sidebar-slot enterprise-sidebar"
-        sx={{
-          display: { xs: "none", md: "flex" },
-          flexDirection: "column",
-          width: DRAWER_WIDTH,
-          minWidth: DRAWER_WIDTH,
-          maxWidth: DRAWER_WIDTH,
-          flexShrink: 0,
-          height: "100vh",
-          position: "sticky",
-          top: 0,
-          zIndex: 1200,
-          boxSizing: "border-box",
-          borderRight: "none",
-          background: sidebarBg,
-          color: "rgba(255,255,255,0.82)",
-          boxShadow: "4px 0 24px rgba(0, 0, 0, 0.18)",
-          overflowX: "hidden",
-          overflowY: "auto",
-          "& .MuiDivider-root": { borderColor: "rgba(255,255,255,0.1)" },
-        }}
-      >
-        {drawerContent}
+      <Box component="nav" sx={{ width: { md: DRAWER_WIDTH }, flexShrink: { md: 0 } }}>
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          ModalProps={{ keepMounted: true }}
+          PaperProps={{ className: "enterprise-sidebar" }}
+          sx={{
+            display: { xs: "block", md: "none" },
+            "& .MuiDrawer-paper": { ...drawerPaperSx, width: 120 },
+          }}
+        >
+          {drawerContent}
+        </Drawer>
+        <Drawer
+          variant="permanent"
+          PaperProps={{ className: "enterprise-sidebar" }}
+          sx={{
+            display: { xs: "none", md: "block" },
+            "& .MuiDrawer-paper": drawerPaperSx,
+          }}
+          open
+        >
+          {drawerContent}
+        </Drawer>
       </Box>
 
       <Box
         component="main"
-        className="app-main-content"
         sx={{
-          flex: "1 1 0%",
+          flexGrow: 1,
           width: { xs: "100%", md: `calc(100% - ${DRAWER_WIDTH}px)` },
-          maxWidth: { xs: "100%", md: `calc(100vw - ${DRAWER_WIDTH}px)` },
+          maxWidth: "100%",
           minWidth: 0,
-          overflow: "hidden",
+          overflowX: "hidden",
           pt: { xs: "calc(56px + env(safe-area-inset-top))", md: 0 },
           pb: { xs: "env(safe-area-inset-bottom)", md: 0 },
           minHeight: "100dvh",
           display: "flex",
           flexDirection: "column",
-          position: "relative",
-          zIndex: 1,
         }}
       >
         <AppTopBar
@@ -670,12 +651,12 @@ function AppLayout({ children }) {
           onOpenConnect={() => navigate("/integrations")}
         />
         <Box
-          className="container-fluid app-page-canvas"
+          className="container-fluid"
           sx={{
             flex: 1,
             px: { xs: 2, sm: 3 },
             py: { xs: 2, sm: 3 },
-            maxWidth: "100%",
+            maxWidth: "none",
             mx: 0,
             width: "100%",
             minWidth: 0,

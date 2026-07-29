@@ -1,9 +1,8 @@
 import { Link } from "react-router-dom";
-import { PageShell } from "../enterprise";
 import "./pageChrome.css";
 
 /**
- * Legacy page shell — delegates to the shared enterprise PageShell.
+ * Shared page shell: title, subtitle, primary action, optional search + filters.
  */
 function PageChrome({
   eyebrow,
@@ -15,29 +14,24 @@ function PageChrome({
   children,
   className = "",
 }) {
-  const breadcrumbs = eyebrow
-    ? [{ label: "Incentra", to: "/dashboard" }, { label: eyebrow }]
-    : undefined;
-
-  const toolbar =
-    search || filters ? (
-      <>
-        {search}
-        {filters}
-      </>
-    ) : null;
-
   return (
-    <PageShell
-      breadcrumbs={breadcrumbs}
-      title={title}
-      subtitle={subtitle}
-      primaryAction={primaryAction}
-      toolbar={toolbar}
-      className={className}
-    >
-      {children}
-    </PageShell>
+    <div className={`pg-chrome ${className}`.trim()}>
+      <header className="pg-chrome__header">
+        <div className="pg-chrome__titles">
+          {eyebrow ? <p className="pg-chrome__eyebrow">{eyebrow}</p> : null}
+          <h1 className="pg-chrome__title">{title}</h1>
+          {subtitle ? <p className="pg-chrome__subtitle">{subtitle}</p> : null}
+        </div>
+        {primaryAction ? <div className="pg-chrome__actions">{primaryAction}</div> : null}
+      </header>
+      {(search || filters) && (
+        <div className="pg-chrome__toolbar">
+          {search ? <div className="pg-chrome__search">{search}</div> : null}
+          {filters ? <div className="pg-chrome__filters">{filters}</div> : null}
+        </div>
+      )}
+      <div className="pg-chrome__body">{children}</div>
+    </div>
   );
 }
 
