@@ -1,6 +1,8 @@
 from .currencies import currency_choices_for_api
 
-from rest_framework import generics
+from django.db.models import Count, Prefetch
+from django.shortcuts import get_object_or_404
+from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
@@ -11,8 +13,17 @@ from .models import (
     CommissionRule,
     CommissionRuleCondition,
     CommissionRuleResult,
+    EmployeeCommissionRuleAssignment,
+    UserProfile,
 )
 from .permissions import user_is_admin
+from .rule_assignments import (
+    add_rule_assignments,
+    assignment_payload,
+    employees_queryset_for_plan,
+    find_invalid_assignments,
+    remove_rule_assignments,
+)
 from .serializers import CommissionRuleSerializer
 from .tenants import filter_queryset_by_organization
 
@@ -36,15 +47,31 @@ def _assert_version_editable(version):
         )
 
 
+def _assignment_only_request(request):
+    keys = set((request.data or {}).keys())
+    return bool(keys) and keys.issubset({"assigned_employee_ids", "assigned_employees"})
+
+
 class CommissionRuleListCreateView(generics.ListCreateAPIView):
     serializer_class = CommissionRuleSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         _require_admin(self.request)
-        qs = CommissionRule.objects.select_related(
-            "compensation_plan", "plan_version"
-        ).prefetch_related("conditions", "results")
+        qs = (
+            CommissionRule.objects.select_related("compensation_plan", "plan_version")
+            .prefetch_related(
+                "conditions",
+                "results",
+                Prefetch(
+                    "employee_assignments",
+                    queryset=EmployeeCommissionRuleAssignment.objects.select_related(
+                        "employee"
+                    ),
+                ),
+            )
+            .annotate(assignee_count=Count("employee_assignments", distinct=True))
+        )
         qs = filter_queryset_by_organization(
             qs, getattr(self.request, "organization", None)
         )
@@ -101,20 +128,165 @@ class CommissionRuleDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         _require_admin(self.request)
-        qs = CommissionRule.objects.select_related("plan_version").prefetch_related(
-            "conditions", "results"
+        qs = (
+            CommissionRule.objects.select_related(
+                "compensation_plan", "plan_version"
+            )
+            .prefetch_related(
+                "conditions",
+                "results",
+                Prefetch(
+                    "employee_assignments",
+                    queryset=EmployeeCommissionRuleAssignment.objects.select_related(
+                        "employee"
+                    ),
+                ),
+            )
+            .annotate(assignee_count=Count("employee_assignments", distinct=True))
         )
         return filter_queryset_by_organization(
             qs, getattr(self.request, "organization", None)
         )
 
     def perform_update(self, serializer):
-        _assert_version_editable(serializer.instance.plan_version)
+        if not _assignment_only_request(self.request):
+            _assert_version_editable(serializer.instance.plan_version)
         serializer.save()
 
     def perform_destroy(self, instance):
         _assert_version_editable(instance.plan_version)
         instance.delete()
+
+
+@api_view(["GET", "POST", "DELETE"])
+@permission_classes([IsAuthenticated])
+def commission_rule_employees(request, pk):
+    """List, add, or remove employees assigned to a commission rule."""
+    _require_admin(request)
+    org = getattr(request, "organization", None)
+    rule = get_object_or_404(
+        filter_queryset_by_organization(
+            CommissionRule.objects.select_related(
+                "compensation_plan", "plan_version", "plan_version__compensation_plan"
+            ),
+            org,
+        ),
+        pk=pk,
+    )
+
+    if request.method == "GET":
+        rows = (
+            EmployeeCommissionRuleAssignment.objects.filter(rule=rule)
+            .select_related("employee", "rule", "rule__compensation_plan", "rule__plan_version")
+            .order_by("employee__name", "employee_id")
+        )
+        return Response([assignment_payload(row) for row in rows])
+
+    employee_ids = request.data.get("employee_ids")
+    if not isinstance(employee_ids, list):
+        raise ValidationError({"employee_ids": "Provide a list of employee profile ids."})
+
+    if request.method == "POST":
+        added = add_rule_assignments(
+            rule,
+            employee_ids,
+            organization=org,
+            assigned_by=request.user,
+        )
+        return Response(
+            {"added": added, "assignee_count": rule.employee_assignments.count()},
+            status=status.HTTP_200_OK,
+        )
+
+    removed = remove_rule_assignments(rule, employee_ids)
+    return Response(
+        {"removed": removed, "assignee_count": rule.employee_assignments.count()}
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def commission_rule_eligible_employees(request):
+    """
+    Employees eligible for rule assignment: same tenant and selected plan only.
+
+    Query:
+      plan_id (required)
+      q (optional search: name, employee_id, email)
+      page / page_size (optional pagination; default page_size=100, max=500)
+      ids_only=1 (return just matching profile ids for Select All)
+    """
+    _require_admin(request)
+    org = getattr(request, "organization", None)
+    plan_id = request.query_params.get("plan_id")
+    if not plan_id:
+        raise ValidationError({"plan_id": "plan_id is required."})
+
+    from .models import CompensationPlan
+    from .rule_assignments import serialize_eligible_employee
+
+    plan = get_object_or_404(
+        filter_queryset_by_organization(CompensationPlan.objects.all(), org),
+        pk=plan_id,
+    )
+    search = request.query_params.get("q") or ""
+    qs = employees_queryset_for_plan(plan.id, organization=org, search=search)
+
+    if str(request.query_params.get("ids_only", "")).lower() in ("1", "true", "yes"):
+        return Response({"count": qs.count(), "ids": list(qs.values_list("id", flat=True))})
+
+    try:
+        page = max(1, int(request.query_params.get("page") or 1))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = int(request.query_params.get("page_size") or 100)
+    except (TypeError, ValueError):
+        page_size = 100
+    page_size = max(1, min(page_size, 500))
+
+    total = qs.count()
+    start = (page - 1) * page_size
+    rows = list(qs[start : start + page_size])
+    return Response(
+        {
+            "count": total,
+            "page": page,
+            "page_size": page_size,
+            "has_more": start + len(rows) < total,
+            "results": [serialize_eligible_employee(row) for row in rows],
+        }
+    )
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def commission_rule_invalid_assignments(request):
+    """Report rule assignments that violate plan/tenant constraints."""
+    _require_admin(request)
+    org = getattr(request, "organization", None)
+    invalid = find_invalid_assignments(organization=org)
+    return Response({"count": len(invalid), "assignments": invalid})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def employee_commission_rules(request, pk):
+    """
+    Commission rules explicitly assigned to one employee (tenant-scoped).
+
+    GET /api/user-setup/{id}/commission-rules/
+    GET /api/employees/{id}/commission-rules/
+    """
+    _require_admin(request)
+    org = getattr(request, "organization", None)
+    profile = get_object_or_404(
+        filter_queryset_by_organization(UserProfile.objects.all(), org),
+        pk=pk,
+    )
+    from .compensation_overrides import assigned_rules_for_employee_display
+
+    rules = assigned_rules_for_employee_display(profile, organization=org)
+    return Response({"count": len(rules), "results": rules})
 
 
 @api_view(["GET"])

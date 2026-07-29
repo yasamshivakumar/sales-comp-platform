@@ -17,6 +17,7 @@ from .models import (
     CommissionRule,
     CommissionRuleCondition,
     CommissionRuleResult,
+    EmployeeCommissionRuleAssignment,
 )
 
 
@@ -228,19 +229,98 @@ class CommissionRuleSerializer(serializers.ModelSerializer):
         read_only=True,
         default=None,
     )
+    assigned_employee_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        write_only=True,
+    )
+    assigned_employees = serializers.SerializerMethodField()
+    assignee_count = serializers.SerializerMethodField()
 
     class Meta:
         model = CommissionRule
         fields = "__all__"
         read_only_fields = ["organization", "created_at", "updated_at"]
 
+    def get_assigned_employees(self, obj):
+        assignments = getattr(obj, "_prefetched_objects_cache", {}).get(
+            "employee_assignments"
+        )
+        if assignments is None:
+            assignments = obj.employee_assignments.select_related("employee").all()
+        from .rule_assignments import assignment_payload
+
+        return [assignment_payload(row) for row in assignments]
+
+    def get_assignee_count(self, obj):
+        if getattr(obj, "apply_to_all_plan_participants", False):
+            return None
+        annotated = getattr(obj, "assignee_count", None)
+        if annotated is not None:
+            return annotated
+        return obj.employee_assignments.count()
+
     def validate(self, attrs):
+        # Assignment-only updates are allowed on Published versions.
+        request = self.context.get("request")
+        incoming = set((request.data or {}).keys()) if request is not None else set()
+        assignment_only = incoming and incoming.issubset(
+            {
+                "assigned_employee_ids",
+                "assigned_employees",
+                "apply_to_all_plan_participants",
+            }
+        )
+
         version = attrs.get("plan_version") or getattr(self.instance, "plan_version", None)
-        if version is not None and version.status != CommissionPlanVersion.STATUS_DRAFT:
+        if (
+            not assignment_only
+            and version is not None
+            and version.status != CommissionPlanVersion.STATUS_DRAFT
+        ):
             raise serializers.ValidationError(
                 f"Cannot modify rules on {version.status} version "
                 f"{version.version_number}. Clone the version to edit."
             )
+
+        apply_all = attrs.get(
+            "apply_to_all_plan_participants",
+            getattr(self.instance, "apply_to_all_plan_participants", False)
+            if self.instance is not None
+            else False,
+        )
+        if request is not None and "apply_to_all_plan_participants" in (request.data or {}):
+            apply_all = bool(request.data.get("apply_to_all_plan_participants"))
+
+        # Plan-wide rules do not require individual assignees.
+        if apply_all:
+            return attrs
+
+        # Require at least one assignee when creating, or when the client
+        # explicitly sends assigned_employee_ids on update.
+        if request is not None and "assigned_employee_ids" in (request.data or {}):
+            ids = request.data.get("assigned_employee_ids")
+            if not isinstance(ids, list) or len(ids) == 0:
+                raise serializers.ValidationError(
+                    {
+                        "assigned_employee_ids": (
+                            "Select at least one employee, or enable "
+                            "“Apply to all plan participants”."
+                        )
+                    }
+                )
+        elif self.instance is None:
+            ids = attrs.get("assigned_employee_ids")
+            if ids is not None and len(ids) == 0:
+                raise serializers.ValidationError(
+                    {
+                        "assigned_employee_ids": (
+                            "Select at least one employee, or enable "
+                            "“Apply to all plan participants”."
+                        )
+                    }
+                )
+
         return attrs
 
     def _sync_children(self, rule, conditions=None, results=None):
@@ -253,18 +333,52 @@ class CommissionRuleSerializer(serializers.ModelSerializer):
             for row in results:
                 CommissionRuleResult.objects.create(rule=rule, **row)
 
+    def _sync_assignments(self, rule, employee_ids):
+        if employee_ids is None:
+            return
+        from .rule_assignments import sync_rule_assignments
+
+        request = self.context.get("request")
+        org = getattr(request, "organization", None) if request else None
+        user = getattr(request, "user", None) if request else None
+        sync_rule_assignments(
+            rule,
+            employee_ids,
+            organization=org or getattr(rule, "organization", None),
+            assigned_by=user if getattr(user, "is_authenticated", False) else None,
+        )
+
+    def _clear_assignments(self, rule):
+        EmployeeCommissionRuleAssignment.objects.filter(rule=rule).delete()
+
     @transaction.atomic
     def create(self, validated_data):
         conditions = validated_data.pop("conditions", [])
         results = validated_data.pop("results", [])
+        employee_ids = validated_data.pop("assigned_employee_ids", None)
+        apply_all = bool(validated_data.get("apply_to_all_plan_participants", False))
+        if not apply_all and not employee_ids:
+            raise serializers.ValidationError(
+                {
+                    "assigned_employee_ids": (
+                        "Select at least one employee, or enable "
+                        "“Apply to all plan participants”."
+                    )
+                }
+            )
         rule = CommissionRule.objects.create(**validated_data)
         self._sync_children(rule, conditions, results)
+        if apply_all:
+            self._clear_assignments(rule)
+        else:
+            self._sync_assignments(rule, employee_ids)
         return rule
 
     @transaction.atomic
     def update(self, instance, validated_data):
         conditions = validated_data.pop("conditions", None)
         results = validated_data.pop("results", None)
+        employee_ids = validated_data.pop("assigned_employee_ids", None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -274,6 +388,10 @@ class CommissionRuleSerializer(serializers.ModelSerializer):
                 conditions if conditions is not None else None,
                 results if results is not None else None,
             )
+        if instance.apply_to_all_plan_participants:
+            self._clear_assignments(instance)
+        elif employee_ids is not None:
+            self._sync_assignments(instance, employee_ids)
         return instance
 
 

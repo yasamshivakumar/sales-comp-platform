@@ -270,6 +270,10 @@ def apply_commission_rules(
     """
     Evaluate plan rules after SCRateTable base calculation.
 
+    Strict employee assignment: only rules linked to this employee via
+    EmployeeCommissionRuleAssignment are considered. Employees with no
+    assignments receive no plan rules (base amount unchanged).
+
     Rules run in hierarchy order — territory (priority 2), business unit (3),
     role (4), then plan default (5) — so the most specific rule wins. Priority
     1 belongs to employee overrides, which are applied before this runs.
@@ -288,16 +292,51 @@ def apply_commission_rules(
     if not plan:
         return amount, credit, matched_rule, metadata
 
+    if user_profile is None or not getattr(user_profile, "pk", None):
+        if trace is not None:
+            trace.append(
+                {
+                    "stage": "commission_rules",
+                    "assignment_mode": "employee",
+                    "skipped": "no_employee",
+                }
+            )
+        return amount, credit, matched_rule, metadata
+
+    from .rule_assignments import valid_assigned_rule_ids_for_employee
+
+    assigned_rule_ids = valid_assigned_rule_ids_for_employee(user_profile)
+    if not assigned_rule_ids.exists():
+        if trace is not None:
+            trace.append(
+                {
+                    "stage": "commission_rules",
+                    "assignment_mode": "employee",
+                    "rules_considered": 0,
+                    "skipped": "no_valid_assignments",
+                }
+            )
+        return amount, credit, matched_rule, metadata
+
     context = build_rule_context(order, user_profile, plan)
     if version is not None:
         rule_filter = {"plan_version": version, "is_active": True}
     else:
         rule_filter = {"compensation_plan": plan, "is_active": True}
     rules = (
-        CommissionRule.objects.filter(**rule_filter)
+        CommissionRule.objects.filter(**rule_filter, id__in=assigned_rule_ids)
         .prefetch_related("conditions", "results")
         .order_by("priority", "sequence", "id")
     )
+
+    if trace is not None:
+        trace.append(
+            {
+                "stage": "commission_rules",
+                "assignment_mode": "employee",
+                "rules_considered": rules.count(),
+            }
+        )
 
     for rule in rules:
         if not rule_is_effective(rule, getattr(order, "order_date", None)):

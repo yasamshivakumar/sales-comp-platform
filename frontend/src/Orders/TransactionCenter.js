@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
+import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
+import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import api, { getApiErrorMessage } from "../api";
 import { useToast } from "../Components/Toast";
 import LoadingCenter from "../Components/LoadingCenter";
+import { ImportDrawer } from "../Components/Import";
+import { ORDERS_IMPORT_CONFIG } from "../Components/Import/importConfigs";
+import { PageShell } from "../Components/enterprise";
 import TransactionKpis from "./TransactionKpis";
 import TransactionActionCenter from "./TransactionActionCenter";
 import TransactionDataGrid from "./TransactionDataGrid";
@@ -27,6 +33,7 @@ const EMPTY_FILTERS = {
 
 function TransactionCenter({ refreshKey = 0 }) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { success, error, warning } = useToast();
   const [orders, setOrders] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -37,6 +44,7 @@ function TransactionCenter({ refreshKey = 0 }) {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [busy, setBusy] = useState(false);
   const [actionBanner, setActionBanner] = useState(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const queryParams = useMemo(() => {
     const params = {};
@@ -172,26 +180,56 @@ function TransactionCenter({ refreshKey = 0 }) {
     ([k, v]) => k !== "q" && v !== "" && v != null
   ).length;
 
-  return (
-    <div className="tx-console">
-      <header className="tx-header">
-        <div>
-          <p className="tx-header__eyebrow">Orders</p>
-          <h1 className="tx-header__title">Orders Center</h1>
-          <p className="tx-header__sub">
-            Manage sales orders, validate credits, and trigger commission calculations.
-          </p>
-        </div>
-        <div className="tx-header__actions">
-          <Link className="cp-btn-ghost" to="/orders/import">
-            Import CSV
-          </Link>
-          <button type="button" className="btn-primary" onClick={() => navigate("/orders/new")}>
-            + Create order
-          </button>
-        </div>
-      </header>
+  useEffect(() => {
+    if (searchParams.get("import") === "1") {
+      setImportOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete("import");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
+  const openImport = () => setImportOpen(true);
+
+  const downloadTemplate = () => {
+    const a = document.createElement("a");
+    a.href = "/orders_template.csv";
+    a.download = "orders_template.csv";
+    a.click();
+  };
+
+  return (
+    <PageShell
+      className="tx-console"
+      breadcrumbs={[{ label: "Incentra", to: "/dashboard" }, { label: "Orders" }]}
+      title="Transaction Center"
+      subtitle="Manage orders, deals, and revenue transactions."
+      primaryAction={
+        <button type="button" className="btn-primary" onClick={() => navigate("/orders/new")}>
+          + Create order
+        </button>
+      }
+      overflowItems={[
+        {
+          id: "import",
+          label: "Import Orders",
+          icon: <UploadFileOutlinedIcon fontSize="small" />,
+          onClick: openImport,
+        },
+        {
+          id: "template",
+          label: "Download Template",
+          icon: <DownloadOutlinedIcon fontSize="small" />,
+          onClick: downloadTemplate,
+        },
+        {
+          id: "export",
+          label: "Export Orders",
+          icon: <FileDownloadOutlinedIcon fontSize="small" />,
+          onClick: exportSelected,
+        },
+      ]}
+    >
       <TransactionKpis
         summary={summary}
         loading={loading && !summary}
@@ -270,7 +308,21 @@ function TransactionCenter({ refreshKey = 0 }) {
         onChange={setFilters}
         onClear={() => setFilters(EMPTY_FILTERS)}
       />
-    </div>
+
+      <ImportDrawer
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        config={ORDERS_IMPORT_CONFIG}
+        onImported={(result) => {
+          if ((result?.imported || 0) > 0) {
+            success(`${result.imported} order(s) imported`);
+          } else if ((result?.failed || 0) > 0) {
+            warning("Import finished with errors — download the error report for details");
+          }
+          load();
+        }}
+      />
+    </PageShell>
   );
 }
 

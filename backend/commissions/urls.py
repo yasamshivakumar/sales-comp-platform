@@ -13,6 +13,10 @@ from .rule_views import (
     CommissionRuleListCreateView,
     CommissionRuleDetailView,
     commission_rule_choices,
+    commission_rule_employees,
+    commission_rule_eligible_employees,
+    commission_rule_invalid_assignments,
+    employee_commission_rules,
 )
 from .plan_version_views import (
     PlanVersionListView,
@@ -458,9 +462,34 @@ urlpatterns = [
         name="commission-rule-choices",
     ),
     path(
+        "commission-rules/eligible-employees/",
+        commission_rule_eligible_employees,
+        name="commission-rule-eligible-employees",
+    ),
+    path(
+        "commission-rules/invalid-assignments/",
+        commission_rule_invalid_assignments,
+        name="commission-rule-invalid-assignments",
+    ),
+    path(
         "commission-rules/<int:pk>/",
         CommissionRuleDetailView.as_view(),
         name="commission-rule-detail",
+    ),
+    path(
+        "commission-rules/<int:pk>/employees/",
+        commission_rule_employees,
+        name="commission-rule-employees",
+    ),
+    path(
+        "user-setup/<int:pk>/commission-rules/",
+        employee_commission_rules,
+        name="employee-commission-rules",
+    ),
+    path(
+        "employees/<int:pk>/commission-rules/",
+        employee_commission_rules,
+        name="employees-commission-rules",
     ),
     path("user-setup/", UserProfileListCreateView.as_view(), name="user-setup"),
     path("user-setup/summary/", views.PeopleSummaryView.as_view(), name="people-summary"),

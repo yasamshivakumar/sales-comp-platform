@@ -232,7 +232,9 @@ def copy_version_children(source, target):
             is_active=row.is_active,
         )
 
-    for rule in source.commission_rules.prefetch_related("conditions", "results"):
+    for rule in source.commission_rules.prefetch_related(
+        "conditions", "results", "employee_assignments"
+    ):
         new_rule = CommissionRule.objects.create(
             organization_id=rule.organization_id,
             compensation_plan=plan,
@@ -247,6 +249,9 @@ def copy_version_children(source, target):
             effective_end_date=rule.effective_end_date,
             active_start_date=rule.active_start_date,
             active_end_date=rule.active_end_date,
+            scope=getattr(rule, "scope", CommissionRule.SCOPE_PLAN_DEFAULT),
+            priority=getattr(rule, "priority", 5),
+            condition_logic=getattr(rule, "condition_logic", CommissionRule.LOGIC_AND),
             sequence=rule.sequence,
             is_active=rule.is_active,
             stop_on_match=rule.stop_on_match,
@@ -267,6 +272,20 @@ def copy_version_children(source, target):
                 if field.name not in ("id", "rule")
             }
             CommissionRuleResult.objects.create(rule=new_rule, **fields)
+        from .models import EmployeeCommissionRuleAssignment
+
+        EmployeeCommissionRuleAssignment.objects.bulk_create(
+            [
+                EmployeeCommissionRuleAssignment(
+                    organization_id=row.organization_id,
+                    employee_id=row.employee_id,
+                    rule=new_rule,
+                    assigned_by_id=row.assigned_by_id,
+                )
+                for row in rule.employee_assignments.all()
+            ],
+            ignore_conflicts=True,
+        )
 
     for quota in source.quotas.all():
         PlanVersionQuota.objects.create(

@@ -1,10 +1,34 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  IconButton,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
+  Tooltip,
+} from "@mui/material";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
+import PersonOutlinedIcon from "@mui/icons-material/PersonOutlined";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
+import PaymentsOutlinedIcon from "@mui/icons-material/PaymentsOutlined";
+import ShoppingBagOutlinedIcon from "@mui/icons-material/ShoppingBagOutlined";
+import BlockOutlinedIcon from "@mui/icons-material/BlockOutlined";
+import {
+  CompensationPlanChip,
+  EmployeeIdentityCell,
+  EmptyValue,
+  RelativeTime,
+  RoleChip,
+  SoftChip,
+  StatusChip,
+} from "./enterprise/peopleCells";
+import EmployeeSummaryCard from "./enterprise/EmployeeSummaryCard";
 
 const ALL_COLUMNS = [
   { key: "employee", label: "Employee", always: true },
-  { key: "employee_id", label: "Employee ID" },
-  { key: "email", label: "Email" },
   { key: "role", label: "Role" },
   { key: "position", label: "Position" },
   { key: "department", label: "Department" },
@@ -19,18 +43,30 @@ const ALL_COLUMNS = [
   { key: "actions", label: "Actions", always: true, sortable: false },
 ];
 
-const STORAGE_KEY = "pe-directory-columns-v1";
+const STORAGE_KEY = "pe-directory-columns-v2";
 
 function loadVisibleColumns() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return ALL_COLUMNS.map((c) => c.key);
+    if (!raw) {
+      return [
+        "employee",
+        "role",
+        "manager_name",
+        "status",
+        "compensation_plan",
+        "quota",
+        "territory_name",
+        "last_login",
+        "actions",
+      ];
+    }
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return ALL_COLUMNS.map((c) => c.key);
     const allowed = new Set(ALL_COLUMNS.map((c) => c.key));
     const next = parsed.filter((k) => allowed.has(k));
     ALL_COLUMNS.filter((c) => c.always).forEach((c) => {
-      if (!next.includes(c.key)) next.unshift(c.key);
+      if (!next.includes(c.key)) next.push(c.key);
     });
     return next.length ? next : ALL_COLUMNS.map((c) => c.key);
   } catch {
@@ -38,41 +74,161 @@ function loadVisibleColumns() {
   }
 }
 
-function StatusBadge({ code, label }) {
-  const tone =
-    code === "active" || code === "plan_assigned"
-      ? "success"
-      : code === "pending_activation" || code === "invited"
-        ? "warning"
-        : code === "suspended" || code === "inactive"
-          ? "danger"
-          : "neutral";
-  return <span className={`pe-badge pe-badge--${tone}`}>{label || code}</span>;
+function RowActionsMenu({ person, onPreview, onDeactivate }) {
+  const [anchor, setAnchor] = useState(null);
+  const navigate = useNavigate();
+  const open = Boolean(anchor);
+  const close = () => setAnchor(null);
+  const go = (path) => {
+    close();
+    navigate(path);
+  };
+
+  return (
+    <>
+      <Tooltip title="Preview">
+        <IconButton
+          size="small"
+          aria-label={`Preview ${person.display_name || person.name}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onPreview?.(person);
+          }}
+        >
+          <VisibilityOutlinedIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <Tooltip title="More actions">
+        <IconButton
+          size="small"
+          aria-label="More actions"
+          aria-haspopup="menu"
+          onClick={(e) => {
+            e.stopPropagation();
+            setAnchor(e.currentTarget);
+          }}
+        >
+          <MoreVertIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <Menu
+        anchorEl={anchor}
+        open={open}
+        onClose={close}
+        onClick={(e) => e.stopPropagation()}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <MenuItem onClick={() => go(`/user-setup/${person.id}/overview`)}>
+          <ListItemIcon>
+            <PersonOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>View profile</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => go(`/user-setup/${person.id}/organization`)}>
+          <ListItemIcon>
+            <EditOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Edit employee</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => go(`/user-setup/${person.id}/compensation`)}>
+          <ListItemIcon>
+            <AccountTreeOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Assign compensation plan</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => go(`/user-setup/${person.id}/organization`)}>
+          <ListItemIcon>
+            <EditOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Assign manager</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => go(`/user-setup/${person.id}/commissions`)}>
+          <ListItemIcon>
+            <PaymentsOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>View commission history</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => go(`/user-setup/${person.id}/transactions`)}>
+          <ListItemIcon>
+            <ShoppingBagOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>View orders</ListItemText>
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            close();
+            onDeactivate?.(person);
+          }}
+        >
+          <ListItemIcon>
+            <BlockOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Deactivate</ListItemText>
+        </MenuItem>
+      </Menu>
+    </>
+  );
 }
 
-function formatDate(value) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return String(value);
-  return d.toLocaleDateString();
-}
-
-function cellValue(person, key) {
+function renderCell(person, key, { onPreview }) {
   switch (key) {
     case "employee":
-      return person.display_name || person.name || "—";
+      return (
+        <EmployeeIdentityCell
+          person={person}
+          onOpen={() => onPreview?.(person)}
+        />
+      );
+    case "role":
+      return <RoleChip role={person.role} />;
+    case "position":
+      return <SoftChip value={person.position || person.position_title} empty="No position" />;
+    case "department":
+      return person.department ? (
+        <span className="pe-muted-text">{person.department}</span>
+      ) : (
+        <EmptyValue label="No department" />
+      );
+    case "manager_name":
+      return person.manager_name ? (
+        <span className="pe-linkish">{person.manager_name}</span>
+      ) : (
+        <EmptyValue label="No manager" />
+      );
+    case "business_unit":
+      return (
+        <SoftChip
+          value={person.business_unit || person.business_group}
+          empty="No business unit"
+        />
+      );
+    case "region":
+      return <SoftChip value={person.region} empty="No region" />;
+    case "territory_name":
+      return person.territory_name ? (
+        <span className="pe-tag">{person.territory_name}</span>
+      ) : (
+        <EmptyValue label="No territory" />
+      );
     case "status":
-      return <StatusBadge code={person.status} label={person.status_label} />;
+      return <StatusChip code={person.status} label={person.status_label} />;
     case "compensation_plan":
-      return person.compensation_plan || person.assigned_plan_name || "—";
+      return (
+        <CompensationPlanChip
+          plan={person.compensation_plan || person.assigned_plan_name}
+        />
+      );
     case "quota":
-      return person.quota_display || person.quota || "—";
+      return person.quota_display || person.quota ? (
+        <strong className="pe-quota">{person.quota_display || person.quota}</strong>
+      ) : (
+        <EmptyValue label="No quota" />
+      );
     case "last_login":
-      return formatDate(person.last_login);
-    case "actions":
-      return null;
+      return <RelativeTime value={person.last_login} />;
     default:
-      return person[key] || "—";
+      return person[key] || <EmptyValue />;
   }
 }
 
@@ -136,7 +292,10 @@ function PeopleDataGrid({
   pageSize,
   total,
   onPageChange,
+  onPreview,
+  onDeactivate,
 }) {
+  const navigate = useNavigate();
   const allSelected = people.length > 0 && people.every((p) => selectedIds.has(p.id));
   const totalPages = Math.max(1, Math.ceil((total || 0) / (pageSize || 50)));
 
@@ -152,10 +311,13 @@ function PeopleDataGrid({
     return "";
   };
 
+  const cell = (person, key) => renderCell(person, key, { onPreview });
+  const showSkeleton = loading && people.length === 0;
+
   return (
-    <section className="pe-grid">
+    <section className="pe-grid pe-grid--enterprise">
       <div className="pe-grid__wrap">
-        <table className="pe-table pe-table--enterprise">
+        <table className="pe-table pe-table--enterprise pe-table--rich">
           <thead>
             <tr>
               <th className="pe-table__check">
@@ -168,7 +330,10 @@ function PeopleDataGrid({
               </th>
               <th className="pe-table__expand" aria-label="Expand" />
               {columns.map((col) => (
-                <th key={col.key}>
+                <th
+                  key={col.key}
+                  className={col.key === "actions" ? "pe-table__actions-col" : undefined}
+                >
                   {col.sortable === false ? (
                     col.label
                   ) : (
@@ -186,14 +351,24 @@ function PeopleDataGrid({
             </tr>
           </thead>
           <tbody>
-            {people.length === 0 ? (
+            {showSkeleton
+              ? Array.from({ length: 6 }).map((_, idx) => (
+                  <tr key={`skel-${idx}`} className="pe-skel-row" aria-hidden>
+                    <td colSpan={columns.length + 2}>
+                      <span className="pe-skel-bar" style={{ width: `${70 - idx * 6}%` }} />
+                    </td>
+                  </tr>
+                ))
+              : null}
+            {!showSkeleton && people.length === 0 ? (
               <tr>
                 <td colSpan={columns.length + 2} className="pe-table__empty">
-                  {loading ? "Loading participants…" : "No people match this view."}
+                  No people match this view.
                 </td>
               </tr>
-            ) : (
-              people.map((person) => {
+            ) : null}
+            {!showSkeleton
+              ? people.map((person) => {
                 const open = expandedId === person.id;
                 return (
                   <Fragment key={person.id}>
@@ -206,65 +381,85 @@ function PeopleDataGrid({
                           type="checkbox"
                           checked={selectedIds.has(person.id)}
                           onChange={() => onToggleOne(person.id)}
-                          aria-label={`Select ${person.display_name}`}
+                          aria-label={`Select ${person.display_name || person.name}`}
                         />
                       </td>
                       <td className="pe-table__expand">{open ? "▾" : "▸"}</td>
                       {columns.map((col) => {
                         if (col.key === "actions") {
                           return (
-                            <td key={col.key} onClick={(e) => e.stopPropagation()}>
-                              <Link
-                                className="pe-link"
-                                to={`/user-setup/${person.id}/overview`}
-                              >
-                                Open
-                              </Link>
+                            <td
+                              key={col.key}
+                              className="pe-table__actions-col"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="pe-row-actions">
+                                <RowActionsMenu
+                                  person={person}
+                                  onPreview={onPreview}
+                                  onDeactivate={onDeactivate}
+                                />
+                              </div>
                             </td>
                           );
                         }
-                        if (col.key === "employee") {
-                          return (
-                            <td key={col.key}>
-                              <strong>{person.display_name || person.name}</strong>
-                              <div className="pe-table__sub">{person.email}</div>
-                            </td>
-                          );
-                        }
-                        return <td key={col.key}>{cellValue(person, col.key)}</td>;
+                        return (
+                          <td key={col.key} className={col.key === "employee" ? "pe-td-employee" : undefined}>
+                            {cell(person, col.key)}
+                          </td>
+                        );
                       })}
                     </tr>
                     {open ? (
                       <tr className="pe-table__detail">
                         <td colSpan={columns.length + 2}>
-                          <div className="pe-expand">
+                          <div className="pe-expand pe-expand--rich">
                             <div>
-                              <span className="pe-expand__label">Plan</span>
+                              <span className="pe-expand__label">Manager</span>
+                              <strong>{person.manager_name || "No manager"}</strong>
+                            </div>
+                            <div>
+                              <span className="pe-expand__label">Department</span>
+                              <strong>{person.department || "No department"}</strong>
+                            </div>
+                            <div>
+                              <span className="pe-expand__label">Business unit</span>
                               <strong>
-                                {person.compensation_plan || person.assigned_plan_name || "—"}
+                                {person.business_unit || person.business_group || "Not assigned"}
                               </strong>
                             </div>
                             <div>
                               <span className="pe-expand__label">Quota</span>
-                              <strong>{person.quota_display || "—"}</strong>
+                              <strong>{person.quota_display || "No quota"}</strong>
+                            </div>
+                            <div>
+                              <span className="pe-expand__label">Compensation plan</span>
+                              <strong>
+                                {person.compensation_plan ||
+                                  person.assigned_plan_name ||
+                                  "Not assigned"}
+                              </strong>
                             </div>
                             <div>
                               <span className="pe-expand__label">Territory</span>
-                              <strong>{person.territory_name || "—"}</strong>
+                              <strong>{person.territory_name || "No territory"}</strong>
                             </div>
-                            <div>
-                              <span className="pe-expand__label">Invite</span>
-                              <strong>{person.invitation?.label || "—"}</strong>
-                            </div>
-                            <div>
-                              <span className="pe-expand__label">Method</span>
-                              <strong>{person.calculation_method || "—"}</strong>
-                            </div>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onPreview?.(person);
+                              }}
+                            >
+                              Quick preview
+                            </button>
                             <Link
                               className="btn-primary pe-expand__cta"
                               to={`/user-setup/${person.id}/compensation`}
+                              onClick={(e) => e.stopPropagation()}
                             >
-                              Participant profile
+                              Full profile
                             </Link>
                           </div>
                         </td>
@@ -273,10 +468,27 @@ function PeopleDataGrid({
                   </Fragment>
                 );
               })
-            )}
+              : null}
           </tbody>
         </table>
       </div>
+
+      <div className="pe-mobile-cards" aria-label="Participants">
+        {people.map((person) => (
+          <EmployeeSummaryCard
+            key={person.id}
+            person={person}
+            selected={selectedIds.has(person.id)}
+            onToggle={onToggleOne}
+            onPreview={onPreview}
+            onOpenProfile={(p) => navigate(`/user-setup/${p.id}/overview`)}
+          />
+        ))}
+        {!loading && people.length === 0 ? (
+          <p className="pe-table__empty">No people match this view.</p>
+        ) : null}
+      </div>
+
       <div className="pe-pager">
         <span>
           {loading
@@ -307,4 +519,4 @@ function PeopleDataGrid({
 }
 
 export default PeopleDataGrid;
-export { ALL_COLUMNS, StatusBadge };
+export { ALL_COLUMNS, StatusChip as StatusBadge };

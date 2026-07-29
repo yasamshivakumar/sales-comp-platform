@@ -1,0 +1,188 @@
+.ent-page {
+  width: 100%;
+  min-width: 0;
+}
+.ent-page__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color, rgba(15, 23, 42, 0.08));
+}
+.ent-page__titles {
+  min-width: 0;
+  flex: 1 1 240px;
+}
+.ent-page__title {
+  margin: 0 !important;
+  letter-spacing: -0.02em;
+}
+.ent-page__subtitle {
+  margin: 6px 0 0 !important;
+  max-width: 720px;
+}
+.ent-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.ent-page__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color, rgba(15, 23, 42, 0.08));
+  background: var(--surface, rgba(255, 255, 255, 0.55));
+  backdrop-filter: blur(10px);
+  transition: box-shadow 200ms ease, border-color 200ms ease;
+}
+.ent-page__body {
+  min-width: 0;
+}
+.ent-page--dense .ent-page__header {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+}
+
+.ent-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.ent-kpi {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 112px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color, rgba(15, 23, 42, 0.08));
+  background: var(--surface, rgba(255, 255, 255, 0.72));
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: default;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+button.ent-kpi {
+  cursor: pointer;
+}
+.ent-kpi:hover,
+.ent-kpi.is-active {
+  transform: translateY(-1px);
+  border-color: var(--primary-color, #0176d3);
+  box-shadow: 0 8px 24px rgba(1, 118, 211, 0.12);
+}
+.ent-kpi__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  margin-bottom: 2px;
+  color: var(--primary-color, #0176d3);
+  background: rgba(1, 118, 211, 0.1);
+}
+.ent-kpi--success .ent-kpi__icon {
+  color: #067647;
+  background: rgba(6, 118, 71, 0.12);
+}
+.ent-kpi--warning .ent-kpi__icon {
+  color: #b54708;
+  background: rgba(181, 71, 8, 0.12);
+}
+.ent-kpi--danger .ent-kpi__icon {
+  color: #b42318;
+  background: rgba(180, 35, 24, 0.12);
+}
+.ent-kpi--teal .ent-kpi__icon {
+  color: #0b827c;
+  background: rgba(11, 130, 124, 0.12);
+}
+.ent-kpi__label {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, #64748b) !important;
+}
+.ent-kpi__value {
+  font-size: 1.35rem !important;
+  font-weight: 800 !important;
+  line-height: 1.2 !important;
+  font-variant-numeric: tabular-nums;
+}
+.ent-kpi__sub,
+.ent-kpi__trend {
+  font-size: 11px;
+  color: var(--text-muted, #64748b);
+}
+.ent-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 48px 24px;
+  border-radius: 14px;
+  border: 1px dashed var(--border-color, rgba(15, 23, 42, 0.16));
+  background: rgba(148, 163, 184, 0.06);
+}
+.ent-empty--compact {
+  padding: 28px 16px;
+}
+.ent-empty__icon {
+  display: inline-flex;
+  color: var(--text-muted, #64748b);
+  opacity: 0.7;
+  margin-bottom: 12px;
+}
+.ent-empty__title {
+  margin: 0 0 6px !important;
+}
+.ent-empty__desc {
+  max-width: 420px;
+  margin: 0 !important;
+}
+
+.ent-card {
+  border-radius: 14px;
+  border: 1px solid var(--border-color, rgba(15, 23, 42, 0.08));
+  background: var(--surface, rgba(255, 255, 255, 0.72));
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  padding: 16px 18px;
+  transition: box-shadow 200ms ease, border-color 200ms ease;
+}
+.ent-card:hover {
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+[data-theme="dark"] .ent-kpi,
+[data-theme="dark"] .ent-page__toolbar,
+[data-theme="dark"] .ent-card,
+[data-theme="glass"] .ent-kpi,
+[data-theme="glass"] .ent-page__toolbar,
+[data-theme="glass"] .ent-card {
+  background: rgba(17, 28, 48, 0.55);
+  backdrop-filter: blur(12px);
+}
+@media (max-width: 720px) {
+  .ent-page__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ent-page__actions {
+    justify-content: flex-start;
+  }
+}

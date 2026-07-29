@@ -458,21 +458,40 @@ function CompensationTab({ person, onSave, busy }) {
   const [choices, setChoices] = useState({ override_types: [], value_units: [], approvers: [] });
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null); // null | 'create' | override object
+  const [assignedRules, setAssignedRules] = useState([]);
+  const [rulesError, setRulesError] = useState("");
 
   const loadCompensation = useCallback(async () => {
     setLoading(true);
+    setRulesError("");
     try {
-      const [compRes, choiceRes, planRes] = await Promise.all([
+      const [compRes, choiceRes, planRes, rulesRes] = await Promise.all([
         api.get(`user-setup/${person.id}/compensation/`),
         api.get("compensation-overrides/choices/"),
         api.get("compensation-plans/", { params: { page_size: 100, status: "Active" } }),
+        api.get(`user-setup/${person.id}/commission-rules/`).catch(() => null),
       ]);
       setComp(compRes.data);
       setChoices(choiceRes.data || {});
       const data = planRes.data;
       setPlans(Array.isArray(data) ? data : data?.results || []);
+      if (rulesRes?.data) {
+        const rows = Array.isArray(rulesRes.data?.results)
+          ? rulesRes.data.results
+          : Array.isArray(rulesRes.data)
+            ? rulesRes.data
+            : [];
+        setAssignedRules(rows);
+      } else {
+        setAssignedRules(
+          compRes.data?.assigned_commission_rules ||
+            compRes.data?.effective_rules ||
+            []
+        );
+      }
     } catch (err) {
       error(getApiErrorMessage(err, "Failed to load compensation"));
+      setRulesError(getApiErrorMessage(err, "Failed to load commission rules"));
     } finally {
       setLoading(false);
     }
@@ -518,10 +537,37 @@ function CompensationTab({ person, onSave, busy }) {
   }
 
   const assigned = comp?.assigned_plan;
-  const rules = comp?.effective_rules || [];
   const overrides = comp?.overrides || [];
   const history = comp?.history || [];
   const activeOverrides = overrides.filter((row) => row.is_active_now);
+
+  const formatRuleRate = (rule) => {
+    const results = rule.results || [];
+    if (!results.length) return "—";
+    return results
+      .map((r) => {
+        const label = r.rate_type_label || r.rate_type || "Result";
+        if (r.rate_value == null || r.rate_value === "") return label;
+        const isPct =
+          String(r.rate_type || "").includes("pct") ||
+          String(r.rate_type || "") === "percentage" ||
+          String(r.rate_type_label || "").toLowerCase().includes("%");
+        return `${label}: ${r.rate_value}${isPct ? "%" : ""}`;
+      })
+      .join(", ");
+  };
+
+  const formatRuleConditions = (rule) => {
+    const conditions = rule.conditions || [];
+    if (!conditions.length) return "All Orders";
+    const joiner = rule.condition_logic === "or" ? " OR " : " AND ";
+    return conditions
+      .map(
+        (c) =>
+          `${c.field_label || c.field} ${c.operator_label || c.operator} ${c.value || ""}`.trim()
+      )
+      .join(joiner);
+  };
 
   return (
     <div className="pe-tab pe-comp-tab">
@@ -604,60 +650,91 @@ function CompensationTab({ person, onSave, busy }) {
       </section>
 
       <section className="pe-comp-section">
-        <h3>Current Commission Rules</h3>
-        <p className="pe-muted">
-          Plan defaults evaluated after any active employee override (priority 1). Rules run by
-          hierarchy: Territory → Business Unit → Role → Plan Default.
-        </p>
-        {rules.length === 0 ? (
-          <p className="pe-muted">No active rules on the assigned plan.</p>
-        ) : (
-          <div className="enterprise-table-wrap">
-            <table className="enterprise-table pe-comp-table">
-              <thead>
-                <tr>
-                  <th>Rule</th>
-                  <th>Scope</th>
-                  <th>Priority</th>
-                  <th>Type</th>
-                  <th>Result</th>
-                  <th>Logic</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rules.map((rule) => (
-                  <tr key={rule.id}>
-                    <td>
-                      <strong>{rule.name}</strong>
-                      {rule.conditions?.length ? (
-                        <div className="pe-table__sub">
-                          {rule.conditions
-                            .map(
-                              (c) =>
-                                `${c.field_label || c.field} ${c.operator} ${c.value || ""}`.trim()
-                            )
-                            .join(rule.condition_logic === "or" ? " OR " : " AND ")}
-                        </div>
-                      ) : null}
-                    </td>
-                    <td>{rule.scope_label || rule.scope}</td>
-                    <td>{rule.priority}</td>
-                    <td>{rule.rule_type_label || rule.rule_type}</td>
-                    <td>
-                      {(rule.results || [])
-                        .map((r) =>
-                          r.rate_value != null
-                            ? `${r.rate_type_label || r.rate_type}: ${r.rate_value}`
-                            : r.name
-                        )
-                        .join(", ") || "—"}
-                    </td>
-                    <td>{(rule.condition_logic || "and").toUpperCase()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="pe-comp-section__head">
+          <div>
+            <h3>Commission Rules</h3>
+            <p className="pe-muted">
+              Rules explicitly assigned to this employee from Commission Rules. Updates appear
+              when you open or refresh this tab.
+            </p>
           </div>
+          <NavLink className="btn-secondary" to="/commission-rules">
+            Manage rules
+          </NavLink>
+        </div>
+
+        {loading ? (
+          <p className="pe-muted">Loading commission rules…</p>
+        ) : rulesError ? (
+          <p className="pe-muted pe-comp-rules-error">{rulesError}</p>
+        ) : assignedRules.length === 0 ? (
+          <div className="pe-comp-empty">
+            <span>No commission rules are assigned to this employee.</span>
+            <NavLink className="btn-secondary" to="/commission-rules">
+              Open Commission Rules
+            </NavLink>
+          </div>
+        ) : (
+          <ul className="pe-rule-list">
+            {assignedRules.map((rule) => (
+              <li key={rule.id} className="pe-rule-card">
+                <div className="pe-rule-card__title">
+                  <strong>✓ {rule.name}</strong>
+                    <span
+                      className={`pe-rule-card__status ${
+                        rule.is_active === false ? "is-inactive" : "is-active"
+                      }`}
+                    >
+                      {rule.status || (rule.is_active === false ? "Inactive" : "Active")}
+                    </span>
+                  </div>
+                  {rule.assignment_source === "plan_participants" ||
+                  rule.apply_to_all_plan_participants ? (
+                    <p className="pe-muted" style={{ marginTop: 0, marginBottom: 10 }}>
+                      Applies to all participants on this Compensation Plan
+                    </p>
+                  ) : null}
+                <dl className="pe-rule-card__meta">
+                  <div>
+                    <dt>Compensation Plan</dt>
+                    <dd>{rule.compensation_plan_name || assigned?.name || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt>Rule Type</dt>
+                    <dd>{rule.rule_type_label || rule.rule_type || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt>Commission Rate / Result</dt>
+                    <dd>{formatRuleRate(rule)}</dd>
+                  </div>
+                  <div>
+                    <dt>Conditions</dt>
+                    <dd>{formatRuleConditions(rule)}</dd>
+                  </div>
+                  <div>
+                    <dt>Valid From</dt>
+                    <dd>{formatDateShort(rule.effective_start_date)}</dd>
+                  </div>
+                  <div>
+                    <dt>Valid To</dt>
+                    <dd>
+                      {rule.effective_end_date
+                        ? formatDateShort(rule.effective_end_date)
+                        : "Open"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Created</dt>
+                    <dd>{formatDateShort(rule.created_at)}</dd>
+                  </div>
+                  <div>
+                    <dt>Assigned</dt>
+                    <dd>{formatDateShort(rule.assigned_at)}</dd>
+                  </div>
+                </dl>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
 

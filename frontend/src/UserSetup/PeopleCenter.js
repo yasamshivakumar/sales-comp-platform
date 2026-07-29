@@ -1,9 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
+import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
+import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
+import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import MarkEmailUnreadOutlinedIcon from "@mui/icons-material/MarkEmailUnreadOutlined";
+import SupervisorAccountOutlinedIcon from "@mui/icons-material/SupervisorAccountOutlined";
+import TrendingUpOutlinedIcon from "@mui/icons-material/TrendingUpOutlined";
+import PersonOffOutlinedIcon from "@mui/icons-material/PersonOffOutlined";
 import api, { getApiErrorMessage } from "../api";
 import { useToast } from "../Components/Toast";
-import LoadingCenter from "../Components/LoadingCenter";
+import { PageShell } from "../Components/enterprise";
+import { ImportDrawer, OverflowActionsMenu } from "../Components/Import";
+import { PEOPLE_IMPORT_CONFIG } from "../Components/Import/importConfigs";
 import PeopleDataGrid, { PeopleColumnPicker, usePeopleColumns } from "./PeopleDataGrid";
+import EmployeeDrawer from "./enterprise/EmployeeDrawer";
+import BulkActionBar from "./enterprise/BulkActionBar";
+import EnterpriseToolbar from "./enterprise/EnterpriseToolbar";
 
 const PAGE_SIZE = 50;
 
@@ -30,16 +45,56 @@ const SAVED_VIEWS = [
 ];
 
 const KPI_DEFS = [
-  { key: "total_employees", label: "Total Employees", view: "all" },
-  { key: "active_users", label: "Active Users", tone: "success" },
-  { key: "pending_invitations", label: "Pending Invitations", tone: "warning", view: "pending" },
-  { key: "inactive_users", label: "Inactive Users", view: "inactive" },
-  { key: "admins", label: "Admins" },
-  { key: "sales_participants", label: "Sales Participants", tone: "teal", view: "sales" },
+  {
+    key: "total_employees",
+    label: "Total Participants",
+    subtitle: "All people in this company",
+    view: "all",
+    Icon: GroupsOutlinedIcon,
+  },
+  {
+    key: "active_users",
+    label: "Active Participants",
+    subtitle: "Active & plan assigned",
+    tone: "success",
+    Icon: CheckCircleIcon,
+  },
+  {
+    key: "pending_invitations",
+    label: "Pending Invitations",
+    subtitle: "Awaiting activation",
+    tone: "warning",
+    view: "pending",
+    Icon: MarkEmailUnreadOutlinedIcon,
+  },
+  {
+    key: "managers",
+    label: "Managers",
+    subtitle: "People leaders",
+    view: "managers",
+    Icon: SupervisorAccountOutlinedIcon,
+  },
+  {
+    key: "sales_participants",
+    label: "Sales Participants",
+    subtitle: "Quota-carrying roles",
+    tone: "teal",
+    view: "sales",
+    Icon: TrendingUpOutlinedIcon,
+  },
+  {
+    key: "inactive_users",
+    label: "Inactive",
+    subtitle: "Suspended or inactive",
+    tone: "danger",
+    view: "inactive",
+    Icon: PersonOffOutlinedIcon,
+  },
 ];
 
 function PeopleCenter() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { success, error } = useToast();
   const { visible, setVisible, columns } = usePeopleColumns();
   const [people, setPeople] = useState([]);
@@ -48,12 +103,14 @@ function PeopleCenter() {
   const [viewId, setViewId] = useState("all");
   const [ordering, setOrdering] = useState("name");
   const [page, setPage] = useState(1);
+  const [importOpen, setImportOpen] = useState(false);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [expandedId, setExpandedId] = useState(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [drawerPersonId, setDrawerPersonId] = useState(null);
 
   const activeView = SAVED_VIEWS.find((v) => v.id === viewId) || SAVED_VIEWS[0];
 
@@ -157,132 +214,138 @@ function PeopleCenter() {
 
   const filterCount = Object.entries(filters).filter(([k, v]) => k !== "q" && v).length;
 
-  return (
-    <div className="pe-console">
-      <header className="pe-header">
-        <div>
-          <p className="pe-header__eyebrow">ICM Participant Management</p>
-          <h1 className="pe-header__title">Compensation Participant Center</h1>
-          <p className="pe-header__sub">
-            Manage employees, compensation assignment, quota attainment, hierarchy, and access.
-          </p>
-        </div>
-        <div className="pe-header__actions">
-          <Link className="cp-btn-ghost" to="/user-setup/import">
-            Upload Employees CSV
-          </Link>
-          <button type="button" className="btn-primary" onClick={() => navigate("/user-setup/new")}>
-            + Create person
-          </button>
-        </div>
-      </header>
+  useEffect(() => {
+    if (searchParams.get("import") === "1") {
+      setImportOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete("import");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
-      <section className="pe-kpis" aria-label="Summary">
-        <div className="pe-kpis__grid">
+  const downloadTemplate = () => {
+    const a = document.createElement("a");
+    a.href = "/user_setup_template.csv";
+    a.download = "user_setup_template.csv";
+    a.click();
+  };
+
+  return (
+    <PageShell
+      breadcrumbs={[
+        { label: "Incentra", to: "/dashboard" },
+        { label: "People & Access" },
+      ]}
+      title="Participant Management"
+      subtitle="Enterprise directory for employees, plans, quota, hierarchy, and access."
+      primaryAction={
+        <button type="button" className="btn-primary" onClick={() => navigate("/user-setup/new")}>
+          + Create person
+        </button>
+      }
+    >
+    <div className="pe-console pe-console--enterprise">
+      <section className="pe-kpis pe-kpis--executive" aria-label="Summary">
+        <div className="pe-kpis__grid pe-kpis__grid--exec">
           {KPI_DEFS.map((kpi) => {
             const raw = summary?.[kpi.key];
             const display = loading && !summary ? "—" : Number(raw || 0).toLocaleString();
+            const Icon = kpi.Icon;
             return (
               <button
                 type="button"
                 key={kpi.key}
-                className={`pe-kpi${kpi.tone ? ` pe-kpi--${kpi.tone}` : ""}`}
+                className={`pe-kpi pe-kpi--card${kpi.tone ? ` pe-kpi--${kpi.tone}` : ""}${
+                  kpi.view && viewId === kpi.view ? " is-active" : ""
+                }`}
                 onClick={() => kpi.view && setViewId(kpi.view)}
               >
+                <span className="pe-kpi__icon" aria-hidden>
+                  {Icon ? <Icon fontSize="small" /> : null}
+                </span>
                 <span className="pe-kpi__label">{kpi.label}</span>
                 <span className="pe-kpi__value">{display}</span>
+                <span className="pe-kpi__sub">{kpi.subtitle}</span>
               </button>
             );
           })}
         </div>
       </section>
 
-      <nav className="pe-views" aria-label="Saved views">
-        {SAVED_VIEWS.map((view) => (
-          <button
-            key={view.id}
-            type="button"
-            className={`pe-views__btn${viewId === view.id ? " is-active" : ""}`}
-            onClick={() => setViewId(view.id)}
-          >
-            {view.label}
-          </button>
-        ))}
-      </nav>
+      <EnterpriseToolbar
+        search={filters.q}
+        onSearchChange={(q) => setFilters((p) => ({ ...p, q }))}
+        filterCount={filterCount}
+        onOpenFilters={() => setFilterOpen(true)}
+        viewId={viewId}
+        views={SAVED_VIEWS}
+        onViewChange={setViewId}
+        ordering={ordering}
+        onOrderingChange={setOrdering}
+        columnPicker={<PeopleColumnPicker visible={visible} onChange={setVisible} />}
+        onRefresh={load}
+        refreshing={loading}
+        bulkDisabled={!selectedIds.size || busy}
+        bulkLabel={
+          selectedIds.size ? `Bulk actions (${selectedIds.size})` : "Bulk actions"
+        }
+        onBulkClick={() => {
+          if (!selectedIds.size) return;
+          document
+            .querySelector(".pe-bulk--float")
+            ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }}
+        createSlot={null}
+        overflowSlot={
+          <OverflowActionsMenu
+            ariaLabel="More people actions"
+            items={[
+              {
+                id: "import",
+                label: "Import Employees",
+                icon: <UploadFileOutlinedIcon fontSize="small" />,
+                onClick: () => setImportOpen(true),
+              },
+              {
+                id: "export",
+                label: "Export Employees",
+                icon: <FileDownloadOutlinedIcon fontSize="small" />,
+                onClick: () => bulk("export"),
+              },
+              {
+                id: "template",
+                label: "Download Template",
+                icon: <DownloadOutlinedIcon fontSize="small" />,
+                onClick: downloadTemplate,
+              },
+              {
+                id: "settings",
+                label: "Settings",
+                icon: <SettingsOutlinedIcon fontSize="small" />,
+                onClick: () => setFilterOpen(true),
+              },
+            ]}
+          />
+        }
+      />
 
-      <div className="pe-toolbar">
-        <input
-          type="search"
-          className="pe-toolbar__search"
-          placeholder="Search name, email, employee ID, manager, territory, plan…"
-          value={filters.q}
-          onChange={(e) => setFilters((p) => ({ ...p, q: e.target.value }))}
-          aria-label="Search people"
-        />
-        <PeopleColumnPicker visible={visible} onChange={setVisible} />
-        <button type="button" className="btn-secondary" onClick={() => setFilterOpen(true)}>
-          Filters{filterCount ? ` (${filterCount})` : ""}
-        </button>
-        <button type="button" className="btn-secondary" onClick={load} disabled={loading}>
-          Refresh
-        </button>
-      </div>
+      <BulkActionBar
+        count={selectedIds.size}
+        busy={busy}
+        onAssignPlan={() => {
+          const planName = window.prompt("Assign plan (exact plan name):");
+          if (planName) bulk("assign_plan", { plan_name: planName });
+        }}
+        onUpdateQuota={() => {
+          const quota = window.prompt("Update quota (numeric target):");
+          if (quota != null && quota !== "") bulk("update_quota", { quota });
+        }}
+        onDeactivate={() => bulk("deactivate")}
+        onExport={() => bulk("export")}
+        onClear={() => setSelectedIds(new Set())}
+      />
 
-      {selectedIds.size > 0 ? (
-        <div className="pe-bulk" role="toolbar">
-          <span>{selectedIds.size} selected</span>
-          <button
-            type="button"
-            className="btn-secondary"
-            disabled={busy}
-            onClick={() => {
-              const planName = window.prompt("Assign plan (exact plan name):");
-              if (planName) bulk("assign_plan", { plan_name: planName });
-            }}
-          >
-            Assign Plan
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            disabled={busy}
-            onClick={() => {
-              const quota = window.prompt("Update quota (numeric target):");
-              if (quota != null && quota !== "") bulk("update_quota", { quota });
-            }}
-          >
-            Update Quota
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            disabled={busy}
-            onClick={() => {
-              const territory = window.prompt("Change territory (name or code):");
-              if (territory) bulk("change_territory", { territory });
-            }}
-          >
-            Change Territory
-          </button>
-          <button type="button" className="btn-secondary" disabled={busy} onClick={() => bulk("invite")}>
-            Send Invitation
-          </button>
-          <button type="button" className="btn-secondary" disabled={busy} onClick={() => bulk("deactivate")}>
-            Deactivate
-          </button>
-          <button type="button" className="btn-secondary" disabled={busy} onClick={() => bulk("export")}>
-            Export
-          </button>
-          <button type="button" className="cp-btn-ghost" onClick={() => setSelectedIds(new Set())}>
-            Clear
-          </button>
-        </div>
-      ) : null}
-
-      {loading && people.length === 0 ? (
-        <LoadingCenter minHeight={220} />
-      ) : (
-        <PeopleDataGrid
+      <PeopleDataGrid
           people={people}
           columns={columns}
           selectedIds={selectedIds}
@@ -297,8 +360,29 @@ function PeopleCenter() {
           pageSize={PAGE_SIZE}
           total={total}
           onPageChange={setPage}
+          onPreview={(person) => setDrawerPersonId(person.id)}
+          onDeactivate={async (person) => {
+            setBusy(true);
+            try {
+              const res = await api.post("user-setup/bulk/", {
+                action: "deactivate",
+                ids: [person.id],
+              });
+              success(`Updated ${res.data.updated} person(s)`);
+              await load();
+            } catch (err) {
+              error(getApiErrorMessage(err, "Deactivate failed"));
+            } finally {
+              setBusy(false);
+            }
+          }}
         />
-      )}
+
+      <EmployeeDrawer
+        open={Boolean(drawerPersonId)}
+        personId={drawerPersonId}
+        onClose={() => setDrawerPersonId(null)}
+      />
 
       {filterOpen ? (
         <div className="pe-filter-drawer" role="dialog" aria-modal="true">
@@ -409,7 +493,20 @@ function PeopleCenter() {
           </aside>
         </div>
       ) : null}
+
+      <ImportDrawer
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        config={PEOPLE_IMPORT_CONFIG}
+        onImported={(result) => {
+          if ((result?.imported || 0) > 0) {
+            success(`${result.imported} employee(s) imported`);
+          }
+          load();
+        }}
+      />
     </div>
+    </PageShell>
   );
 }
 

@@ -2128,15 +2128,77 @@ class CommissionRule(models.Model):
     sequence = models.PositiveIntegerField(default=1)
     is_active = models.BooleanField(default=True)
     stop_on_match = models.BooleanField(default=False)
+    apply_to_all_plan_participants = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text=(
+            "When true, this rule applies to every employee who belongs to the "
+            "rule's compensation plan (current and future). Individual "
+            "assignments are not required."
+        ),
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    assigned_employees = models.ManyToManyField(
+        "UserProfile",
+        through="EmployeeCommissionRuleAssignment",
+        related_name="assigned_commission_rules",
+        blank=True,
+    )
 
     class Meta:
         ordering = ["priority", "sequence", "id"]
 
     def __str__(self):
         return self.name
+
+
+class EmployeeCommissionRuleAssignment(models.Model):
+    """Explicit link: a commission rule only evaluates for assigned employees."""
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="commission_rule_assignments",
+        null=True,
+        blank=True,
+    )
+    employee = models.ForeignKey(
+        UserProfile,
+        on_delete=models.CASCADE,
+        related_name="commission_rule_assignments",
+    )
+    rule = models.ForeignKey(
+        CommissionRule,
+        on_delete=models.CASCADE,
+        related_name="employee_assignments",
+    )
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="commission_rule_assignments_made",
+    )
+    assigned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["employee", "rule"],
+                name="uniq_employee_commission_rule",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["employee", "rule"], name="emprule_emp_rule_idx"),
+            models.Index(fields=["organization", "rule"], name="emprule_org_rule_idx"),
+        ]
+        ordering = ["-assigned_at", "-id"]
+
+    def __str__(self):
+        return f"{self.employee_id} → rule {self.rule_id}"
 
 
 class CommissionRuleCondition(models.Model):

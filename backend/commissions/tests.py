@@ -744,6 +744,14 @@ class CommissionRuleEngineTests(TestCase):
             rule_type="commission_rate",
             sequence=1,
         )
+        from .models import EmployeeCommissionRuleAssignment
+
+        profile = UserProfile.objects.get(employee_id="RULE001")
+        profile.assigned_compensation_plan = self.plan
+        profile.save(update_fields=["assigned_compensation_plan"])
+        EmployeeCommissionRuleAssignment.objects.create(
+            organization=self.org, employee=profile, rule=rule
+        )
         CommissionRuleCondition.objects.create(
             rule=rule,
             field="product_name",
@@ -775,7 +783,12 @@ class CommissionRuleEngineTests(TestCase):
         self.assertEqual(commission.rule_result_name, "Bonus")
 
     def test_override_tier_pct_replaces_plan_rate(self):
-        from .models import CommissionRule, CommissionRuleCondition, CommissionRuleResult
+        from .models import (
+            CommissionRule,
+            CommissionRuleCondition,
+            CommissionRuleResult,
+            EmployeeCommissionRuleAssignment,
+        )
 
         rule = CommissionRule.objects.create(
             organization=self.org,
@@ -783,6 +796,12 @@ class CommissionRuleEngineTests(TestCase):
             name="SaaS override rate",
             rule_type="commission_rate",
             sequence=1,
+        )
+        profile = UserProfile.objects.get(employee_id="RULE001")
+        profile.assigned_compensation_plan = self.plan
+        profile.save(update_fields=["assigned_compensation_plan"])
+        EmployeeCommissionRuleAssignment.objects.create(
+            organization=self.org, employee=profile, rule=rule
         )
         CommissionRuleCondition.objects.create(
             rule=rule,

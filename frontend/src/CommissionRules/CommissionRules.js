@@ -17,7 +17,9 @@ const EMPTY_RULE = {
   sequence: 1,
   is_active: true,
   stop_on_match: false,
+  apply_to_all_plan_participants: false,
   compensation_plan: "",
+  assigned_employee_ids: [],
   conditions: [],
   results: [
     {
@@ -123,7 +125,9 @@ function CommissionRules() {
   const [searchParams] = useSearchParams();
   const [rules, setRules] = useState([]);
   const [plans, setPlans] = useState([]);
+  const [people, setPeople] = useState([]);
   const [choices, setChoices] = useState(null);
+  const [invalidAssignments, setInvalidAssignments] = useState([]);
   const [planFilter, setPlanFilter] = useState("");
   const [selectedId, setSelectedId] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -143,6 +147,29 @@ function CommissionRules() {
       .finally(() => setLoading(false));
   }, [planFilter, error]);
 
+  // Lightweight list for Employee ID condition dropdown (picker loads its own pages).
+  const fetchConditionPeople = useCallback((planId) => {
+    if (!planId) {
+      setPeople([]);
+      return;
+    }
+    setPeople([]);
+    api
+      .get(
+        `commission-rules/eligible-employees/?plan_id=${planId}&page=1&page_size=500`
+      )
+      .then((res) => {
+        const data = res.data;
+        const rows = Array.isArray(data?.results)
+          ? data.results
+          : Array.isArray(data)
+            ? data
+            : [];
+        setPeople(rows);
+      })
+      .catch(() => setPeople([]));
+  }, []);
+
   useEffect(() => {
     const planFromUrl = searchParams.get("plan");
     if (planFromUrl) setPlanFilter(planFromUrl);
@@ -153,6 +180,17 @@ function CommissionRules() {
   }, [fetchRules]);
 
   useEffect(() => {
+    fetchConditionPeople(draft?.compensation_plan);
+  }, [draft?.compensation_plan, fetchConditionPeople]);
+
+  const fetchInvalidAssignments = useCallback(() => {
+    api
+      .get("commission-rules/invalid-assignments/")
+      .then((res) => setInvalidAssignments(res.data?.assignments || []))
+      .catch(() => setInvalidAssignments([]));
+  }, []);
+
+  useEffect(() => {
     api
       .get("compensation-plans/")
       .then((res) => setPlans(res.data))
@@ -161,7 +199,8 @@ function CommissionRules() {
       .get("commission-rules/choices/")
       .then((res) => setChoices(res.data))
       .catch(() => error("Failed to load rule choices"));
-  }, [error]);
+    fetchInvalidAssignments();
+  }, [error, fetchInvalidAssignments]);
 
   const selectRule = async (id) => {
     if (!id) {
@@ -176,6 +215,9 @@ function CommissionRules() {
         ...res.data,
         compensation_plan: res.data.compensation_plan || "",
         multiplier: String(res.data.multiplier ?? "1"),
+        assigned_employee_ids: (res.data.assigned_employees || []).map((row) =>
+          Number(row.id)
+        ),
         conditions: res.data.conditions || [],
         results: res.data.results?.length
           ? res.data.results
@@ -204,6 +246,10 @@ function CommissionRules() {
       error("Compensation plan is required");
       return;
     }
+    if (!draft.apply_to_all_plan_participants && !(draft.assigned_employee_ids || []).length) {
+      error("Select at least one employee, or enable Apply to all plan participants");
+      return;
+    }
     const hasRateValue = (draft.results || []).some(
       (row) => row.rate_value !== "" && row.rate_value != null
     );
@@ -224,8 +270,12 @@ function CommissionRules() {
       sequence: draft.sequence || 1,
       is_active: draft.is_active !== false,
       stop_on_match: Boolean(draft.stop_on_match),
+      apply_to_all_plan_participants: Boolean(draft.apply_to_all_plan_participants),
       description: draft.description || "",
       tags: draft.tags || [],
+      assigned_employee_ids: draft.apply_to_all_plan_participants
+        ? []
+        : (draft.assigned_employee_ids || []).map((id) => Number(id)),
       conditions: (draft.conditions || []).map((row, index) => {
         const { id, rule, ...rest } = row;
         return {
@@ -251,15 +301,24 @@ function CommissionRules() {
         const res = await api.patch(`commission-rules/${selectedId}/`, payload);
         success(savedMessage(res.data));
         fetchRules();
+        fetchInvalidAssignments();
         selectRule(selectedId);
       } else {
         const res = await api.post("commission-rules/", payload);
         success(savedMessage(res.data).replace("Rule saved", "Rule created"));
         fetchRules();
+        fetchInvalidAssignments();
         selectRule(res.data.id);
       }
     } catch (err) {
-      error(err.response?.data?.error || "Failed to save rule");
+      const data = err.response?.data;
+      const msg =
+        data?.employee_ids ||
+        data?.detail ||
+        data?.error ||
+        (typeof data === "string" ? data : null) ||
+        "Failed to save rule";
+      error(Array.isArray(msg) ? msg.join(" ") : String(msg));
     } finally {
       setSaving(false);
     }
@@ -281,6 +340,24 @@ function CommissionRules() {
   return (
     <div className="cr-root">
       <PageHeader badge="Configuration" title="Commission Rules" />
+
+      {invalidAssignments.length > 0 && (
+        <div className="panel cr-invalid-banner" role="status">
+          <strong>{invalidAssignments.length} invalid assignment(s)</strong>
+          <p>
+            Some employees are linked to rules whose Compensation Plan no longer matches.
+            Those assignments are ignored in calculation until corrected. Open each rule and
+            re-select only employees on that plan.
+          </p>
+          <ul>
+            {invalidAssignments.slice(0, 8).map((row) => (
+              <li key={row.assignment_id}>
+                {row.employee_name || row.employee_code} → {row.rule_name} ({row.reason})
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="cr-toolbar panel" style={{ padding: "12px 16px" }}>
         <div className="cr-plan-filter">
@@ -332,6 +409,10 @@ function CommissionRules() {
                     <span className="cr-list__item-name">{rule.name}</span>
                     <span className="cr-list__item-meta">
                       {rule.rule_type} · {rule.plan_name || "No plan"} · seq {rule.sequence}
+                      {" · "}
+                      {rule.apply_to_all_plan_participants
+                        ? "All plan participants"
+                        : `${rule.assignee_count ?? rule.assigned_employees?.length ?? 0} employees`}
                     </span>
                   </button>
                 </li>
@@ -353,6 +434,7 @@ function CommissionRules() {
                 setDraft={setDraft}
                 choices={choices}
                 plans={plans}
+                people={people}
                 currency={selectedCurrency}
               />
               <div className="cr-actions">

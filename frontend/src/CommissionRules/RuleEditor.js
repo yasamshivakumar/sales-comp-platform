@@ -1,4 +1,5 @@
 import DatePickerField from "../Components/DatePickerField";
+import EmployeeAssigneePicker from "./EmployeeAssigneePicker";
 
 function clientRowKey() {
   return `row-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -60,9 +61,20 @@ function resultDefaultsForType(resultType, sequence) {
   };
 }
 
-function RuleEditor({ draft, setDraft, choices, plans, currency = "INR" }) {
+function RuleEditor({ draft, setDraft, choices, plans, people = [], currency = "INR" }) {
   const update = (patch) => setDraft({ ...draft, ...patch });
   const amountCurrencyLabel = currency || "order currency";
+  const planId = draft.compensation_plan ? Number(draft.compensation_plan) : null;
+  const selectedIds = draft.assigned_employee_ids || [];
+
+  const onPlanChange = (nextPlanId) => {
+    // Changing plan clears assignees; picker reloads for the new plan only.
+    update({
+      compensation_plan: nextPlanId || "",
+      assigned_employee_ids: [],
+      assigned_employees: [],
+    });
+  };
 
   const updateCondition = (index, patch) => {
     const conditions = [...(draft.conditions || [])];
@@ -120,7 +132,7 @@ function RuleEditor({ draft, setDraft, choices, plans, currency = "INR" }) {
             <select
               id="rule-plan"
               value={draft.compensation_plan || ""}
-              onChange={(e) => update({ compensation_plan: e.target.value })}
+              onChange={(e) => onPlanChange(e.target.value)}
             >
               <option value="">— Select plan —</option>
               {plans.map((plan) => (
@@ -180,10 +192,64 @@ function RuleEditor({ draft, setDraft, choices, plans, currency = "INR" }) {
       </section>
 
       <section className="cr-section">
+        <h3 className="cr-section__title">Employees *</h3>
+        <p className="cr-hint">
+          Choose who this rule applies to. You can select specific people, or apply it to
+          everyone on the Compensation Plan (including people who join the plan later).
+        </p>
+        <label className="cr-checkbox-row">
+          <input
+            type="checkbox"
+            checked={Boolean(draft.apply_to_all_plan_participants)}
+            onChange={(e) =>
+              update({
+                apply_to_all_plan_participants: e.target.checked,
+                assigned_employee_ids: e.target.checked
+                  ? []
+                  : draft.assigned_employee_ids || [],
+              })
+            }
+          />
+          <span>
+            <strong>Apply to all plan participants</strong>
+            <span className="cr-hint" style={{ display: "block", marginTop: 2 }}>
+              Stays in sync when people are added to or removed from this Compensation Plan.
+              No need to pick employees individually.
+            </span>
+          </span>
+        </label>
+        {draft.apply_to_all_plan_participants ? (
+          <div className="cr-assignee-empty">
+            This rule will apply to every employee on{" "}
+            <strong>
+              {plans.find((p) => String(p.id) === String(draft.compensation_plan))
+                ?.plan_name || "the selected plan"}
+            </strong>
+            , including future participants.
+          </div>
+        ) : (
+          <>
+            <EmployeeAssigneePicker
+              planId={planId}
+              selectedIds={selectedIds}
+              onChange={(ids) => update({ assigned_employee_ids: ids })}
+              initialPeople={draft.assigned_employees || []}
+            />
+            {planId && selectedIds.length === 0 && (
+              <p className="cr-hint cr-hint--warn">
+                Select at least one employee before saving, or enable Apply to all plan
+                participants.
+              </p>
+            )}
+          </>
+        )}
+      </section>
+
+      <section className="cr-section">
         <h3 className="cr-section__title">Conditions (optional)</h3>
         <p className="cr-hint">
-          Leave empty to apply to all orders on the plan. <strong>Product</strong> = CSV{" "}
-          <code>product_name</code>; <strong>Service</strong> = <code>service_name</code>.
+          Conditions define <strong>when</strong> the rule applies to the selected employees
+          (product, region, amount, etc.). Leave empty to apply to all of their orders.
         </p>
         <div className="cr-table-wrap">
           <table className="cr-table">
@@ -199,7 +265,7 @@ function RuleEditor({ draft, setDraft, choices, plans, currency = "INR" }) {
               {(draft.conditions || []).length === 0 ? (
                 <tr>
                   <td colSpan={4} className="cr-empty">
-                    No conditions — applies to all orders on this plan.
+                    No conditions — applies to all orders for the assigned employees.
                   </td>
                 </tr>
               ) : (
@@ -241,6 +307,27 @@ function RuleEditor({ draft, setDraft, choices, plans, currency = "INR" }) {
                               {opt.label}
                             </option>
                           ))}
+                        </select>
+                      ) : row.field === "employee_id" && people.length > 0 ? (
+                        <select
+                          value={row.value || ""}
+                          onChange={(e) => updateCondition(index, { value: e.target.value })}
+                        >
+                          <option value="">Select employee…</option>
+                          {people
+                            .filter((p) => (p.employee_id || "").trim())
+                            .map((person) => (
+                              <option key={person.id} value={person.employee_id}>
+                                {(person.name || person.email || "Employee") +
+                                  ` (${person.employee_id})`}
+                              </option>
+                            ))}
+                          {row.value &&
+                          !people.some(
+                            (p) => String(p.employee_id) === String(row.value)
+                          ) ? (
+                            <option value={row.value}>{row.value} (current)</option>
+                          ) : null}
                         </select>
                       ) : (
                         <input

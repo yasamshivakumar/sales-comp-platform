@@ -280,7 +280,12 @@ def expire_due_overrides(organization=None, actor=None):
 # ---------------------------------------------------------------------------
 
 
-def _rule_summary(rule):
+def _rule_summary(rule, assignment=None):
+    plan = getattr(rule, "compensation_plan", None)
+    if plan is None:
+        version = getattr(rule, "plan_version", None)
+        plan = getattr(version, "compensation_plan", None) if version else None
+    status = "Active" if rule.is_active else "Inactive"
     return {
         "id": rule.id,
         "name": rule.name,
@@ -292,11 +297,30 @@ def _rule_summary(rule):
         "sequence": rule.sequence,
         "condition_logic": rule.condition_logic,
         "multiplier": str(rule.multiplier),
+        "is_active": bool(rule.is_active),
+        "status": status,
+        "compensation_plan_id": getattr(plan, "id", None),
+        "compensation_plan_name": getattr(plan, "plan_name", "") or "",
         "effective_start_date": (
             rule.effective_start_date.isoformat() if rule.effective_start_date else None
         ),
         "effective_end_date": (
             rule.effective_end_date.isoformat() if rule.effective_end_date else None
+        ),
+        "created_at": rule.created_at.isoformat() if rule.created_at else None,
+        "assigned_at": (
+            assignment.assigned_at.isoformat()
+            if assignment is not None and assignment.assigned_at
+            else None
+        ),
+        "assignment_id": getattr(assignment, "id", None),
+        "apply_to_all_plan_participants": bool(
+            getattr(rule, "apply_to_all_plan_participants", False)
+        ),
+        "assignment_source": (
+            "plan_participants"
+            if assignment is None and getattr(rule, "apply_to_all_plan_participants", False)
+            else "explicit"
         ),
         "conditions": [
             {
@@ -324,8 +348,95 @@ def _rule_summary(rule):
     }
 
 
-def plan_rules_for_display(plan, on_date=None):
-    """Currently effective rules of a plan, in evaluation order."""
+def assigned_rules_for_employee_display(employee, organization=None):
+    """
+    Rules visible on an employee profile:
+    - explicit EmployeeCommissionRuleAssignment rows, and
+    - active apply_to_all_plan_participants rules for plans they belong to.
+
+    Does not require the rule to sit on a Published plan version.
+    """
+    if employee is None or not getattr(employee, "pk", None):
+        return []
+
+    from .models import EmployeeCommissionRuleAssignment
+    from .rule_assignments import employee_belongs_to_plan, rule_plan_id
+
+    qs = (
+        EmployeeCommissionRuleAssignment.objects.filter(employee=employee)
+        .select_related(
+            "rule",
+            "rule__compensation_plan",
+            "rule__plan_version",
+            "rule__plan_version__compensation_plan",
+            "assigned_by",
+        )
+        .prefetch_related("rule__conditions", "rule__results")
+        .order_by("rule__priority", "rule__sequence", "rule_id")
+    )
+    if organization is not None:
+        org_id = getattr(organization, "id", organization)
+        qs = qs.filter(
+            Q(organization_id=org_id)
+            | Q(organization__isnull=True, employee__organization_id=org_id)
+            | Q(rule__organization_id=org_id)
+            | Q(rule__organization__isnull=True, employee__organization_id=org_id)
+        ).filter(employee__organization_id=org_id)
+
+    seen = set()
+    rows = []
+    for assignment in qs:
+        rule = assignment.rule
+        if rule is None or rule.id in seen:
+            continue
+        seen.add(rule.id)
+        rows.append(_rule_summary(rule, assignment=assignment))
+
+    plan_wide = CommissionRule.objects.filter(
+        apply_to_all_plan_participants=True,
+        is_active=True,
+    ).select_related(
+        "compensation_plan",
+        "plan_version",
+        "plan_version__compensation_plan",
+    ).prefetch_related("conditions", "results")
+    if organization is not None:
+        org_id = getattr(organization, "id", organization)
+        plan_wide = plan_wide.filter(
+            Q(organization_id=org_id) | Q(organization__isnull=True)
+        )
+
+    for rule in plan_wide.order_by("priority", "sequence", "id"):
+        if rule.id in seen:
+            continue
+        pid = rule_plan_id(rule)
+        if not pid or not employee_belongs_to_plan(
+            employee, pid, organization=organization
+        ):
+            continue
+        seen.add(rule.id)
+        rows.append(_rule_summary(rule, assignment=None))
+
+    rows.sort(key=lambda row: (row.get("priority") or 99, row.get("sequence") or 99, row["id"]))
+    return rows
+
+
+def plan_rules_for_display(plan, on_date=None, employee=None):
+    """
+    Currently effective rules for display.
+
+    When employee is provided (strict assignment mode), only rules assigned to
+    that employee are returned — via EmployeeCommissionRuleAssignment, including
+    draft-version rules so People stays in sync with Commission Rules.
+
+    Without an employee, returns published (or legacy plan-level) rules for
+    plan preview.
+    """
+    if employee is not None:
+        return assigned_rules_for_employee_display(
+            employee, organization=getattr(employee, "organization", None)
+        )
+
     if plan is None:
         return []
 

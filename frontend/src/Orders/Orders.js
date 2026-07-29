@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import TransactionCenter from "./TransactionCenter";
 import TransactionWorkspace from "./TransactionWorkspace";
 import OrderForm from "./OrderForm";
-import OrderUpload from "./OrderUpload";
 import "./orders.css";
 
 function CreatePage({ onCreated }) {
@@ -17,19 +16,11 @@ function CreatePage({ onCreated }) {
   );
 }
 
-function ImportPage({ onDone }) {
-  return (
-    <div className="tx-subpage">
-      <OrderUpload onUploadSuccess={onDone} />
-    </div>
-  );
-}
-
 /**
  * Sales Transaction Operations — routes
- * /orders           → Operations Center
+ * /orders           → Operations Center (import via ⋮ menu)
  * /orders/new       → Create
- * /orders/import    → Import wizard
+ * /orders/import    → Redirects to center with import dialog
  * /orders/:id/*     → Detail workspace
  */
 function Orders() {
@@ -51,7 +42,7 @@ function Orders() {
           legacyTab === "create" ? (
             <Navigate to="new" replace />
           ) : legacyTab === "import" ? (
-            <Navigate to="import" replace />
+            <Navigate to="/orders?import=1" replace />
           ) : (
             <TransactionCenter refreshKey={refreshKey} />
           )
@@ -61,10 +52,7 @@ function Orders() {
         path="new"
         element={<CreatePage onCreated={() => setRefreshKey((k) => k + 1)} />}
       />
-      <Route
-        path="import"
-        element={<ImportPage onDone={() => setRefreshKey((k) => k + 1)} />}
-      />
+      <Route path="import" element={<Navigate to="/orders?import=1" replace />} />
       <Route path=":orderId/*" element={<TransactionWorkspace />} />
       <Route path="*" element={<Navigate to="." replace />} />
     </Routes>

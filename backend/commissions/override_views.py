@@ -529,7 +529,10 @@ def employee_compensation(request, pk):
                 if plan
                 else None
             ),
-            "effective_rules": plan_rules_for_display(plan, today),
+            "effective_rules": plan_rules_for_display(plan, today, employee=profile),
+            "assigned_commission_rules": plan_rules_for_display(
+                plan, today, employee=profile
+            ),
             "overrides": [
                 {**override_payload(row), "is_active_now": row.id in active_ids}
                 for row in overrides

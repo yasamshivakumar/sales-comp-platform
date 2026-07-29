@@ -346,7 +346,6 @@ function Login() {
                 <AuthTextField
                   label="Email"
                   type="email"
-                  placeholder="you@company.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && !loading && handleLogin()}
@@ -358,7 +357,6 @@ function Login() {
                 <AuthTextField
                   label="Password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && !loading && handleLogin()}
@@ -377,12 +375,30 @@ function Login() {
                           disabled={loading}
                           onClick={() => setShowPassword((value) => !value)}
                           onMouseDown={(e) => e.preventDefault()}
-                          sx={{
-                            width: "32px !important",
-                            minWidth: "32px !important",
-                            height: "32px",
-                            p: "4px !important",
-                          }}
+                         sx={{
+  width: 36,
+  height: 36,
+  minWidth: 36,
+  p: 0,
+  borderRadius: 2,
+  backdropFilter: "blur(12px)",
+  background: "rgba(255,255,255,0.06)",
+  border: "1px solid rgba(255,255,255,0.12)",
+  color: "rgba(255,255,255,0.85)",
+  transition: "all 0.2s ease",
+
+  "&:hover": {
+    background: "rgba(255,255,255,0.12)",
+    border: "1px solid rgba(59,130,246,0.45)",
+    color: "#60A5FA",
+    boxShadow: "0 8px 24px rgba(59,130,246,0.25)",
+    transform: "translateY(-1px)",
+  },
+
+  "&:active": {
+    transform: "scale(0.96)",
+  },
+}}
                         >
                           {showPassword ? (
                             <VisibilityOffIcon fontSize="small" />
